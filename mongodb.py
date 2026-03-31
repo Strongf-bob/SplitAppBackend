@@ -48,7 +48,12 @@ def build_mongodb_uri() -> str:
     if bool(mongodb_user) != bool(mongodb_password):
         raise ValueError("Set both MONGODB_USER and MONGODB_PASSWORD, or neither.")
 
-    hosts = mongodb_hosts or f"{mongodb_host}:{mongodb_port}"
+    if mongodb_hosts:
+        hosts = ",".join(
+            host.strip() for host in mongodb_hosts.split(",") if host.strip()
+        )
+    else:
+        hosts = f"{mongodb_host}:{mongodb_port}"
     query: dict[str, str] = {"authSource": mongodb_auth_source}
     if mongodb_replica_set:
         query["replicaSet"] = mongodb_replica_set
@@ -64,8 +69,20 @@ def build_mongodb_uri() -> str:
 
 def connect_mongodb(app: FastAPI) -> None:
     mongodb_uri = build_mongodb_uri()
-    mongodb_tls = os.getenv("MONGODB_TLS", "false").lower() == "true"
+    mongodb_tls_raw = os.getenv("MONGODB_TLS")
     mongodb_tls_ca_file = os.getenv("MONGODB_TLS_CA_FILE", "").strip()
+    mongodb_replica_set = os.getenv("MONGODB_REPLICA_SET", "").strip()
+    mongodb_hosts = os.getenv("MONGODB_HOSTS", "").strip()
+
+    if mongodb_tls_raw is None:
+        # Managed replica-set clusters usually require TLS; keep local
+        # defaults non-TLS unless cluster-style settings are present.
+        mongodb_tls = bool(mongodb_replica_set or mongodb_hosts)
+    else:
+        mongodb_tls = mongodb_tls_raw.lower() == "true"
+
+    if mongodb_tls_ca_file and not mongodb_tls:
+        mongodb_tls = True
 
     client_kwargs: dict[str, object] = {"serverSelectionTimeoutMS": 5000}
     if mongodb_tls:
