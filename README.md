@@ -14,7 +14,7 @@ The login handler is available at `POST /api/login`.
 
 ## Run on remote server
 
-Use the production-style target (binds to all interfaces):
+Use the production-style target (binds to all interfaces and survives SSH disconnect):
 
 1. `make setup`
 2. `make run`
@@ -26,6 +26,12 @@ Defaults:
 You can override port/host:
 
 `PORT=8080 HOST=0.0.0.0 make run`
+
+Useful process commands:
+
+- `make status`
+- `make logs`
+- `make stop`
 
 ## Manual venv commands (optional)
 
