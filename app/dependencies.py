@@ -14,8 +14,12 @@ def get_db(request: Request) -> Database:
 
 
 def require_auth_token(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> None:
+    if request.url.path == "/api/ping":
+        return
+
     auth_token = os.getenv(AUTH_TOKEN_ENV_KEY, "").strip()
     if not auth_token:
         raise HTTPException(
