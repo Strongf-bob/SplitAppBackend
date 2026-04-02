@@ -201,6 +201,29 @@ paths:
                   $ref: "#/components/schemas/Receipt"
 
   /api/receipts/{id}:
+    patch:
+      tags: [Receipts]
+      summary: Update receipt
+      operationId: updateReceipt
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReceiptRequest"
+      responses:
+        "200":
+          description: Receipt updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receipt"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
     delete:
       tags: [Receipts]
       summary: Delete receipt
@@ -530,6 +553,22 @@ components:
           minItems: 1
       required: [payer_id, total_amount, items]
 
+    UpdateReceiptRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        total_amount:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateReceiptItemRequest"
+          minItems: 1
+      minProperties: 1
+
     Payment:
       type: object
       properties:
@@ -583,7 +622,7 @@ components:
         event_id:
           type: string
           format: uuid
-        debtor_id:
+        debitor_id:
           type: string
           format: uuid
         creditor_id:
@@ -592,4 +631,4 @@ components:
         amount:
           type: number
           format: double
-      required: [event_id, debtor_id, creditor_id, amount]
+      required: [event_id, debitor_id, creditor_id, amount]
