@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
 from app.core.db import close_mongodb, connect_mongodb, load_env_file
+from app.dependencies import require_auth_token
 from app.routers import (
     events_router,
     health_router,
@@ -28,7 +29,11 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    api = FastAPI(lifespan=lifespan, title="SplitApp Backend")
+    api = FastAPI(
+        lifespan=lifespan,
+        title="SplitApp Backend",
+        dependencies=[Depends(require_auth_token)],
+    )
     api.include_router(health_router)
     api.include_router(users_router)
     api.include_router(events_router)

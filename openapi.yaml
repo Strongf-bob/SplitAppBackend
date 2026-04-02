@@ -5,6 +5,8 @@ info:
 servers:
   - url: http://localhost:8000
     description: Local development
+security:
+  - BearerAuth: []
 tags:
   - name: Users
   - name: Events
@@ -317,6 +319,11 @@ paths:
           $ref: "#/components/responses/NotFound"
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
   parameters:
     IdPathParam:
       in: path
