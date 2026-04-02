@@ -5,6 +5,8 @@ info:
 servers:
   - url: http://localhost:8000
     description: Local development
+  - url: https://splitapp.tech
+    description: Production
 security:
   - BearerAuth: []
 tags:
