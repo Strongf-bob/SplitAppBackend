@@ -1,0 +1,595 @@
+openapi: 3.1.0
+info:
+  title: SplitApp Backend API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000
+    description: Local development
+tags:
+  - name: Users
+  - name: Events
+  - name: Receipts
+  - name: Debts & Balances
+  - name: Payments
+paths:
+  /api/users:
+    post:
+      tags: [Users]
+      summary: Create user
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /api/events:
+    post:
+      tags: [Events]
+      summary: Create event
+      operationId: createEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEventRequest"
+      responses:
+        "201":
+          description: Event created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [Events]
+      summary: List events
+      operationId: listEvents
+      parameters:
+        - in: query
+          name: user_id
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter events by participant/creator user id.
+      responses:
+        "200":
+          description: Event list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Event"
+
+  /api/events/{id}:
+    get:
+      tags: [Events]
+      summary: Get event details
+      operationId: getEventById
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      responses:
+        "200":
+          description: Event details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Events]
+      summary: Update event name or closed flag
+      operationId: updateEvent
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEventRequest"
+      responses:
+        "200":
+          description: Event updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/events/{id}/participants:
+    post:
+      tags: [Events]
+      summary: Add participants to event
+      operationId: addEventParticipants
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddParticipantsRequest"
+      responses:
+        "201":
+          description: Participants added
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/events/{id}/participants/{user_id}:
+    delete:
+      tags: [Events]
+      summary: Remove participant from event
+      operationId: removeEventParticipant
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Participant removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/events/{id}/receipts:
+    post:
+      tags: [Receipts]
+      summary: Create receipt with items and shares
+      operationId: createReceipt
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReceiptRequest"
+      responses:
+        "201":
+          description: Receipt created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receipt"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    get:
+      tags: [Receipts]
+      summary: List event receipts
+      operationId: listReceiptsByEvent
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      responses:
+        "200":
+          description: Receipt list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Receipt"
+
+  /api/receipts/{id}:
+    delete:
+      tags: [Receipts]
+      summary: Delete receipt
+      operationId: deleteReceipt
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      responses:
+        "204":
+          description: Receipt deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/events/{id}/balances:
+    get:
+      tags: [Debts & Balances]
+      summary: Calculate debts and balances for event
+      operationId: getEventBalances
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      responses:
+        "200":
+          description: Balance rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EventBalance"
+
+  /api/events/{id}/payments:
+    post:
+      tags: [Payments]
+      summary: Create payment declaration
+      operationId: createPayment
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentRequest"
+      responses:
+        "201":
+          description: Payment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    get:
+      tags: [Payments]
+      summary: List event payments
+      operationId: listPaymentsByEvent
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      responses:
+        "200":
+          description: Payment list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Payment"
+
+  /api/payments/{id}:
+    patch:
+      tags: [Payments]
+      summary: Update payment
+      operationId: updatePayment
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePaymentRequest"
+      responses:
+        "200":
+          description: Payment updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  parameters:
+    IdPathParam:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Invalid request payload
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required: [detail]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone_number:
+          type: string
+      required: [id, name, phone_number]
+
+    CreateUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        phone_number:
+          type: string
+      required: [name, phone_number]
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        creator_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        is_closed:
+          type: boolean
+        users:
+          type: array
+          description: Participant user IDs for this event.
+          items:
+            type: string
+            format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        [id, creator_id, name, is_closed, users, created_at, updated_at]
+
+    CreateEventRequest:
+      type: object
+      properties:
+        creator_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required: [creator_id, name]
+
+    UpdateEventRequest:
+      type: object
+      properties:
+        is_closed:
+          type: boolean
+        name:
+          type: string
+      minProperties: 1
+
+    AddParticipantsRequest:
+      type: object
+      properties:
+        user_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+      required: [user_ids]
+
+    ShareItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        receipt_item_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        share_value:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+          maximum: 1
+          description: Relative share in interval (0, 1].
+      required: [id, receipt_item_id, user_id, share_value]
+
+    CreateShareItemRequest:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        share_value:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+          maximum: 1
+          description: Relative share in interval (0, 1].
+      required: [user_id, share_value]
+
+    ReceiptItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        receipt_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        cost:
+          type: number
+          format: double
+        share_items:
+          type: array
+          description: IDs of ShareItem records linked to this receipt item.
+          items:
+            type: string
+            format: uuid
+      required: [id, receipt_id, cost, share_items]
+
+    CreateReceiptItemRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        cost:
+          type: number
+          format: double
+        share_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateShareItemRequest"
+      required: [cost, share_items]
+
+    Receipt:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_id:
+          type: string
+          format: uuid
+        payer_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        total_amount:
+          type: number
+          format: double
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReceiptItem"
+      required:
+        [
+          id,
+          event_id,
+          payer_id,
+          total_amount,
+          created_at,
+          updated_at,
+          items
+        ]
+
+    CreateReceiptRequest:
+      type: object
+      properties:
+        payer_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        total_amount:
+          type: number
+          format: double
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateReceiptItemRequest"
+          minItems: 1
+      required: [payer_id, total_amount, items]
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_id:
+          type: string
+          format: uuid
+        sender_id:
+          type: string
+          format: uuid
+        receiver_id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: double
+        confirmed:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+      required: [id, event_id, sender_id, receiver_id, amount, confirmed, created_at]
+
+    CreatePaymentRequest:
+      type: object
+      properties:
+        sender_id:
+          type: string
+          format: uuid
+        receiver_id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: double
+      required: [sender_id, receiver_id, amount]
+
+    UpdatePaymentRequest:
+      type: object
+      properties:
+        confirmed:
+          type: boolean
+      required: [confirmed]
+
+    EventBalance:
+      type: object
+      description: One debt row for an event balance snapshot.
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        debtor_id:
+          type: string
+          format: uuid
+        creditor_id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: double
+      required: [event_id, debtor_id, creditor_id, amount]
