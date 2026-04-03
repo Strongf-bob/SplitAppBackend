@@ -5,11 +5,11 @@ from fastapi import Depends, FastAPI
 from app.core.db import close_mongodb, connect_mongodb, load_env_file
 from app.dependencies import require_auth_token
 from app.routers import (
+    auth_router,
     events_router,
     health_router,
     payments_router,
     receipts_router,
-    users_router,
 )
 from app.services import ensure_indexes
 
@@ -35,7 +35,7 @@ def create_app() -> FastAPI:
         dependencies=[Depends(require_auth_token)],
     )
     api.include_router(health_router)
-    api.include_router(users_router)
+    api.include_router(auth_router)
     api.include_router(events_router)
     api.include_router(receipts_router)
     api.include_router(payments_router)

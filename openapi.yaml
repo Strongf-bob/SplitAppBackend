@@ -10,32 +10,66 @@ servers:
 security:
   - BearerAuth: []
 tags:
-  - name: Users
+  - name: Auth
   - name: Events
   - name: Receipts
   - name: Debts & Balances
   - name: Payments
 paths:
-  /api/users:
+  /api/login:
     post:
-      tags: [Users]
-      summary: Create user
-      operationId: createUser
+      tags: [Auth]
+      summary: Exchange Yandex OAuth token for app tokens
+      operationId: loginWithYandex
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateUserRequest"
+              $ref: "#/components/schemas/LoginYandexRequest"
       responses:
-        "201":
-          description: User created
+        "200":
+          description: Access and refresh tokens issued
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
-        "400":
-          $ref: "#/components/responses/BadRequest"
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: phone_number conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Yandex API error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate refresh token and issue new access token
+      operationId: refreshTokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: New token pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /api/events:
     post:
       tags: [Events]
@@ -56,18 +90,13 @@ paths:
                 $ref: "#/components/schemas/Event"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     get:
       tags: [Events]
-      summary: List events
+      summary: List events for the authenticated user
       operationId: listEvents
-      parameters:
-        - in: query
-          name: user_id
-          required: false
-          schema:
-            type: string
-            format: uuid
-          description: Filter events by participant/creator user id.
+      description: Returns events where the caller is a participant or creator.
       responses:
         "200":
           description: Event list
@@ -77,6 +106,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Event"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /api/events/{id}:
     get:
@@ -92,6 +123,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Event"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
@@ -115,6 +148,8 @@ paths:
                 $ref: "#/components/schemas/Event"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -142,6 +177,8 @@ paths:
                   $ref: "#/components/schemas/User"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -161,6 +198,8 @@ paths:
       responses:
         "204":
           description: Participant removed
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -186,6 +225,8 @@ paths:
                 $ref: "#/components/schemas/Receipt"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     get:
@@ -203,6 +244,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Receipt"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /api/receipts/{id}:
     patch:
@@ -226,6 +269,8 @@ paths:
                 $ref: "#/components/schemas/Receipt"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
@@ -237,6 +282,8 @@ paths:
       responses:
         "204":
           description: Receipt deleted
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -256,6 +303,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/EventBalance"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /api/events/{id}/payments:
     post:
@@ -279,6 +328,8 @@ paths:
                 $ref: "#/components/schemas/Payment"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     get:
@@ -296,6 +347,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Payment"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /api/payments/{id}:
     patch:
@@ -317,6 +370,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Payment"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -325,7 +380,8 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: token
+      bearerFormat: JWT
+      description: HS256 access token from /api/login or /api/refresh
   parameters:
     IdPathParam:
       in: path
@@ -336,6 +392,12 @@ components:
         format: uuid
 
   responses:
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     BadRequest:
       description: Invalid request payload
       content:
@@ -344,6 +406,12 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     NotFound:
       description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Authenticated user may not access this resource
       content:
         application/json:
           schema:
@@ -367,16 +435,58 @@ components:
           type: string
         phone_number:
           type: string
+        email:
+          type: string
+          format: email
+          nullable: true
       required: [id, name, phone_number]
 
-    CreateUserRequest:
+    LoginYandexRequest:
       type: object
       properties:
-        name:
+        yandex_token:
           type: string
-        phone_number:
+          description: OAuth token from Yandex Login SDK
+      required: [yandex_token]
+
+    LoginResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        access_token:
           type: string
-      required: [name, phone_number]
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          default: bearer
+        expires_in:
+          type: integer
+          description: Access token lifetime in seconds
+      required: [user, access_token, refresh_token, expires_in]
+
+    RefreshRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+      required: [refresh_token]
+
+    RefreshResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          default: bearer
+        expires_in:
+          type: integer
+          description: Access token lifetime in seconds
+      required: [access_token, refresh_token, expires_in]
 
     Event:
       type: object
