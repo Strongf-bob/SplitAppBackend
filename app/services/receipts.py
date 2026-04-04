@@ -3,7 +3,7 @@ from pymongo.database import Database
 
 from app import schemas
 
-from app.services.access import assert_event_member, get_receipt_or_404
+from app.services.access import assert_event_access, get_receipt_or_404
 from app.services.common import new_uuid, strip_mongo_id, utc_now
 
 
@@ -69,9 +69,9 @@ def _build_receipt_items(
 
 
 def create_receipt(
-    db: Database, event_id: str, payload: schemas.CreateReceiptRequest, actor_user_id: str
+    db: Database, event_id: str, payload: schemas.CreateReceiptRequest, actor_user_id: str | None
 ) -> dict:
-    event = assert_event_member(db, event_id, actor_user_id)
+    event = assert_event_access(db, event_id, actor_user_id)
     payer_id = str(payload.payer_id)
     _validate_receipt_users(event, payer_id, payload.items)
     _validate_share_sum(payload.items)
@@ -103,10 +103,10 @@ def create_receipt(
 
 
 def update_receipt(
-    db: Database, receipt_id: str, payload: schemas.UpdateReceiptRequest, actor_user_id: str
+    db: Database, receipt_id: str, payload: schemas.UpdateReceiptRequest, actor_user_id: str | None
 ) -> dict:
     receipt = get_receipt_or_404(db, receipt_id)
-    event = assert_event_member(db, receipt["event_id"], actor_user_id)
+    event = assert_event_access(db, receipt["event_id"], actor_user_id)
     update_fields: dict = {}
 
     if payload.title is not None:
@@ -144,8 +144,8 @@ def update_receipt(
     return strip_mongo_id(get_receipt_or_404(db, receipt_id))
 
 
-def list_receipts_by_event(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
-    assert_event_member(db, event_id, actor_user_id)
+def list_receipts_by_event(db: Database, event_id: str, actor_user_id: str | None) -> list[dict]:
+    assert_event_access(db, event_id, actor_user_id)
     receipts = []
     for receipt in db.receipts.find({"event_id": event_id}).sort("created_at", -1):
         cleaned = strip_mongo_id(receipt)
@@ -154,7 +154,7 @@ def list_receipts_by_event(db: Database, event_id: str, actor_user_id: str) -> l
     return receipts
 
 
-def delete_receipt(db: Database, receipt_id: str, actor_user_id: str) -> None:
+def delete_receipt(db: Database, receipt_id: str, actor_user_id: str | None) -> None:
     receipt = get_receipt_or_404(db, receipt_id)
-    assert_event_member(db, receipt["event_id"], actor_user_id)
+    assert_event_access(db, receipt["event_id"], actor_user_id)
     db.receipts.delete_one({"id": receipt_id})

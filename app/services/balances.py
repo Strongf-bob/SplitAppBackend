@@ -1,6 +1,6 @@
 from pymongo.database import Database
 
-from app.services.access import assert_event_member
+from app.services.access import assert_event_access
 from app.services.common import strip_mongo_id
 
 
@@ -10,8 +10,8 @@ def _apply_transfer(ledger: dict[tuple[str, str], float], debtor: str, creditor:
     ledger[(debtor, creditor)] = ledger.get((debtor, creditor), 0.0) + amount
 
 
-def get_event_balances(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
-    assert_event_member(db, event_id, actor_user_id)
+def get_event_balances(db: Database, event_id: str, actor_user_id: str | None) -> list[dict]:
+    assert_event_access(db, event_id, actor_user_id)
     receipts = [
         strip_mongo_id(receipt)
         for receipt in db.receipts.find({"event_id": event_id})

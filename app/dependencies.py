@@ -1,9 +1,13 @@
+import os
+
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pymongo.database import Database
 
 from app.core import tokens
+
+AUTH_TOKEN_ENV_KEY = "AUTH_TOKEN"
 
 UNAUTHENTICATED_PATHS = frozenset(
     {
@@ -33,14 +37,6 @@ def require_auth_token(
     if _is_unauthenticated_path(request.url.path):
         return
 
-    try:
-        tokens.ensure_jwt_secret_configured()
-    except RuntimeError:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="JWT_SECRET is not configured.",
-        )
-
     if not credentials or credentials.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -49,6 +45,21 @@ def require_auth_token(
         )
 
     raw = credentials.credentials
+    legacy = os.getenv(AUTH_TOKEN_ENV_KEY, "").strip()
+    if legacy and raw == legacy:
+        request.state.auth_legacy = True
+        request.state.user_id = None
+        return
+
+    try:
+        tokens.ensure_jwt_secret_configured()
+    except RuntimeError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="JWT_SECRET is not configured.",
+        )
+
+    request.state.auth_legacy = False
     try:
         request.state.user_id = tokens.decode_access_token(raw)
     except jwt.ExpiredSignatureError:
@@ -65,7 +76,10 @@ def require_auth_token(
         ) from None
 
 
-def get_current_user_id(request: Request) -> str:
+def get_actor_user_id(request: Request) -> str | None:
+    """JWT subject user id, or None when the legacy AUTH_TOKEN was used."""
+    if getattr(request.state, "auth_legacy", False):
+        return None
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(
