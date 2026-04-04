@@ -4,15 +4,34 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-class UserCreate(BaseModel):
-    name: str
-    phone_number: str
-
-
 class User(BaseModel):
     id: UUID
     name: str
     phone_number: str
+    email: str | None = None
+
+
+class LoginYandexRequest(BaseModel):
+    yandex_token: str = Field(min_length=1)
+
+
+class LoginResponse(BaseModel):
+    user: User
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int = Field(description="Access token lifetime in seconds.")
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=1)
+
+
+class RefreshResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int = Field(description="Access token lifetime in seconds.")
 
 
 class EventCreate(BaseModel):

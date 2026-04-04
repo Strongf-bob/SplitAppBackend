@@ -18,8 +18,3 @@ def db_health(request: Request) -> dict[str, str]:
         raise HTTPException(status_code=500, detail="MongoDB ping failed") from exc
     return {"message": "MongoDB connected"}
 
-
-@router.post("/api/login")
-def login() -> dict[str, str]:
-    return {"message": "Hello, world!"}
-
