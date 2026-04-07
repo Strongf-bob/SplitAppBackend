@@ -6,7 +6,7 @@ from pymongo.database import Database
 
 from app.core import tokens
 
-from app.services.common import new_uuid, utc_now
+from app.services.common import new_uuid, utc_now, user_to_api_dict
 
 YANDEX_INFO_URL = "https://login.yandex.ru/info"
 
@@ -72,15 +72,6 @@ def _yandex_profile_to_fields(profile: dict) -> dict:
         "phone_number": phone_number,
         "email": email,
         "default_avatar_id": default_avatar_id,
-    }
-
-
-def _user_api_dict(user: dict) -> dict:
-    return {
-        "id": user["id"],
-        "name": user["name"],
-        "phone_number": user["phone_number"],
-        "email": user.get("email"),
     }
 
 
@@ -158,7 +149,7 @@ def login_with_yandex_oauth(db: Database, oauth_token: str) -> dict:
     access_token, expires_in = tokens.create_access_token(user["id"])
     refresh_raw = _issue_refresh_token(db, user["id"])
     return {
-        "user": _user_api_dict(user),
+        "user": user_to_api_dict(user),
         "access_token": access_token,
         "refresh_token": refresh_raw,
         "token_type": "bearer",
