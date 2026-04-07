@@ -4,7 +4,7 @@ from pymongo.database import Database
 from app import schemas
 
 from app.services.access import assert_event_access, get_event_or_404, get_user_or_404
-from app.services.common import new_uuid, strip_mongo_id, utc_now
+from app.services.common import new_uuid, strip_mongo_id, utc_now, user_to_api_dict
 
 
 def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str | None) -> dict:
@@ -88,7 +88,7 @@ def add_participants(
 
     users = []
     for user in db.users.find({"id": {"$in": incoming_ids}}):
-        users.append(strip_mongo_id(user))
+        users.append(user_to_api_dict(user))
     return users
 
 

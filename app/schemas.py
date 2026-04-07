@@ -9,6 +9,7 @@ class User(BaseModel):
     name: str
     phone_number: str
     email: str | None = None
+    avatar_url: str | None = None
 
 
 class LoginYandexRequest(BaseModel):

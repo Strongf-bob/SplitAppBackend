@@ -439,6 +439,10 @@ components:
           type: string
           format: email
           nullable: true
+        avatar_url:
+          type: string
+          format: uri
+          nullable: true
       required: [id, name, phone_number]
 
     LoginYandexRequest:
