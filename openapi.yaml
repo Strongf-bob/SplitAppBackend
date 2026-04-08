@@ -15,6 +15,7 @@ security:
   - BearerAuth: []
 tags:
   - name: Auth
+  - name: Users
   - name: Events
   - name: Receipts
   - name: Debts & Balances
@@ -74,6 +75,20 @@ paths:
                 $ref: "#/components/schemas/RefreshResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/users:
+    get:
+      tags: [Users]
+      summary: List all users
+      operationId: listUsers
+      responses:
+        "200":
+          description: All registered users, sorted by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
   /api/events:
     post:
       tags: [Events]
