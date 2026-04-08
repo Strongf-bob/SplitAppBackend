@@ -10,7 +10,7 @@ def _apply_transfer(ledger: dict[tuple[str, str], float], debtor: str, creditor:
     ledger[(debtor, creditor)] = ledger.get((debtor, creditor), 0.0) + amount
 
 
-def get_event_balances(db: Database, event_id: str, actor_user_id: str | None) -> list[dict]:
+def get_event_balances(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
     assert_event_access(db, event_id, actor_user_id)
     receipts = [
         strip_mongo_id(receipt)

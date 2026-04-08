@@ -10,6 +10,6 @@ router = APIRouter(tags=["Users"])
 @router.get("/api/users", response_model=list[schemas.User])
 def list_users(
     db: Database = Depends(get_db),
-    _current_user_id: str | None = Depends(get_actor_user_id),
+    _current_user_id: str = Depends(get_actor_user_id),
 ) -> list[dict]:
     return services.list_users(db)

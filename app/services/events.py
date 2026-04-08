@@ -7,9 +7,9 @@ from app.services.access import assert_event_access, get_event_or_404, get_user_
 from app.services.common import new_uuid, strip_mongo_id, utc_now, user_to_api_dict
 
 
-def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str | None) -> dict:
+def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str) -> dict:
     creator_id = str(payload.creator_id)
-    if actor_user_id is not None and creator_id != actor_user_id:
+    if creator_id != actor_user_id:
         raise HTTPException(
             status_code=403,
             detail="creator_id must match the authenticated user.",
@@ -33,21 +33,18 @@ def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str 
     return event
 
 
-def list_events(db: Database, user_id: str | None) -> list[dict]:
-    if user_id is None:
-        query: dict = {}
-    else:
-        query = {"$or": [{"users": user_id}, {"creator_id": user_id}]}
+def list_events(db: Database, user_id: str) -> list[dict]:
+    query = {"$or": [{"users": user_id}, {"creator_id": user_id}]}
     events = [strip_mongo_id(event) for event in db.events.find(query).sort("created_at", -1)]
     return events
 
 
-def get_event(db: Database, event_id: str, actor_user_id: str | None) -> dict:
+def get_event(db: Database, event_id: str, actor_user_id: str) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
     return strip_mongo_id(event)
 
 
-def update_event(db: Database, event_id: str, payload: schemas.EventUpdate, actor_user_id: str | None) -> dict:
+def update_event(db: Database, event_id: str, payload: schemas.EventUpdate, actor_user_id: str) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
     update_fields: dict = {}
 
@@ -69,7 +66,7 @@ def update_event(db: Database, event_id: str, payload: schemas.EventUpdate, acto
 
 
 def add_participants(
-    db: Database, event_id: str, payload: schemas.AddParticipantsRequest, actor_user_id: str | None
+    db: Database, event_id: str, payload: schemas.AddParticipantsRequest, actor_user_id: str
 ) -> list[dict]:
     event = assert_event_access(db, event_id, actor_user_id)
     incoming_ids = [str(user_id) for user_id in payload.user_ids]
@@ -92,7 +89,7 @@ def add_participants(
     return users
 
 
-def remove_participant(db: Database, event_id: str, user_id: str, actor_user_id: str | None) -> None:
+def remove_participant(db: Database, event_id: str, user_id: str, actor_user_id: str) -> None:
     event = assert_event_access(db, event_id, actor_user_id)
     if user_id not in event["users"]:
         raise HTTPException(status_code=404, detail="Participant not found in event.")

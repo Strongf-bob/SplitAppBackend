@@ -27,7 +27,7 @@ def upload_receipt_image(
     receipt_id: str,
     body: bytes,
     content_type: str | None,
-    actor_user_id: str | None,
+    actor_user_id: str,
 ) -> dict[str, str]:
     receipt = get_receipt_or_404(db, receipt_id)
     assert_event_access(db, receipt["event_id"], actor_user_id)

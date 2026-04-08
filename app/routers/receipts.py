@@ -18,7 +18,7 @@ def create_receipt(
     id: UUID,
     payload: schemas.CreateReceiptRequest,
     db: Database = Depends(get_db),
-    current_user_id: str | None = Depends(get_actor_user_id),
+    current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
     return services.create_receipt(db, str(id), payload, current_user_id)
 
@@ -27,7 +27,7 @@ def create_receipt(
 def list_receipts_by_event(
     id: UUID,
     db: Database = Depends(get_db),
-    current_user_id: str | None = Depends(get_actor_user_id),
+    current_user_id: str = Depends(get_actor_user_id),
 ) -> list[dict]:
     return services.list_receipts_by_event(db, str(id), current_user_id)
 
@@ -37,7 +37,7 @@ def update_receipt(
     id: UUID,
     payload: schemas.UpdateReceiptRequest,
     db: Database = Depends(get_db),
-    current_user_id: str | None = Depends(get_actor_user_id),
+    current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
     return services.update_receipt(db, str(id), payload, current_user_id)
 
@@ -46,7 +46,7 @@ def update_receipt(
 def delete_receipt(
     id: UUID,
     db: Database = Depends(get_db),
-    current_user_id: str | None = Depends(get_actor_user_id),
+    current_user_id: str = Depends(get_actor_user_id),
 ) -> Response:
     services.delete_receipt(db, str(id), current_user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -61,7 +61,7 @@ async def upload_receipt_image(
     id: UUID,
     db: Database = Depends(get_db),
     s3=Depends(get_s3),
-    current_user_id: str | None = Depends(get_actor_user_id),
+    current_user_id: str = Depends(get_actor_user_id),
     file: UploadFile | None = File(
         None,
         description="JPEG image (.jpg or .jpeg); use this field or `image`.",
