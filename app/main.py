@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 
 from app.core.db import close_mongodb, connect_mongodb, load_env_file
+from app.core.s3 import connect_s3
 from app.dependencies import require_auth_token
 from app.routers import (
     auth_router,
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI):
     try:
         load_env_file()
         connect_mongodb(app)
+        connect_s3(app)
         ensure_indexes(app.state.db)
     except Exception as exc:
         raise RuntimeError("Could not connect to MongoDB with current settings.") from exc

@@ -14,6 +14,7 @@ from app.services.payments import (
     list_payments_by_event,
     update_payment,
 )
+from app.services.receipt_image import upload_receipt_image
 from app.services.receipts import (
     create_receipt,
     delete_receipt,
@@ -38,4 +39,5 @@ __all__ = [
     "update_event",
     "update_payment",
     "update_receipt",
+    "upload_receipt_image",
 ]

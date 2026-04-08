@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
@@ -6,6 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pymongo.database import Database
 
 from app.core import tokens
+from app.core.s3 import get_s3_client
 
 AUTH_TOKEN_ENV_KEY = "AUTH_TOKEN"
 
@@ -28,6 +30,10 @@ def _is_unauthenticated_path(path: str) -> bool:
 
 def get_db(request: Request) -> Database:
     return request.app.state.db
+
+
+def get_s3(request: Request) -> Any:
+    return get_s3_client(request.app)
 
 
 def require_auth_token(

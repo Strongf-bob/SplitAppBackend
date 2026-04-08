@@ -107,6 +107,11 @@ class Receipt(BaseModel):
     created_at: datetime
     updated_at: datetime
     items: list[ReceiptItem]
+    image_url: str | None = None
+
+
+class ReceiptImageUploadResponse(BaseModel):
+    image_url: str
 
 
 class PaymentCreate(BaseModel):

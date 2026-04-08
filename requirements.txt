@@ -3,3 +3,5 @@ uvicorn
 pymongo
 PyJWT
 httpx
+python-multipart
+boto3

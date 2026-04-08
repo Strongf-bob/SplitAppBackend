@@ -2,6 +2,10 @@ openapi: 3.1.0
 info:
   title: SplitApp Backend API
   version: 1.0.0
+  description: |
+    **Object storage (server environment):** S3-compatible storage (e.g. Yandex Object Storage) uses
+    `S3_ENDPOINT_URL`, `S3_REGION`, optional `S3_BUCKET`, and static keys
+    `YC_OBJECT_STORAGE_ACCESS_KEY_ID` and `YC_OBJECT_STORAGE_SECRET_ACCESS_KEY`.
 servers:
   - url: http://localhost:8000
     description: Local development
@@ -282,6 +286,48 @@ paths:
       responses:
         "204":
           description: Receipt deleted
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/receipts/{id}/image:
+    post:
+      tags: [Receipts]
+      summary: Upload receipt image (JPEG)
+      description: |
+        Accepts a JPEG file for the given receipt. The image is stored in S3-compatible object storage
+        (e.g. Yandex Object Storage; see `S3_ENDPOINT_URL`, `S3_REGION`, `S3_BUCKET`,
+        `YC_OBJECT_STORAGE_ACCESS_KEY_ID`, `YC_OBJECT_STORAGE_SECRET_ACCESS_KEY` in server configuration).
+        The receipt record is updated with `image_url` pointing at the object URL.
+      operationId: uploadReceiptImage
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              description: Send exactly one file using form field `file` or `image` (multipart/form-data, not JSON).
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: JPEG image (.jpg or .jpeg)
+                image:
+                  type: string
+                  format: binary
+                  description: Same as `file` if your client uses this field name instead.
+      responses:
+        "201":
+          description: Image stored; public URL of the file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptImageUploadResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -647,6 +693,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ReceiptItem"
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Absolute URL of the receipt image when one has been uploaded.
       required:
         [
           id,
@@ -657,6 +708,15 @@ components:
           updated_at,
           items
         ]
+
+    ReceiptImageUploadResponse:
+      type: object
+      properties:
+        image_url:
+          type: string
+          format: uri
+          description: Absolute URL to fetch the uploaded image (same as Receipt.image_url after upload).
+      required: [image_url]
 
     CreateReceiptRequest:
       type: object

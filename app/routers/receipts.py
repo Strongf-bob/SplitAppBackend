@@ -1,10 +1,10 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from pymongo.database import Database
 
 from app import schemas, services
-from app.dependencies import get_actor_user_id, get_db
+from app.dependencies import get_actor_user_id, get_db, get_s3
 
 router = APIRouter(tags=["Receipts"])
 
@@ -50,4 +50,35 @@ def delete_receipt(
 ) -> Response:
     services.delete_receipt(db, str(id), current_user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/api/receipts/{id}/image",
+    response_model=schemas.ReceiptImageUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_receipt_image(
+    id: UUID,
+    db: Database = Depends(get_db),
+    s3=Depends(get_s3),
+    current_user_id: str | None = Depends(get_actor_user_id),
+    file: UploadFile | None = File(
+        None,
+        description="JPEG image (.jpg or .jpeg); use this field or `image`.",
+    ),
+    image: UploadFile | None = File(
+        None,
+        description="Same as `file` (alternate form field name some clients use).",
+    ),
+) -> dict[str, str]:
+    upload = file or image
+    if upload is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Send the JPEG as multipart form-data with field name 'file' or 'image'.",
+        )
+    body = await upload.read()
+    return services.upload_receipt_image(
+        db, s3, str(id), body, upload.content_type, current_user_id
+    )
 
