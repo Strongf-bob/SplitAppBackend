@@ -69,7 +69,7 @@ def _build_receipt_items(
 
 
 def create_receipt(
-    db: Database, event_id: str, payload: schemas.CreateReceiptRequest, actor_user_id: str | None
+    db: Database, event_id: str, payload: schemas.CreateReceiptRequest, actor_user_id: str
 ) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
     payer_id = str(payload.payer_id)
@@ -103,7 +103,7 @@ def create_receipt(
 
 
 def update_receipt(
-    db: Database, receipt_id: str, payload: schemas.UpdateReceiptRequest, actor_user_id: str | None
+    db: Database, receipt_id: str, payload: schemas.UpdateReceiptRequest, actor_user_id: str
 ) -> dict:
     receipt = get_receipt_or_404(db, receipt_id)
     event = assert_event_access(db, receipt["event_id"], actor_user_id)
@@ -144,7 +144,7 @@ def update_receipt(
     return strip_mongo_id(get_receipt_or_404(db, receipt_id))
 
 
-def list_receipts_by_event(db: Database, event_id: str, actor_user_id: str | None) -> list[dict]:
+def list_receipts_by_event(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
     assert_event_access(db, event_id, actor_user_id)
     receipts = []
     for receipt in db.receipts.find({"event_id": event_id}).sort("created_at", -1):
@@ -154,7 +154,7 @@ def list_receipts_by_event(db: Database, event_id: str, actor_user_id: str | Non
     return receipts
 
 
-def delete_receipt(db: Database, receipt_id: str, actor_user_id: str | None) -> None:
+def delete_receipt(db: Database, receipt_id: str, actor_user_id: str) -> None:
     receipt = get_receipt_or_404(db, receipt_id)
     assert_event_access(db, receipt["event_id"], actor_user_id)
     db.receipts.delete_one({"id": receipt_id})

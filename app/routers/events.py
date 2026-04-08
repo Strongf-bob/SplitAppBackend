@@ -13,7 +13,7 @@ router = APIRouter(tags=["Events"])
 def create_event(
     payload: schemas.EventCreate,
     db: Database = Depends(get_db),
-    current_user_id: str | None = Depends(get_actor_user_id),
+    current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
     return services.create_event(db, payload, current_user_id)
 
@@ -21,7 +21,7 @@ def create_event(
 @router.get("/api/events", response_model=list[schemas.Event])
 def list_events(
     db: Database = Depends(get_db),
-    current_user_id: str | None = Depends(get_actor_user_id),
+    current_user_id: str = Depends(get_actor_user_id),
 ) -> list[dict]:
     return services.list_events(db, current_user_id)
 
@@ -30,7 +30,7 @@ def list_events(
 def get_event(
     id: UUID,
     db: Database = Depends(get_db),
-    current_user_id: str | None = Depends(get_actor_user_id),
+    current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
     return services.get_event(db, str(id), current_user_id)
 
@@ -40,7 +40,7 @@ def update_event(
     id: UUID,
     payload: schemas.EventUpdate,
     db: Database = Depends(get_db),
-    current_user_id: str | None = Depends(get_actor_user_id),
+    current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
     return services.update_event(db, str(id), payload, current_user_id)
 
@@ -54,7 +54,7 @@ def add_event_participants(
     id: UUID,
     payload: schemas.AddParticipantsRequest,
     db: Database = Depends(get_db),
-    current_user_id: str | None = Depends(get_actor_user_id),
+    current_user_id: str = Depends(get_actor_user_id),
 ) -> list[dict]:
     return services.add_participants(db, str(id), payload, current_user_id)
 
@@ -64,7 +64,7 @@ def remove_event_participant(
     id: UUID,
     user_id: UUID,
     db: Database = Depends(get_db),
-    current_user_id: str | None = Depends(get_actor_user_id),
+    current_user_id: str = Depends(get_actor_user_id),
 ) -> Response:
     services.remove_participant(db, str(id), str(user_id), current_user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -74,7 +74,7 @@ def remove_event_participant(
 def get_event_balances(
     id: UUID,
     db: Database = Depends(get_db),
-    current_user_id: str | None = Depends(get_actor_user_id),
+    current_user_id: str = Depends(get_actor_user_id),
 ) -> list[dict]:
     return services.get_event_balances(db, str(id), current_user_id)
 

@@ -8,7 +8,7 @@ from app.services.common import new_uuid, strip_mongo_id, utc_now
 
 
 def create_payment(
-    db: Database, event_id: str, payload: schemas.PaymentCreate, actor_user_id: str | None
+    db: Database, event_id: str, payload: schemas.PaymentCreate, actor_user_id: str
 ) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
     sender_id = str(payload.sender_id)
@@ -36,7 +36,7 @@ def create_payment(
     return payment
 
 
-def list_payments_by_event(db: Database, event_id: str, actor_user_id: str | None) -> list[dict]:
+def list_payments_by_event(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
     assert_event_access(db, event_id, actor_user_id)
     return [
         strip_mongo_id(item)
@@ -45,7 +45,7 @@ def list_payments_by_event(db: Database, event_id: str, actor_user_id: str | Non
 
 
 def update_payment(
-    db: Database, payment_id: str, payload: schemas.PaymentUpdate, actor_user_id: str | None
+    db: Database, payment_id: str, payload: schemas.PaymentUpdate, actor_user_id: str
 ) -> dict:
     payment = get_payment_or_404(db, payment_id)
     assert_event_access(db, payment["event_id"], actor_user_id)

@@ -26,10 +26,7 @@ def assert_event_member(db: Database, event_id: str, user_id: str) -> dict:
     return event
 
 
-def assert_event_access(db: Database, event_id: str, actor_user_id: str | None) -> dict:
-    """Enforce event membership for JWT users; legacy AUTH_TOKEN skips membership checks."""
-    if actor_user_id is None:
-        return get_event_or_404(db, event_id)
+def assert_event_access(db: Database, event_id: str, actor_user_id: str) -> dict:
     return assert_event_member(db, event_id, actor_user_id)
 
 
