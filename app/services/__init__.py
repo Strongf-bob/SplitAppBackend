@@ -21,6 +21,7 @@ from app.services.receipts import (
     list_receipts_by_event,
     update_receipt,
 )
+from app.services.users import list_users
 __all__ = [
     "add_participants",
     "create_event",
@@ -33,6 +34,7 @@ __all__ = [
     "list_events",
     "list_payments_by_event",
     "list_receipts_by_event",
+    "list_users",
     "login_with_yandex_oauth",
     "remove_participant",
     "rotate_refresh_token",

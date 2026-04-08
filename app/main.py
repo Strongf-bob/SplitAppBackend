@@ -11,6 +11,7 @@ from app.routers import (
     health_router,
     payments_router,
     receipts_router,
+    users_router,
 )
 from app.services import ensure_indexes
 
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
     api.include_router(health_router)
     api.include_router(auth_router)
     api.include_router(events_router)
+    api.include_router(users_router)
     api.include_router(receipts_router)
     api.include_router(payments_router)
     return api
