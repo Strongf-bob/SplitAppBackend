@@ -171,6 +171,20 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Events]
+      summary: Delete event
+      description: Deletes the event and its receipts and payments. Only the event creator may call this.
+      operationId: deleteEvent
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      responses:
+        "204":
+          description: Event deleted
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/events/{id}/participants:
     post:

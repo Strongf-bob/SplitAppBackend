@@ -45,6 +45,16 @@ def update_event(
     return services.update_event(db, str(id), payload, current_user_id)
 
 
+@router.delete("/api/events/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_event(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> Response:
+    services.delete_event(db, str(id), current_user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post(
     "/api/events/{id}/participants",
     response_model=list[schemas.User],

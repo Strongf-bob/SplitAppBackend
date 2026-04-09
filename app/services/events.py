@@ -39,6 +39,18 @@ def get_event(db: Database, event_id: str, actor_user_id: str) -> dict:
     return strip_mongo_id(event)
 
 
+def delete_event(db: Database, event_id: str, actor_user_id: str) -> None:
+    event = get_event_or_404(db, event_id)
+    if actor_user_id != event["creator_id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the event creator can delete this event.",
+        )
+    db.receipts.delete_many({"event_id": event_id})
+    db.payments.delete_many({"event_id": event_id})
+    db.events.delete_one({"id": event_id})
+
+
 def update_event(db: Database, event_id: str, payload: schemas.EventUpdate, actor_user_id: str) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
     update_fields: dict = {}
