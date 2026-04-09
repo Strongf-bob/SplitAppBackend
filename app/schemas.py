@@ -36,7 +36,6 @@ class RefreshResponse(BaseModel):
 
 
 class EventCreate(BaseModel):
-    creator_id: UUID
     name: str
 
 
