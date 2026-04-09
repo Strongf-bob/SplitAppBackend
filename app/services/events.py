@@ -8,12 +8,7 @@ from app.services.common import new_uuid, strip_mongo_id, utc_now, user_to_api_d
 
 
 def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str) -> dict:
-    creator_id = str(payload.creator_id)
-    if creator_id != actor_user_id:
-        raise HTTPException(
-            status_code=403,
-            detail="creator_id must match the authenticated user.",
-        )
+    creator_id = actor_user_id
     get_user_or_404(db, creator_id)
 
     now = utc_now()

@@ -584,12 +584,9 @@ components:
     CreateEventRequest:
       type: object
       properties:
-        creator_id:
-          type: string
-          format: uuid
         name:
           type: string
-      required: [creator_id, name]
+      required: [name]
 
     UpdateEventRequest:
       type: object
