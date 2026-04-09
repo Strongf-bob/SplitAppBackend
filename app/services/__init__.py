@@ -3,6 +3,7 @@ from app.services.balances import get_event_balances
 from app.services.events import (
     add_participants,
     create_event,
+    delete_event,
     get_event,
     list_events,
     remove_participant,
@@ -25,6 +26,7 @@ from app.services.users import list_users
 __all__ = [
     "add_participants",
     "create_event",
+    "delete_event",
     "create_payment",
     "create_receipt",
     "delete_receipt",
