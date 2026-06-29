@@ -5,7 +5,7 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.monitoring import metrics_response, monitor_db_operation, monitor_service_operation
-from app.dependencies import require_auth_token
+from app.dependencies import _is_internal_client, require_auth_token
 from app.main import configure_cors, cors_allowed_origins
 from app.main import configure_exception_handlers, configure_request_logging
 from app.routers.health import router as health_router
@@ -98,6 +98,18 @@ def test_metrics_endpoint_bypasses_global_auth_dependency():
 
     assert response.status_code == 200
     assert "splitapp_http_requests_total" in response.text
+
+
+def test_operations_scrape_allows_private_and_loopback_clients():
+    assert _is_internal_client("127.0.0.1")
+    assert _is_internal_client("172.20.0.6")
+    assert _is_internal_client("10.0.0.10")
+
+
+def test_operations_scrape_rejects_public_clients():
+    assert not _is_internal_client("8.8.8.8")
+    assert not _is_internal_client("1.1.1.1")
+    assert not _is_internal_client(None)
 
 
 def test_request_metrics_use_route_template_not_raw_path():
