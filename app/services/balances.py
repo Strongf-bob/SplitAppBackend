@@ -1,39 +1,43 @@
+from decimal import Decimal
+
 from pymongo.database import Database
 
 from app.services.access import assert_event_access
-from app.services.common import strip_mongo_id
+from app.services.common import active_filter, decimal_from_value, money_round, strip_mongo_id
 
 
-def _apply_transfer(ledger: dict[tuple[str, str], float], debtor: str, creditor: str, amount: float) -> None:
+def _apply_transfer(
+    ledger: dict[tuple[str, str], Decimal], debtor: str, creditor: str, amount: Decimal
+) -> None:
     if debtor == creditor or amount <= 0:
         return
-    ledger[(debtor, creditor)] = ledger.get((debtor, creditor), 0.0) + amount
+    ledger[(debtor, creditor)] = ledger.get((debtor, creditor), Decimal("0")) + amount
 
 
 def get_event_balances(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
     assert_event_access(db, event_id, actor_user_id)
     receipts = [
         strip_mongo_id(receipt)
-        for receipt in db.receipts.find({"event_id": event_id})
+        for receipt in db.receipts.find(active_filter({"event_id": event_id}))
     ]
     confirmed_payments = [
         strip_mongo_id(payment)
-        for payment in db.payments.find({"event_id": event_id, "confirmed": True})
+        for payment in db.payments.find(active_filter({"event_id": event_id, "confirmed": True}))
     ]
 
-    ledger: dict[tuple[str, str], float] = {}
+    ledger: dict[tuple[str, str], Decimal] = {}
     for receipt in receipts:
         payer_id = receipt["payer_id"]
         share_map = {item["id"]: item for item in receipt.get("share_items", [])}
 
         for item in receipt.get("items", []):
-            cost = float(item["cost"])
+            cost = decimal_from_value(item["cost"])
             for share_id in item.get("share_items", []):
                 share = share_map.get(share_id)
                 if not share:
                     continue
                 debitor_id = share["user_id"]
-                amount = cost * float(share["share_value"])
+                amount = cost * decimal_from_value(share["share_value"])
                 _apply_transfer(ledger, debitor_id, payer_id, amount)
 
     for payment in confirmed_payments:
@@ -41,7 +45,7 @@ def get_event_balances(db: Database, event_id: str, actor_user_id: str) -> list[
             ledger,
             payment["receiver_id"],
             payment["sender_id"],
-            float(payment["amount"]),
+            decimal_from_value(payment["amount"]),
         )
 
     results: list[dict] = []
@@ -50,26 +54,26 @@ def get_event_balances(db: Database, event_id: str, actor_user_id: str) -> list[
         if (debtor, creditor) in processed_pairs or (creditor, debtor) in processed_pairs:
             continue
 
-        forward = ledger.get((debtor, creditor), 0.0)
-        backward = ledger.get((creditor, debtor), 0.0)
+        forward = ledger.get((debtor, creditor), Decimal("0"))
+        backward = ledger.get((creditor, debtor), Decimal("0"))
         net = forward - backward
 
-        if net > 1e-6:
+        if net > 0:
             results.append(
                 {
                     "event_id": event_id,
                     "debitor_id": debtor,
                     "creditor_id": creditor,
-                    "amount": round(net, 2),
+                    "amount": money_round(net),
                 }
             )
-        elif net < -1e-6:
+        elif net < 0:
             results.append(
                 {
                     "event_id": event_id,
                     "debitor_id": creditor,
                     "creditor_id": debtor,
-                    "amount": round(-net, 2),
+                    "amount": money_round(-net),
                 }
             )
 

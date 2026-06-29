@@ -5,6 +5,9 @@ from app import schemas
 
 from app.services.access import assert_event_access, assert_event_open, get_receipt_or_404
 from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
+from app.services.common import decimal_from_value, decimal_to_storage, money_to_storage
+
+_ONE = decimal_from_value("1")
 
 
 def _validate_receipt_users(event: dict, payer_id: str, items: list[schemas.CreateReceiptItemRequest]) -> None:
@@ -25,7 +28,7 @@ def _validate_receipt_users(event: dict, payer_id: str, items: list[schemas.Crea
 def _validate_share_sum(items: list[schemas.CreateReceiptItemRequest]) -> None:
     for item in items:
         total = sum(share.share_value for share in item.share_items)
-        if abs(total - 1.0) > 1e-6:
+        if total != _ONE:
             raise HTTPException(
                 status_code=400,
                 detail="Each item share_items must sum to 1.",
@@ -51,7 +54,7 @@ def _build_receipt_items(
                     "id": share_id,
                     "receipt_item_id": item_id,
                     "user_id": str(share.user_id),
-                    "share_value": share.share_value,
+                    "share_value": decimal_to_storage(share.share_value),
                 }
             )
 
@@ -60,7 +63,7 @@ def _build_receipt_items(
                 "id": item_id,
                 "receipt_id": receipt_id,
                 "name": item.name,
-                "cost": item.cost,
+                "cost": money_to_storage(item.cost),
                 "share_items": share_ids,
             }
         )
@@ -78,7 +81,7 @@ def create_receipt(
     _validate_share_sum(payload.items)
 
     calculated_total = sum(item.cost for item in payload.items)
-    if abs(calculated_total - payload.total_amount) > 1e-6:
+    if money_to_storage(calculated_total) != money_to_storage(payload.total_amount):
         raise HTTPException(
             status_code=400,
             detail="total_amount must be equal to the sum of all item costs.",
@@ -93,7 +96,7 @@ def create_receipt(
         "event_id": event_id,
         "payer_id": payer_id,
         "title": payload.title,
-        "total_amount": payload.total_amount,
+        "total_amount": money_to_storage(payload.total_amount),
         "created_at": now,
         "updated_at": now,
         "items": stored_items,
@@ -125,14 +128,18 @@ def update_receipt(
         _validate_share_sum(payload.items)
 
         calculated_total = sum(item.cost for item in payload.items)
-        if payload.total_amount is not None and abs(calculated_total - payload.total_amount) > 1e-6:
+        if payload.total_amount is not None and money_to_storage(calculated_total) != money_to_storage(
+            payload.total_amount
+        ):
             raise HTTPException(
                 status_code=400,
                 detail="total_amount must be equal to the sum of all item costs.",
             )
 
         update_fields["total_amount"] = (
-            payload.total_amount if payload.total_amount is not None else calculated_total
+            money_to_storage(payload.total_amount)
+            if payload.total_amount is not None
+            else money_to_storage(calculated_total)
         )
         stored_items, stored_share_items = _build_receipt_items(receipt_id, payload.items)
         update_fields["items"] = stored_items

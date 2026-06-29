@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal, ROUND_HALF_UP
 from uuid import uuid4
 
 
@@ -21,6 +22,22 @@ def active_filter(extra: dict | None = None) -> dict:
     if extra:
         query.update(extra)
     return query
+
+
+def decimal_from_value(value) -> Decimal:
+    return Decimal(str(value))
+
+
+def money_to_storage(value: Decimal) -> str:
+    return str(decimal_from_value(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def decimal_to_storage(value: Decimal) -> str:
+    return str(decimal_from_value(value))
+
+
+def money_round(value: Decimal) -> Decimal:
+    return decimal_from_value(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def record_audit_event(

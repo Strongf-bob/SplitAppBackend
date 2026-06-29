@@ -1,6 +1,6 @@
 from app import schemas
 from app.core import tokens
-from app.services import auth, events, payments, receipt_image, receipts, users
+from app.services import auth, balances, events, payments, receipt_image, receipts, users
 
 from tests.conftest import (
     EVENT_ID,
@@ -85,7 +85,7 @@ def test_receipt_create_validates_total_and_membership(db):
 
     assert receipt["event_id"] == EVENT_ID
     assert receipt["payer_id"] == USER_A
-    assert receipt["total_amount"] == 100
+    assert receipt["total_amount"] == "100.00"
     assert len(receipt["items"]) == 1
 
     fetched = receipts.get_receipt(db, receipt["id"], USER_B)
@@ -103,6 +103,39 @@ def test_receipt_detail_requires_event_membership(db):
         assert_status(exc, 403)
     else:
         raise AssertionError("Expected non-member receipt detail access to fail")
+
+
+def test_balances_use_decimal_money_math(db):
+    seed_event(db)
+    payload = schemas.CreateReceiptRequest(
+        payer_id=USER_A,
+        title="Small amounts",
+        total_amount="0.30",
+        items=[
+            schemas.CreateReceiptItemRequest(
+                name="A",
+                cost="0.10",
+                share_items=[schemas.CreateShareItemRequest(user_id=USER_B, share_value="1")],
+            ),
+            schemas.CreateReceiptItemRequest(
+                name="B",
+                cost="0.20",
+                share_items=[schemas.CreateShareItemRequest(user_id=USER_B, share_value="1")],
+            ),
+        ],
+    )
+    receipts.create_receipt(db, EVENT_ID, payload, USER_A)
+
+    rows = balances.get_event_balances(db, EVENT_ID, USER_A)
+
+    assert rows == [
+        {
+            "event_id": EVENT_ID,
+            "debitor_id": USER_B,
+            "creditor_id": USER_A,
+            "amount": schemas.Decimal("0.30"),
+        }
+    ]
 
 
 def test_receipt_image_upload_presign_and_delete(db, fake_s3, monkeypatch):
