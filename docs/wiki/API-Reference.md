@@ -29,6 +29,16 @@ Authorization: Bearer <access_token>
 | `POST` | `/api/login` | Обмен Yandex OAuth token на app access/refresh tokens. | `AuthUserEndpoint` |
 | `POST` | `/api/refresh` | Ротация refresh token и выдача нового access token. | `RefreshTokenEndpoint` |
 
+## Security
+
+Sensitive endpoints have lightweight per-actor/IP rate limiting and return `429` on excess traffic. Covered scopes include auth login/refresh, user search, invite preview/accept/create, and nearby invite code preview/accept/create.
+
+Config:
+
+- `RATE_LIMIT_ENABLED`: default `true`.
+- `RATE_LIMIT_MAX_REQUESTS`: default `60`.
+- `RATE_LIMIT_WINDOW_SECONDS`: default `60`.
+
 ## Users
 
 | Method | Path | Назначение | Notes |

@@ -4,6 +4,7 @@ import re
 
 from app import schemas
 from app.core.monitoring import record_domain_event, track_service_operation
+from app.core.rate_limit import check_rate_limit
 from app.services.access import get_user_or_404
 from app.services.balances import get_event_balances
 from app.services.common import record_audit_event, user_to_api_dict
@@ -230,6 +231,7 @@ def update_current_user(db: Database, actor_user_id: str, payload: schemas.UserU
 @track_service_operation("users.search")
 def search_users(db: Database, actor_user_id: str, query: str, *, limit: int, offset: int) -> dict:
     get_user_or_404(db, actor_user_id)
+    check_rate_limit("users.search", actor_user_id)
     term = _search_name(query)
     if len(term) < 2:
         raise HTTPException(status_code=400, detail="query must contain at least 2 characters.")

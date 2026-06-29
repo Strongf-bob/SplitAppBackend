@@ -161,6 +161,27 @@ def test_user_search_is_opt_in_and_does_not_search_phone(db):
     assert by_phone["items"] == []
 
 
+def test_sensitive_user_search_is_rate_limited(db, monkeypatch):
+    from tests.conftest import seed_users
+
+    monkeypatch.setenv("RATE_LIMIT_MAX_REQUESTS", "1")
+    monkeypatch.setenv("RATE_LIMIT_WINDOW_SECONDS", "60")
+    seed_users(db)
+    users.update_current_user(
+        db,
+        USER_B,
+        schemas.UserUpdate(public_handle="bob_split", discovery_enabled=True),
+    )
+
+    users.search_users(db, USER_A, "bob", limit=20, offset=0)
+    try:
+        users.search_users(db, USER_A, "bob", limit=20, offset=0)
+    except Exception as exc:
+        assert_status(exc, 429)
+    else:
+        raise AssertionError("Expected repeated sensitive search to be rate limited")
+
+
 def test_payment_phone_visibility_respects_event_membership(db):
     seed_event(db)
     users.update_current_user(

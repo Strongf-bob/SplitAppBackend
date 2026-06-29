@@ -11,6 +11,7 @@ from app.core.monitoring import (
     record_domain_event,
     track_service_operation,
 )
+from app.core.rate_limit import check_rate_limit
 
 from app.services.access import (
     active_event_memberships,
@@ -385,6 +386,7 @@ def create_event_invite(
     payload: schemas.CreateEventInviteRequest,
     actor_user_id: str,
 ) -> dict:
+    check_rate_limit("events.invites.create", actor_user_id)
     event = assert_event_access(db, event_id, actor_user_id)
     _assert_can_create_invite(event, actor_user_id)
     assert_event_open(event)
@@ -410,6 +412,7 @@ def create_event_invite(
 
 @track_service_operation("events.invites.preview")
 def preview_event_invite(db: Database, token: str, actor_user_id: str) -> dict:
+    check_rate_limit("events.invites.preview", actor_user_id)
     get_user_or_404(db, actor_user_id)
     invite = _get_active_invite_or_error(db, token)
     event = get_event_or_404(db, invite["event_id"])
@@ -424,6 +427,7 @@ def preview_event_invite(db: Database, token: str, actor_user_id: str) -> dict:
 
 @track_service_operation("events.invites.accept")
 def accept_event_invite(db: Database, token: str, actor_user_id: str) -> dict:
+    check_rate_limit("events.invites.accept", actor_user_id)
     get_user_or_404(db, actor_user_id)
     invite = _get_active_invite_or_error(db, token)
     event = get_event_or_404(db, invite["event_id"])
@@ -481,6 +485,7 @@ def create_nearby_invite_code(
     payload: schemas.CreateNearbyInviteCodeRequest,
     actor_user_id: str,
 ) -> dict:
+    check_rate_limit("events.nearby_codes.create", actor_user_id)
     event = assert_event_access(db, event_id, actor_user_id)
     _assert_can_create_invite(event, actor_user_id)
     assert_event_open(event)
@@ -510,6 +515,7 @@ def create_nearby_invite_code(
 
 @track_service_operation("events.nearby_codes.preview")
 def preview_nearby_invite_code(db: Database, code: str, actor_user_id: str) -> dict:
+    check_rate_limit("events.nearby_codes.preview", actor_user_id)
     get_user_or_404(db, actor_user_id)
     invite_code = _get_active_nearby_code_or_error(db, code)
     event = get_event_or_404(db, invite_code["event_id"])
@@ -524,6 +530,7 @@ def preview_nearby_invite_code(db: Database, code: str, actor_user_id: str) -> d
 
 @track_service_operation("events.nearby_codes.accept")
 def accept_nearby_invite_code(db: Database, code: str, actor_user_id: str) -> dict:
+    check_rate_limit("events.nearby_codes.accept", actor_user_id)
     get_user_or_404(db, actor_user_id)
     invite_code = _get_active_nearby_code_or_error(db, code)
     event = get_event_or_404(db, invite_code["event_id"])
