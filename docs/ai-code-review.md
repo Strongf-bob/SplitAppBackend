@@ -78,3 +78,7 @@ When tests fail, the AI failure workflow uploads `ai-test-failure-context` with:
 
 - `test-output.log` - full `make test` output.
 - `pr-diff.patch` - the PR diff used as LLM context.
+
+Before sending test logs and diffs to the LLM, the analyzer redacts common secret
+patterns. Tests must still avoid printing secrets, tokens, credentials, or
+private user data.
