@@ -10,6 +10,8 @@ from app.core.monitoring import (
 )
 
 from app.services.access import (
+    active_event_memberships,
+    active_event_user_ids,
     assert_event_access,
     assert_event_creator,
     assert_event_open,
@@ -26,6 +28,62 @@ from app.services.common import (
 )
 
 
+def _membership_to_api(membership: dict) -> dict:
+    cleaned = strip_mongo_id(membership)
+    cleaned.pop("deleted_at", None)
+    return cleaned
+
+
+def _event_to_api(db: Database, event: dict) -> dict:
+    cleaned = strip_mongo_id(event)
+    cleaned.pop("users", None)
+    cleaned["participants"] = [
+        _membership_to_api(membership)
+        for membership in active_event_memberships(db, cleaned["id"])
+    ]
+    return cleaned
+
+
+def _upsert_membership(
+    db: Database,
+    *,
+    event_id: str,
+    user_id: str,
+    role: str,
+    now,
+) -> None:
+    existing = db.event_memberships.find_one({"event_id": event_id, "user_id": user_id})
+    if existing:
+        db.event_memberships.update_one(
+            {"id": existing["id"]},
+            {
+                "$set": {
+                    "role": role,
+                    "status": "active",
+                    "joined_at": existing.get("joined_at") or now,
+                    "removed_at": None,
+                    "updated_at": now,
+                },
+                "$unset": {"deleted_at": ""},
+            },
+        )
+        return
+
+    db.event_memberships.insert_one(
+        {
+            "id": new_uuid(),
+            "event_id": event_id,
+            "user_id": user_id,
+            "role": role,
+            "status": "active",
+            "joined_at": now,
+            "removed_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+
+
 @track_service_operation("events.create")
 def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str) -> dict:
     creator_id = actor_user_id
@@ -37,7 +95,6 @@ def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str)
         "creator_id": creator_id,
         "name": payload.name.strip(),
         "is_closed": False,
-        "users": [creator_id],
         "created_at": now,
         "updated_at": now,
     }
@@ -45,24 +102,27 @@ def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str)
         raise HTTPException(status_code=400, detail="name must be set.")
 
     db.events.insert_one(event)
+    _upsert_membership(db, event_id=event["id"], user_id=creator_id, role="creator", now=now)
     record_domain_event("events", "created")
-    observe_event_participants(len(event["users"]))
-    return event
+    observe_event_participants(1)
+    return _event_to_api(db, event)
 
 
 @track_service_operation("events.list")
 def list_events(db: Database, user_id: str, *, limit: int, offset: int) -> dict:
-    query = active_filter({"$or": [{"users": user_id}, {"creator_id": user_id}]})
+    membership_query = {"user_id": user_id, "status": "active", "deleted_at": {"$exists": False}}
+    event_ids = [membership["event_id"] for membership in db.event_memberships.find(membership_query)]
+    query = active_filter({"id": {"$in": event_ids}})
     total = db.events.count_documents(query)
     cursor = db.events.find(query).sort("created_at", -1).skip(offset).limit(limit)
-    events = [strip_mongo_id(event) for event in cursor]
-    return {"items": events, "limit": limit, "offset": offset, "total": total}
+    items = [_event_to_api(db, event) for event in cursor]
+    return {"items": items, "limit": limit, "offset": offset, "total": total}
 
 
 @track_service_operation("events.get")
 def get_event(db: Database, event_id: str, actor_user_id: str) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
-    return strip_mongo_id(event)
+    return _event_to_api(db, event)
 
 
 @track_service_operation("events.delete")
@@ -89,6 +149,11 @@ def delete_event(db: Database, event_id: str, actor_user_id: str) -> None:
         db.payments.update_many(
             active_filter({"event_id": event_id}),
             {"$set": delete_fields},
+            session=session,
+        )
+        db.event_memberships.update_many(
+            {"event_id": event_id, "status": "active"},
+            {"$set": {"status": "removed", "removed_at": now, **delete_fields}},
             session=session,
         )
         db.events.update_one(
@@ -143,7 +208,7 @@ def update_event(
     if "is_closed" in update_fields:
         action = "closed" if update_fields["is_closed"] else "reopened"
         record_domain_event("events", action)
-    return strip_mongo_id(get_event_or_404(db, event_id))
+    return _event_to_api(db, get_event_or_404(db, event_id))
 
 
 @track_service_operation("events.add_participants")
@@ -161,13 +226,12 @@ def add_participants(
             detail=f"Users not found: {', '.join(unknown_ids)}",
         )
 
-    new_users = sorted(set(event["users"]) | set(incoming_ids))
-    db.events.update_one(
-        {"id": event_id},
-        {"$set": {"users": new_users, "updated_at": utc_now()}},
-    )
+    now = utc_now()
+    for user_id in incoming_ids:
+        _upsert_membership(db, event_id=event_id, user_id=user_id, role="member", now=now)
+    db.events.update_one({"id": event_id}, {"$set": {"updated_at": now}})
     record_domain_event("events", "participants_added")
-    observe_event_participants(len(new_users))
+    observe_event_participants(len(active_event_user_ids(db, event_id)))
 
     users = []
     for user in db.users.find({"id": {"$in": incoming_ids}}):
@@ -180,15 +244,19 @@ def remove_participant(db: Database, event_id: str, user_id: str, actor_user_id:
     event = assert_event_access(db, event_id, actor_user_id)
     assert_event_creator(event, actor_user_id)
     assert_event_open(event)
-    if user_id not in event["users"]:
+    if user_id not in active_event_user_ids(db, event_id):
         raise HTTPException(status_code=404, detail="Participant not found in event.")
     if user_id == event["creator_id"]:
         raise HTTPException(status_code=400, detail="Cannot remove event creator.")
 
-    new_users = [uid for uid in event["users"] if uid != user_id]
+    now = utc_now()
     db.events.update_one(
         {"id": event_id},
-        {"$set": {"users": new_users, "updated_at": utc_now()}},
+        {"$set": {"updated_at": now}},
+    )
+    db.event_memberships.update_one(
+        {"event_id": event_id, "user_id": user_id, "status": "active"},
+        {"$set": {"status": "removed", "removed_at": now, "updated_at": now}},
     )
     record_domain_event("events", "participants_removed")
-    observe_event_participants(len(new_users))
+    observe_event_participants(len(active_event_user_ids(db, event_id)))

@@ -77,16 +77,42 @@ def seed_users(db) -> None:
 
 def seed_event(db, *, is_closed: bool = False) -> None:
     seed_users(db)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     db.events.insert_one(
         {
             "id": EVENT_ID,
             "creator_id": USER_A,
             "name": "Trip",
             "is_closed": is_closed,
-            "users": [USER_A, USER_B],
-            "created_at": datetime(2026, 1, 1, tzinfo=UTC),
-            "updated_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "created_at": now,
+            "updated_at": now,
         }
+    )
+    db.event_memberships.insert_many(
+        [
+            {
+                "id": "aaaaaaaa-0000-0000-0000-000000000001",
+                "event_id": EVENT_ID,
+                "user_id": USER_A,
+                "role": "creator",
+                "status": "active",
+                "joined_at": now,
+                "removed_at": None,
+                "created_at": now,
+                "updated_at": now,
+            },
+            {
+                "id": "aaaaaaaa-0000-0000-0000-000000000002",
+                "event_id": EVENT_ID,
+                "user_id": USER_B,
+                "role": "member",
+                "status": "active",
+                "joined_at": now,
+                "removed_at": None,
+                "created_at": now,
+                "updated_at": now,
+            },
+        ]
     )
 
 

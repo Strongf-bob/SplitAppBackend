@@ -27,7 +27,9 @@ def test_event_create_and_list_for_actor(db):
 
     assert created["name"] == "Weekend"
     assert created["creator_id"] == USER_A
-    assert created["users"] == [USER_A]
+    assert [(item["user_id"], item["role"], item["status"]) for item in created["participants"]] == [
+        (USER_A, "creator", "active")
+    ]
     page = events.list_events(db, USER_A, limit=50, offset=0)
 
     assert [event["id"] for event in page["items"]] == [created["id"]]
@@ -68,14 +70,36 @@ def test_list_users_only_returns_visible_users(db):
             "email": "hidden@example.com",
         }
     )
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     db.events.insert_one(
         {
             "id": EVENT_ID,
             "creator_id": USER_A,
             "name": "Trip",
             "is_closed": False,
-            "users": [USER_A, USER_B],
+            "created_at": now,
+            "updated_at": now,
         }
+    )
+    db.event_memberships.insert_many(
+        [
+            {
+                "id": "membership-a",
+                "event_id": EVENT_ID,
+                "user_id": USER_A,
+                "role": "creator",
+                "status": "active",
+                "joined_at": now,
+            },
+            {
+                "id": "membership-b",
+                "event_id": EVENT_ID,
+                "user_id": USER_B,
+                "role": "member",
+                "status": "active",
+                "joined_at": now,
+            },
+        ]
     )
 
     visible_ids = {user["id"] for user in users.list_users(db, USER_A, limit=50, offset=0)["items"]}
@@ -88,18 +112,29 @@ def test_list_events_returns_paginated_visible_page(db):
 
     seed_users(db)
     base_time = datetime(2026, 1, 1, tzinfo=UTC)
-    db.events.insert_many(
+    event_docs = [
+        {
+            "id": f"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa{index}",
+            "creator_id": USER_A,
+            "name": f"Trip {index}",
+            "is_closed": False,
+            "created_at": base_time + timedelta(days=index),
+            "updated_at": base_time + timedelta(days=index),
+        }
+        for index in range(3)
+    ]
+    db.events.insert_many(event_docs)
+    db.event_memberships.insert_many(
         [
             {
-                "id": f"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa{index}",
-                "creator_id": USER_A,
-                "name": f"Trip {index}",
-                "is_closed": False,
-                "users": [USER_A],
-                "created_at": base_time + timedelta(days=index),
-                "updated_at": base_time + timedelta(days=index),
+                "id": f"membership-{index}",
+                "event_id": event["id"],
+                "user_id": USER_A,
+                "role": "creator",
+                "status": "active",
+                "joined_at": event["created_at"],
             }
-            for index in range(3)
+            for index, event in enumerate(event_docs)
         ]
     )
     db.events.insert_one(
@@ -108,7 +143,6 @@ def test_list_events_returns_paginated_visible_page(db):
             "creator_id": USER_C,
             "name": "Hidden",
             "is_closed": False,
-            "users": [USER_C],
             "created_at": base_time + timedelta(days=4),
             "updated_at": base_time + timedelta(days=4),
         }
@@ -138,14 +172,31 @@ def test_list_users_returns_paginated_visible_page(db):
             },
         ]
     )
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     db.events.insert_one(
         {
             "id": EVENT_ID,
             "creator_id": USER_A,
             "name": "Trip",
             "is_closed": False,
-            "users": [USER_A, USER_B, "44444444-4444-4444-4444-444444444444"],
+            "created_at": now,
+            "updated_at": now,
         }
+    )
+    db.event_memberships.insert_many(
+        [
+            {
+                "id": f"membership-visible-{index}",
+                "event_id": EVENT_ID,
+                "user_id": user_id,
+                "role": "creator" if user_id == USER_A else "member",
+                "status": "active",
+                "joined_at": now,
+            }
+            for index, user_id in enumerate(
+                [USER_A, USER_B, "44444444-4444-4444-4444-444444444444"]
+            )
+        ]
     )
 
     page = users.list_users(db, USER_A, limit=2, offset=1)
@@ -542,6 +593,22 @@ def test_event_access_blocks_non_members(db):
         assert_status(exc, 403)
     else:
         raise AssertionError("Expected non-member access to fail")
+
+
+def test_removed_event_member_loses_access(db):
+    seed_event(db)
+
+    events.remove_participant(db, EVENT_ID, USER_B, USER_A)
+
+    membership = db.event_memberships.find_one({"event_id": EVENT_ID, "user_id": USER_B})
+    assert membership["status"] == "removed"
+    assert membership["removed_at"] is not None
+    try:
+        receipts.list_receipts_by_event(db, EVENT_ID, USER_B, limit=50, offset=0)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected removed event member access to fail")
 
 
 def test_closed_event_blocks_mutations_but_allows_reads(db):

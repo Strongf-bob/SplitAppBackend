@@ -11,14 +11,24 @@ from app.services.common import utc_now
 @track_service_operation("users.list")
 def list_users(db: Database, actor_user_id: str, *, limit: int, offset: int) -> dict:
     visible_user_ids = {actor_user_id}
-    for event in db.events.find(
+    event_ids = [
+        membership["event_id"]
+        for membership in db.event_memberships.find(
+            {
+                "user_id": actor_user_id,
+                "status": "active",
+                "deleted_at": {"$exists": False},
+            }
+        )
+    ]
+    for membership in db.event_memberships.find(
         {
+            "event_id": {"$in": event_ids},
+            "status": "active",
             "deleted_at": {"$exists": False},
-            "$or": [{"users": actor_user_id}, {"creator_id": actor_user_id}],
         }
     ):
-        visible_user_ids.update(event.get("users", []))
-        visible_user_ids.add(event["creator_id"])
+        visible_user_ids.add(membership["user_id"])
 
     query = {"id": {"$in": sorted(visible_user_ids)}}
     total = db.users.count_documents(query)

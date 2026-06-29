@@ -41,12 +41,14 @@ Authorization: Bearer <access_token>
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
 | `POST` | `/api/events` | Создать событие. | Creator становится owner события. |
-| `GET` | `/api/events` | Получить события, видимые caller. | Paginated; caller должен быть creator или participant. |
+| `GET` | `/api/events` | Получить события, видимые caller. | Paginated; caller должен иметь active event membership. |
 | `GET` | `/api/events/{id}` | Получить детали события. | Требуется membership. |
 | `PATCH` | `/api/events/{id}` | Обновить name или `is_closed`. | Creator-only management. |
 | `DELETE` | `/api/events/{id}` | Удалить событие. | Creator-only; service удаляет связанные receipts/payments. |
 | `POST` | `/api/events/{id}/participants` | Добавить участников. | Creator-only management. |
 | `DELETE` | `/api/events/{id}/participants/{user_id}` | Удалить участника. | Creator-only management. |
+
+Events return `participants` as membership records with `role` (`creator`, `member`) and `status`. Authorization uses `event_memberships`, not legacy `events.users`.
 
 ## Receipts
 
