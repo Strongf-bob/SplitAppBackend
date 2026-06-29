@@ -78,6 +78,17 @@ def first_int(mapping: dict[str, Any], keys: tuple[str, ...]) -> int | None:
     return None
 
 
+def has_non_empty_value(mapping: dict[str, Any], key: str) -> bool:
+    value = mapping.get(key)
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, dict, tuple, set)):
+        return bool(value)
+    return True
+
+
 def normalize_severity(raw: Any, text: str = "") -> str:
     candidates: list[str] = []
     if isinstance(raw, str):
@@ -164,11 +175,18 @@ def finding_from_dict(item: dict[str, Any]) -> Finding | None:
         start_line is not None and start_line > 0
     )
     has_explicit_finding_signal = any(
-        isinstance(item.get(key), str) and item[key].strip()
+        has_non_empty_value(item, key)
         for key in (
             "severity",
             "level",
             "priority",
+            "body",
+            "message",
+            "comment",
+            "description",
+            "content",
+            "detail",
+            "details",
             "rule",
             "category",
             "recommendation",

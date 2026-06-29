@@ -50,6 +50,14 @@ def sanitize_code_fence(text: str) -> str:
 
 def redact_secrets(text: str) -> str:
     patterns = (
+        (
+            r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----",
+            "[REDACTED_PRIVATE_KEY]",
+        ),
+        (
+            r"(?i)\bAuthorization\s*:\s*(?:Bearer|Token|Basic)\s+[A-Za-z0-9._~+/=-]+",
+            "Authorization: [REDACTED]",
+        ),
         (r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b", "[REDACTED_GITHUB_TOKEN]"),
         (r"\bAKIA[0-9A-Z]{16}\b", "[REDACTED_AWS_ACCESS_KEY]"),
         (
@@ -66,6 +74,17 @@ def redact_secrets(text: str) -> str:
             "[REDACTED_CONNECTION_STRING]",
         ),
         (r"\bsk-[A-Za-z0-9_-]{20,}\b", "[REDACTED_API_KEY]"),
+        (
+            r"(?i)\b([A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|AUTH_KEY|PRIVATE_KEY)[A-Z0-9_]*)"
+            r"\s*=\s*[^\s]+",
+            r"\1=[REDACTED]",
+        ),
+        (
+            r"(?i)\b(https?|postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://"
+            r"[^/\s:@]+:[^@\s]+@",
+            r"\1://[REDACTED_CREDENTIALS]@",
+        ),
+        (r"\b[A-Za-z0-9+/=_-]{48,}\b", "[REDACTED_HIGH_ENTROPY_VALUE]"),
     )
     for pattern, replacement in patterns:
         text = re.sub(pattern, replacement, text)
@@ -96,7 +115,12 @@ def github_request(method: str, url: str, token: str, payload: dict[str, Any]) -
     )
     with urllib.request.urlopen(request, timeout=30) as response:
         body = response.read().decode("utf-8")
-        return json.loads(body) if body else None
+    if not body:
+        return None
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("GitHub API response is not valid JSON.") from exc
 
 
 def validate_llm_url(url: str) -> None:
