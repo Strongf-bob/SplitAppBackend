@@ -28,5 +28,5 @@ def user_to_api_dict(user: dict) -> dict:
         "name": user["name"],
         "phone_number": user["phone_number"],
         "email": user.get("email"),
-        "avatar_url": yandex_avatar_url(user.get("default_avatar_id")),
+        "avatar_url": user.get("avatar_url") or yandex_avatar_url(user.get("default_avatar_id")),
     }

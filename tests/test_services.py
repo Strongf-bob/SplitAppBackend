@@ -2,7 +2,7 @@ from datetime import UTC
 
 from app import schemas
 from app.core import tokens
-from app.services import auth, events, payments, receipts
+from app.services import auth, events, payments, receipts, users
 
 from tests.conftest import (
     EVENT_ID,
@@ -29,6 +29,27 @@ def test_event_create_and_list_for_actor(db):
     assert created["creator_id"] == USER_A
     assert created["users"] == [USER_A]
     assert [event["id"] for event in events.list_events(db, USER_A)] == [created["id"]]
+
+
+def test_update_current_user_profile(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+
+    user = users.update_current_user(
+        db,
+        USER_A,
+        schemas.UserUpdate(
+            name=" Alice Updated ",
+            email=" updated@example.com ",
+            avatar_url=" https://cdn.example.com/a.jpg ",
+        ),
+    )
+
+    assert user["name"] == "Alice Updated"
+    assert user["email"] == "updated@example.com"
+    assert user["avatar_url"] == "https://cdn.example.com/a.jpg"
+    assert db.users.find_one({"id": USER_A})["phone_number"] == "+10000000001"
 
 
 def test_receipt_create_validates_total_and_membership(db):

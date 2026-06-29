@@ -12,6 +12,12 @@ class User(BaseModel):
     avatar_url: str | None = None
 
 
+class UserUpdate(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    avatar_url: str | None = None
+
+
 class LoginYandexRequest(BaseModel):
     yandex_token: str = Field(min_length=1)
 
@@ -138,4 +144,3 @@ class EventBalance(BaseModel):
     debitor_id: UUID
     creditor_id: UUID
     amount: float
-
