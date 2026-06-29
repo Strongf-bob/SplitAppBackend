@@ -16,6 +16,7 @@ from app.dependencies import require_auth_token
 from app.routers import (
     auth_router,
     events_router,
+    friends_router,
     health_router,
     payments_router,
     receipts_router,
@@ -144,6 +145,7 @@ def create_app() -> FastAPI:
     api.include_router(health_router)
     api.include_router(auth_router)
     api.include_router(events_router)
+    api.include_router(friends_router)
     api.include_router(users_router)
     api.include_router(receipts_router)
     api.include_router(payments_router)

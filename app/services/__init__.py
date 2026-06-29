@@ -13,6 +13,14 @@ from app.services.events import (
     revoke_event_invite,
     update_event,
 )
+from app.services.friends import (
+    accept_friend_request,
+    block_friendship,
+    create_friend_request,
+    list_friendships,
+    reject_friend_request,
+    remove_friendship,
+)
 from app.services.indexes import ensure_indexes
 from app.services.payments import (
     confirm_payment,
@@ -36,10 +44,13 @@ from app.services.users import list_users, search_users
 __all__ = [
     "add_participants",
     "accept_event_invite",
+    "accept_friend_request",
+    "block_friendship",
     "confirm_payment",
     "confirm_receipt",
     "create_event",
     "create_event_invite",
+    "create_friend_request",
     "delete_event",
     "create_payment",
     "create_payment_request",
@@ -50,6 +61,7 @@ __all__ = [
     "get_event_balance_explanations",
     "get_event_balances",
     "list_events",
+    "list_friendships",
     "list_payment_requests_by_event",
     "list_payments_by_event",
     "list_receipts_by_event",
@@ -58,7 +70,9 @@ __all__ = [
     "mark_payment_request_paid",
     "preview_event_invite",
     "reject_payment",
+    "reject_friend_request",
     "remove_participant",
+    "remove_friendship",
     "revoke_event_invite",
     "rotate_refresh_token",
     "search_users",

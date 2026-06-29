@@ -25,6 +25,26 @@ class UserPage(BaseModel):
     total: int
 
 
+class FriendRequestCreate(BaseModel):
+    user_id: UUID
+
+
+class Friendship(BaseModel):
+    id: UUID
+    requester_id: UUID
+    addressee_id: UUID
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class FriendshipPage(BaseModel):
+    items: list[Friendship]
+    limit: int
+    offset: int
+    total: int
+
+
 class UserUpdate(BaseModel):
     name: str | None = None
     email: str | None = None
