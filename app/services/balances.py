@@ -28,7 +28,14 @@ def get_event_balances(db: Database, event_id: str, actor_user_id: str) -> list[
     assert_event_access(db, event_id, actor_user_id)
     receipts = [
         strip_mongo_id(receipt)
-        for receipt in db.receipts.find(active_filter({"event_id": event_id}))
+        for receipt in db.receipts.find(
+            active_filter(
+                {
+                    "event_id": event_id,
+                    "$or": [{"status": "confirmed"}, {"status": {"$exists": False}}],
+                }
+            )
+        )
     ]
     confirmed_payments = [
         strip_mongo_id(payment)

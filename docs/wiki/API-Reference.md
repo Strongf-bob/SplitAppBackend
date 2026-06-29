@@ -58,10 +58,11 @@ Events return `participants` as membership records with `role` (`creator`, `memb
 
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
-| `POST` | `/api/events/{id}/receipts` | Создать чек с items и shares. | Требуется membership; closed event запрещает mutation. |
+| `POST` | `/api/events/{id}/receipts` | Создать draft чек с items и shares. | Требуется membership; closed event запрещает mutation; нужен `Idempotency-Key`. |
 | `GET` | `/api/events/{id}/receipts` | Список чеков события. | Paginated; требуется membership. |
 | `GET` | `/api/receipts/{id}` | Детали чека. | Требуется membership через событие. |
-| `PATCH` | `/api/receipts/{id}` | Обновить чек. | Требуется membership; closed event запрещает mutation. |
+| `PATCH` | `/api/receipts/{id}` | Обновить чек. | Financial fields нельзя менять после confirmation; title можно обновить. |
+| `POST` | `/api/receipts/{id}/confirm` | Подтвердить draft чек. | Только confirmed receipts влияют на balances. |
 | `DELETE` | `/api/receipts/{id}` | Удалить чек. | Требуется authorization; delete behavior реализован в service layer. |
 | `POST` | `/api/receipts/{id}/image` | Загрузить JPEG изображения чека. | Multipart field: `file` или `image`. |
 | `DELETE` | `/api/receipts/{id}/image` | Удалить изображение чека. | Storage state должен быть очищен. |

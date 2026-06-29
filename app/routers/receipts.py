@@ -58,6 +58,15 @@ def update_receipt(
     return services.update_receipt(db, str(id), payload, current_user_id)
 
 
+@router.post("/api/receipts/{id}/confirm", response_model=schemas.Receipt)
+def confirm_receipt(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.confirm_receipt(db, str(id), current_user_id)
+
+
 @router.delete("/api/receipts/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_receipt(
     id: UUID,
