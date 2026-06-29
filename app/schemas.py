@@ -214,3 +214,16 @@ class EventBalance(BaseModel):
     debitor_id: UUID
     creditor_id: UUID
     amount_kopecks: int
+
+
+class BalanceContribution(BaseModel):
+    source_type: str
+    source_id: UUID
+    debitor_id: UUID
+    creditor_id: UUID
+    amount_kopecks: int
+    description: str
+
+
+class EventBalanceExplanation(EventBalance):
+    contributions: list[BalanceContribution]

@@ -135,3 +135,15 @@ def get_event_balances(
     current_user_id: str = Depends(get_actor_user_id),
 ) -> list[dict]:
     return services.get_event_balances(db, str(id), current_user_id)
+
+
+@router.get(
+    "/api/events/{id}/balances/explain",
+    response_model=list[schemas.EventBalanceExplanation],
+)
+def get_event_balance_explanations(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> list[dict]:
+    return services.get_event_balance_explanations(db, str(id), current_user_id)
