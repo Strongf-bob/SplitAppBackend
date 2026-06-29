@@ -1,41 +1,121 @@
-# SplitApp TODO
+# SplitApp Project Backlog
 
-## Организация Проекта
-- [ ] **Создать wiki для проекта** — описать архитектуру, API, деплой, рабочие процессы и troubleshooting.
-- [ ] **Провести полную настройку GitHub** — branch protection, required checks, labels, issue/PR templates, environments, repository secrets.
-- [ ] **Деплой на сервер** — настроить production-сервер, systemd/service env, доступы, мониторинг и rollback-процесс.
+Дата сверки: 2026-06-29.
 
-## Доделать Начатое
-- [ ] **Платёжный флоу** — экран создания платежа, подтверждение получателем, отображение долгов в `FriendsView`. Frontend: `/Users/strongf/Developer/SplitApp Yandex/SplitApp`; backend endpoints уже частично готовы.
-- [ ] **Закрытие событий** — кнопка закрытия во фронте; backend уже запрещает мутации закрытого события.
-- [ ] **Экран участников события** — добавить/удалить людей, видеть кто в событии. Требует frontend-экрана; backend owner-only endpoints уже есть.
-- [ ] **Финансовая статистика в профиле** — вывести `closedBillsAmount` / `openBillsAmount`. Нужен backend contract и frontend UI.
-- [ ] **Просмотр и загрузка фото чека** — привязать `ReceiptImageViewerSheet`, добавить загрузку из галереи. Frontend; backend upload/delete/presigned URL уже есть.
-- [ ] **Swipe-to-delete чеков на главной** — сейчас `onDelete = {}`. Frontend; backend `DELETE /api/receipts/{id}` уже есть.
+Этот файл разделяет исходный список задач на четыре группы:
 
-## Новые Фичи
-- [ ] **Групповые долги и взаимозачёты** — оптимизация «кто кому платит» с минимизацией транзакций.
-- [ ] **Push-уведомления** — новый чек в событии, новый платёж, подтверждение, закрытие события.
-- [ ] **Инвайт-коды в события** — шеринг ссылкой/кодом вместо поиска по UUID.
-- [ ] **Категории чеков** — еда/транспорт/жильё и аналитика расходов по категориям.
-- [ ] **Шаблоны повторяющихся чеков** — «коммуналка каждый месяц».
-- [ ] **AI-ассистент в приложении** — «раскидай чек поровну», «добавь чаевые 10%», автокатегоризация.
-- [ ] **Экспорт отчёта** — PDF/CSV кто кому сколько.
-- [ ] **Мультивалютность** — сейчас суммы без валюты.
+- что уже сделано в `SplitAppBackend`;
+- что осталось сделать в этом backend-репозитории;
+- что требует настройки GitHub или production-инфраструктуры;
+- что относится к iOS-приложению `/Users/strongf/Developer/SplitApp Yandex/SplitApp`.
 
-## Инфраструктура
-- [x] **Логирование backend** — structured request logs + correlation/request ID.
-- [x] **Метрики backend** — Prometheus `/api/metrics`; optional Sentry через `SENTRY_DSN`.
-- [ ] **Мониторинг production** — Grafana/alerts/Sentry project setup на сервере и во frontend.
-- [x] **Backend tests** — pytest regression suite.
-- [ ] **Frontend tests** — UI/unit tests в `/Users/strongf/Developer/SplitApp Yandex/SplitApp`.
-- [x] **CI для backend** — GitHub Actions lint + test.
-- [ ] **CD для backend** — workflow добавлен, но требует GitHub Secrets и production server setup.
-- [ ] **Docker** — контейнеризация бэка, docker-compose для локальной разработки.
-- [ ] **Пагинация** — все списковые ручки API.
-- [ ] **Rate limiting** — защита API.
-- [ ] **AI-агент для ревью коммитов** — авто-проверка PR.
+## Уже Сделано В Backend
 
-## Что Не В Этом Репозитории
-- Все SwiftUI screens, `FriendsView`, `ReceiptImageViewerSheet`, `onDelete = {}`, offline UX, frontend alerts и frontend tests относятся к `/Users/strongf/Developer/SplitApp Yandex/SplitApp`.
-- Wiki, branch protection, GitHub environments, secrets и labels настраиваются в GitHub UI/API, не только изменениями файлов в этом backend repository.
+### Документация И Организация
+
+- [x] **AGENTS.md для backend** — правила работы Codex добавлены в репозиторий.
+- [x] **Backend wiki в репозитории** — добавлены страницы в `docs/wiki`.
+- [x] **README с локальным запуском и server-runbook** — описаны `.env`, MongoDB, `make run-dev`, systemd.
+- [x] **Security baseline** — добавлен `docs/security-baseline.md`.
+- [x] **Remediation report** — добавлен `docs/remediation-report.md`.
+- [x] **Backend TODO** — этот файл ведет backlog по backend scope.
+
+### Исправленные Backend Проблемы
+
+- [x] **Закрытое событие защищено** — backend запрещает финансовые мутации закрытого события.
+- [x] **Каскадное удаление события сделано транзакционным** — удаление backend-сущностей выполняется согласованно.
+- [x] **Подтверждение платежа ограничено получателем** — платеж не может подтвердить любой участник.
+- [x] **Создание платежа защищено от подмены sender_id** — backend не доверяет клиентскому отправителю.
+- [x] **Управление событием ограничено создателем** — изменение события и участников не доступно любому участнику.
+- [x] **Refresh token rotation получил grace period** — потеря одного ответа не должна навсегда ломать доступ.
+- [x] **DELETE `/api/payments/{id}`** — удаление платежей добавлено.
+- [x] **GET `/api/receipts/{id}`** — получение одного чека добавлено.
+- [x] **CORS настроен явно** — production/local origins задаются конфигурацией.
+- [x] **PATCH `/api/users/me`** — управление профилем текущего пользователя добавлено.
+- [x] **Receipt image lifecycle** — upload/delete/presigned URL добавлены.
+- [x] **Soft delete и audit fields** — чувствительные удаления не являются безусловным hard delete.
+- [x] **GET `/api/users` больше не сливает всех пользователей** — список ограничен видимыми пользователями.
+- [x] **Денежная логика переведена на Decimal** — backend больше не считает новые суммы через `float`.
+- [x] **S3-чек не публикуется через public-read ACL** — чтение идет через presigned URL.
+
+### Backend Инфраструктура
+
+- [x] **Backend tests** — добавлен pytest regression suite.
+- [x] **Backend lint tooling** — добавлен Ruff и targets `make lint` / `make format-check`.
+- [x] **Backend CI** — добавлен GitHub Actions workflow для lint/test.
+- [x] **Structured logging** — request logs и request/correlation ID добавлены.
+- [x] **Backend metrics** — Prometheus `/api/metrics` и optional Sentry через `SENTRY_DSN`.
+- [x] **Systemd deployment path** — добавлен `deploy/splitapp-backend.service`.
+- [x] **Backend pagination** — list endpoints переведены на `items` / `limit` / `offset` / `total`.
+- [x] **OpenAPI sync** — `openapi.yaml` обновлен под текущие backend contracts.
+
+## Осталось Сделать В Backend
+
+### Product/API
+
+- [ ] **Финансовая статистика профиля** — определить contract и добавить `closedBillsAmount` / `openBillsAmount`.
+- [ ] **Групповые долги и взаимозачеты** — оптимизировать "кто кому платит" с минимизацией транзакций.
+- [ ] **Push-уведомления: backend contract** — события для нового чека, платежа, подтверждения и закрытия события.
+- [ ] **Инвайт-коды в события** — ссылки/коды вместо ручного поиска по UUID.
+- [ ] **Категории чеков** — модель, API и аналитика расходов по категориям.
+- [ ] **Шаблоны повторяющихся чеков** — backend-модель и API для периодических расходов.
+- [ ] **AI-ассистент: backend boundary** — определить, какие команды обрабатывает сервер.
+- [ ] **Экспорт отчета** — PDF/CSV "кто кому сколько".
+- [ ] **Мультивалютность** — хранение валюты, правила конвертации и API contract.
+
+### Security/Infra
+
+- [ ] **Rate limiting** — ограничение частоты запросов на API.
+- [ ] **Docker** — Dockerfile и docker-compose для локальной разработки.
+- [ ] **Production monitoring hardening** — закрыть `/api/metrics` сетевой политикой или авторизацией.
+- [ ] **MongoDB transaction requirement** — задокументировать/проверить production topology для транзакций.
+- [ ] **Secrets audit** — проверить, что `JWT_SECRET`, OAuth, S3 и MongoDB credentials живут только в env/secrets.
+
+## Требует GitHub Или Production Настройки
+
+Эти задачи не закрываются только изменениями файлов в backend-репозитории.
+
+- [ ] **GitHub branch protection** — запрет прямого push в `main`, required PR reviews, required status checks.
+- [ ] **GitHub labels** — bug/security/backend/frontend/infra/docs и приоритеты.
+- [ ] **Issue templates** — bug report, feature request, security remediation.
+- [ ] **PR template** — summary, testing, migration/security notes.
+- [ ] **GitHub environments** — production environment с approvals.
+- [ ] **Repository secrets** — production SSH host/user/key, env path, Sentry DSN и другие deploy secrets.
+- [ ] **CD activation** — workflow есть, но деплой требует secrets и production server setup.
+- [ ] **Production server setup** — `/opt/splitapp/backend`, `/etc/splitapp/backend.env`, systemd enable/start.
+- [ ] **Grafana/Sentry/alerts** — реальные dashboards, alert rules и error project setup.
+- [ ] **Wiki publication check** — workflow синхронизации есть; нужно проверить, что GitHub Wiki включена и action может пушить в `.wiki.git`.
+- [ ] **AI-агент для ревью коммитов** — выбрать GitHub app/action и правила запуска на PR.
+
+## Вынесено Во Frontend Репозиторий
+
+Эти пункты относятся к `/Users/strongf/Developer/SplitApp Yandex/SplitApp`.
+
+### Доделать Начатое
+
+- [ ] **Платежный флоу UI** — экран создания платежа, подтверждение получателем, отображение долгов в `FriendsView`.
+- [ ] **Закрытие событий UI** — кнопка закрытия события.
+- [ ] **Экран участников события** — добавить/удалить людей, видеть кто в событии.
+- [ ] **Финансовая статистика в профиле UI** — вывести `closedBillsAmount` / `openBillsAmount` после backend contract.
+- [ ] **Просмотр и загрузка фото чека** — привязать `ReceiptImageViewerSheet`, добавить загрузку из галереи.
+- [ ] **Swipe-to-delete чеков на главной** — заменить `onDelete = {}` на вызов backend `DELETE /api/receipts/{id}`.
+- [ ] **Пагинация в клиентах** — перейти на backend envelope `items` / `limit` / `offset` / `total`.
+
+### Frontend Проблемы Из Исходного Списка
+
+- [ ] **FriendsView debts** — долги сейчас не грузятся с сервера.
+- [ ] **settleDebt()** — заменить локальную заглушку реальным API-запросом.
+- [ ] **LocalFriendsStore** — подключить к ViewModel или удалить, если backend является source of truth.
+- [ ] **Offline UX** — улучшить индикацию офлайна.
+- [ ] **Мертвый `.swift` файл** — удалить или восстановить корректное имя/использование.
+- [ ] **CoreData Payment mapping** — использовать или удалить.
+- [ ] **Server error presentation** — заменить сырые alerts на нормальную обработку ошибок.
+- [ ] **Frontend tests** — добавить unit/UI tests.
+
+## Предлагаемый Порядок Работы
+
+1. Закрыть GitHub setup: branch protection, templates, labels, environments, secrets.
+2. Довести production deploy: server env, systemd, CD secrets, smoke check после deploy.
+3. Добавить backend rate limiting и Docker, потому что это инфраструктурная база.
+4. Перейти во frontend-репозиторий и закрыть интеграцию уже готовых backend endpoints: payments, receipt delete/images, pagination.
+5. После этого брать новые product features: invite codes, categories, group debt optimization, export, multicurrency.
