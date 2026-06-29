@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import sys
@@ -18,6 +19,7 @@ COMMENT_MARKER = "<!-- ai-test-failure-analysis -->"
 MAX_LOG_CHARS = 30000
 MAX_DIFF_CHARS = 45000
 MAX_ANALYSIS_CHARS = 12000
+HIGH_ENTROPY_TOKEN_RE = re.compile(r"\b[A-Za-z0-9+/=_-]{24,}\b")
 
 
 def log(message: str) -> None:
@@ -84,11 +86,29 @@ def redact_secrets(text: str) -> str:
             r"[^/\s:@]+:[^@\s]+@",
             r"\1://[REDACTED_CREDENTIALS]@",
         ),
-        (r"\b[A-Za-z0-9+/=_-]{48,}\b", "[REDACTED_HIGH_ENTROPY_VALUE]"),
     )
     for pattern, replacement in patterns:
         text = re.sub(pattern, replacement, text)
-    return text
+    return redact_high_entropy_values(text)
+
+
+def shannon_entropy(value: str) -> float:
+    if not value:
+        return 0.0
+    return -sum((value.count(char) / len(value)) * math.log2(value.count(char) / len(value)) for char in set(value))
+
+
+def redact_high_entropy_values(text: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        value = match.group(0)
+        has_letters = bool(re.search(r"[A-Za-z]", value))
+        has_digits = bool(re.search(r"\d", value))
+        has_symbols = bool(re.search(r"[+/=_-]", value))
+        if (has_letters and (has_digits or has_symbols)) and shannon_entropy(value) >= 4.5:
+            return "[REDACTED_HIGH_ENTROPY_VALUE]"
+        return value
+
+    return HIGH_ENTROPY_TOKEN_RE.sub(replace, text)
 
 
 def sanitize_llm_markdown(text: str) -> str:
@@ -114,8 +134,12 @@ def github_request(method: str, url: str, token: str, payload: dict[str, Any] | 
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        body = response.read().decode("utf-8")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"GitHub API {method} {url} failed: {exc.code} {error_body}") from exc
     if not body:
         return None
     try:
