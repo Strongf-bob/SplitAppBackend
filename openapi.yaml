@@ -1685,6 +1685,32 @@
         }
       }
     },
+    "/api/users/me/financial-stats": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get Current User Financial Stats",
+        "operationId": "get_current_user_financial_stats_api_users_me_financial_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserFinancialStats"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/users/me": {
       "patch": {
         "tags": [
@@ -5482,6 +5508,34 @@
           "phone_number"
         ],
         "title": "User"
+      },
+      "UserFinancialStats": {
+        "properties": {
+          "open_events_count": {
+            "type": "integer",
+            "title": "Open Events Count"
+          },
+          "closed_events_count": {
+            "type": "integer",
+            "title": "Closed Events Count"
+          },
+          "outstanding_owed_kopecks": {
+            "type": "integer",
+            "title": "Outstanding Owed Kopecks"
+          },
+          "outstanding_receivable_kopecks": {
+            "type": "integer",
+            "title": "Outstanding Receivable Kopecks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "open_events_count",
+          "closed_events_count",
+          "outstanding_owed_kopecks",
+          "outstanding_receivable_kopecks"
+        ],
+        "title": "UserFinancialStats"
       },
       "UserPage": {
         "properties": {

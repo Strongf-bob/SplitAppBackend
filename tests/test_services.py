@@ -165,6 +165,29 @@ def test_payment_phone_visibility_respects_event_membership(db):
     assert hidden["items"] == []
 
 
+def test_current_user_financial_stats_counts_events_and_balances(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    db.events.update_one({"id": EVENT_ID}, {"$set": {"is_closed": True}})
+
+    stats_a = users.get_current_user_financial_stats(db, USER_A)
+    stats_b = users.get_current_user_financial_stats(db, USER_B)
+
+    assert stats_a == {
+        "open_events_count": 0,
+        "closed_events_count": 1,
+        "outstanding_owed_kopecks": 0,
+        "outstanding_receivable_kopecks": 5000,
+    }
+    assert stats_b == {
+        "open_events_count": 0,
+        "closed_events_count": 1,
+        "outstanding_owed_kopecks": 5000,
+        "outstanding_receivable_kopecks": 0,
+    }
+
+
 def test_friend_request_accept_remove_and_block(db):
     from tests.conftest import seed_users
 

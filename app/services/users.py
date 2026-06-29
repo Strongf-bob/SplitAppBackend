@@ -5,6 +5,7 @@ import re
 from app import schemas
 from app.core.monitoring import record_domain_event, track_service_operation
 from app.services.access import get_user_or_404
+from app.services.balances import get_event_balances
 from app.services.common import record_audit_event, user_to_api_dict
 from app.services.common import utc_now
 
@@ -114,6 +115,49 @@ def list_users(db: Database, actor_user_id: str, *, limit: int, offset: int) -> 
         "limit": limit,
         "offset": offset,
         "total": total,
+    }
+
+
+@track_service_operation("users.financial_stats")
+def get_current_user_financial_stats(db: Database, actor_user_id: str) -> dict:
+    get_user_or_404(db, actor_user_id)
+    open_events_count = 0
+    closed_events_count = 0
+    outstanding_owed_kopecks = 0
+    outstanding_receivable_kopecks = 0
+
+    memberships = db.event_memberships.find(
+        {
+            "user_id": actor_user_id,
+            "status": "active",
+            "deleted_at": {"$exists": False},
+        }
+    )
+    for membership in memberships:
+        event = db.events.find_one(
+            {
+                "id": membership["event_id"],
+                "deleted_at": {"$exists": False},
+            }
+        )
+        if not event:
+            continue
+        if event.get("is_closed"):
+            closed_events_count += 1
+        else:
+            open_events_count += 1
+
+        for row in get_event_balances(db, event["id"], actor_user_id):
+            if row["debitor_id"] == actor_user_id:
+                outstanding_owed_kopecks += row["amount_kopecks"]
+            if row["creditor_id"] == actor_user_id:
+                outstanding_receivable_kopecks += row["amount_kopecks"]
+
+    return {
+        "open_events_count": open_events_count,
+        "closed_events_count": closed_events_count,
+        "outstanding_owed_kopecks": outstanding_owed_kopecks,
+        "outstanding_receivable_kopecks": outstanding_receivable_kopecks,
     }
 
 

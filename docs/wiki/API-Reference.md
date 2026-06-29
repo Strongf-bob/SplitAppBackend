@@ -35,6 +35,7 @@ Authorization: Bearer <access_token>
 | --- | --- | --- | --- |
 | `GET` | `/api/users` | Список пользователей, видимых текущему actor. | Paginated; возвращает current user и пользователей из общих active events. |
 | `GET` | `/api/users/search` | Opt-in поиск пользователей по handle/name. | Не ищет по телефону; возвращает только `discovery_enabled=true`. |
+| `GET` | `/api/users/me/financial-stats` | Финансовая сводка текущего пользователя. | Open/closed event totals, outstanding owed/receivable kopecks. |
 | `PATCH` | `/api/users/me` | Обновить профиль текущего пользователя. | `name`, `email`, `avatar_url`, discovery fields, payment hints. |
 
 Payment phone visibility is conservative: `nobody`, `event_members`, or `friends`. Phone search is disabled.
