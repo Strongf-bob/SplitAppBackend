@@ -261,6 +261,35 @@ class ReceiptPage(BaseModel):
     total: int
 
 
+class AllocationSession(BaseModel):
+    id: UUID
+    event_id: UUID
+    receipt_id: UUID
+    status: str
+    created_by: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReceiptItemClaimRequest(BaseModel):
+    receipt_item_id: UUID
+
+
+class ReceiptItemClaim(BaseModel):
+    id: UUID
+    session_id: UUID
+    receipt_id: UUID
+    receipt_item_id: UUID
+    user_id: UUID
+    status: str
+    created_at: datetime
+
+
+class AllocationSessionState(BaseModel):
+    session: AllocationSession
+    claims: list[ReceiptItemClaim]
+
+
 class ReceiptImageUploadResponse(BaseModel):
     image_url: str
 
