@@ -31,6 +31,11 @@ def refresh_token_ttl() -> timedelta:
     return timedelta(days=days)
 
 
+def refresh_token_reuse_grace() -> timedelta:
+    seconds = int(os.getenv("JWT_REFRESH_REUSE_GRACE_SECONDS", "120"))
+    return timedelta(seconds=max(seconds, 0))
+
+
 def create_access_token(user_id: str, *, now: datetime | None = None) -> tuple[str, int]:
     issued = now or datetime.now(UTC)
     ttl = access_token_ttl()
