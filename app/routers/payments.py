@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Response, status
 from pymongo.database import Database
 
 from app import schemas, services
@@ -17,10 +17,13 @@ router = APIRouter(tags=["Payments"])
 def create_payment(
     id: UUID,
     payload: schemas.PaymentCreate,
+    idempotency_key: str = Header(min_length=1, alias="Idempotency-Key"),
     db: Database = Depends(get_db),
     current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
-    return services.create_payment(db, str(id), payload, current_user_id)
+    return services.create_payment(
+        db, str(id), payload, current_user_id, idempotency_key=idempotency_key
+    )
 
 
 @router.get("/api/events/{id}/payments", response_model=schemas.PaymentPage)

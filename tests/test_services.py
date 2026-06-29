@@ -174,6 +174,40 @@ def test_receipt_create_validates_total_and_membership(db):
     assert "share_items" not in fetched
 
 
+def test_receipt_create_is_idempotent_for_same_key_and_payload(db):
+    seed_event(db)
+    payload = receipt_payload()
+
+    first = receipts.create_receipt(
+        db, EVENT_ID, payload, USER_A, idempotency_key="receipt-create-1"
+    )
+    second = receipts.create_receipt(
+        db, EVENT_ID, payload, USER_A, idempotency_key="receipt-create-1"
+    )
+
+    assert second == first
+    assert db.receipts.count_documents({"event_id": EVENT_ID}) == 1
+    assert db.idempotency_keys.count_documents({}) == 1
+
+
+def test_receipt_create_rejects_idempotency_key_reuse_with_different_payload(db):
+    seed_event(db)
+    receipts.create_receipt(
+        db, EVENT_ID, receipt_payload(), USER_A, idempotency_key="receipt-create-1"
+    )
+    changed_payload = receipt_payload()
+    changed_payload.title = "Different"
+
+    try:
+        receipts.create_receipt(
+            db, EVENT_ID, changed_payload, USER_A, idempotency_key="receipt-create-1"
+        )
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected idempotency key reuse with different payload to fail")
+
+
 def test_receipt_detail_requires_event_membership(db):
     seed_event(db)
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
@@ -361,6 +395,41 @@ def test_payment_create_and_confirm(db):
     )
 
     assert updated["confirmed"] is True
+
+
+def test_payment_create_is_idempotent_for_same_key_and_payload(db):
+    seed_event(db)
+    payload = payment_payload()
+
+    first = payments.create_payment(
+        db, EVENT_ID, payload, USER_A, idempotency_key="payment-create-1"
+    )
+    second = payments.create_payment(
+        db, EVENT_ID, payload, USER_A, idempotency_key="payment-create-1"
+    )
+
+    assert second == first
+    assert db.payments.count_documents({"event_id": EVENT_ID}) == 1
+    assert db.idempotency_keys.count_documents({}) == 1
+
+
+def test_payment_create_rejects_idempotency_key_reuse_with_different_payload(db):
+    seed_event(db)
+    payments.create_payment(
+        db, EVENT_ID, payment_payload(), USER_A, idempotency_key="payment-create-1"
+    )
+    changed_payload = schemas.PaymentCreate(
+        sender_id=USER_A, receiver_id=USER_B, amount_kopecks=5100
+    )
+
+    try:
+        payments.create_payment(
+            db, EVENT_ID, changed_payload, USER_A, idempotency_key="payment-create-1"
+        )
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected idempotency key reuse with different payload to fail")
 
 
 def test_list_payments_returns_paginated_active_page(db):

@@ -12,6 +12,7 @@ from app.services.common import (
     money_to_storage,
     stored_money_to_kopecks,
 )
+from app.services.idempotency import run_idempotent_create
 
 _ONE = decimal_from_value("1")
 
@@ -103,6 +104,24 @@ def _receipt_to_api(receipt: dict, *, include_internal_shares: bool = False) -> 
 
 @track_service_operation("receipts.create")
 def create_receipt(
+    db: Database,
+    event_id: str,
+    payload: schemas.CreateReceiptRequest,
+    actor_user_id: str,
+    *,
+    idempotency_key: str | None = None,
+) -> dict:
+    return run_idempotent_create(
+        db,
+        actor_user_id=actor_user_id,
+        scope=f"events:{event_id}:receipts",
+        key=idempotency_key,
+        request_payload=payload.model_dump(mode="json"),
+        create=lambda: _create_receipt(db, event_id, payload, actor_user_id),
+    )
+
+
+def _create_receipt(
     db: Database, event_id: str, payload: schemas.CreateReceiptRequest, actor_user_id: str
 ) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)

@@ -723,6 +723,16 @@
               "format": "uuid",
               "title": "Id"
             }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Idempotency-Key"
+            }
           }
         ],
         "requestBody": {
@@ -1136,6 +1146,16 @@
               "type": "string",
               "format": "uuid",
               "title": "Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Idempotency-Key"
             }
           }
         ],

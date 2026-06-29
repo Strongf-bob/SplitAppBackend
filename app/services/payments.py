@@ -7,6 +7,7 @@ from app.core.monitoring import observe_money_amount, record_domain_event, track
 from app.services.access import assert_event_access, assert_event_open, get_payment_or_404
 from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
 from app.services.common import money_to_storage, stored_money_to_kopecks
+from app.services.idempotency import run_idempotent_create
 
 
 def _payment_to_api(payment: dict) -> dict:
@@ -18,6 +19,24 @@ def _payment_to_api(payment: dict) -> dict:
 
 @track_service_operation("payments.create")
 def create_payment(
+    db: Database,
+    event_id: str,
+    payload: schemas.PaymentCreate,
+    actor_user_id: str,
+    *,
+    idempotency_key: str | None = None,
+) -> dict:
+    return run_idempotent_create(
+        db,
+        actor_user_id=actor_user_id,
+        scope=f"events:{event_id}:payments",
+        key=idempotency_key,
+        request_payload=payload.model_dump(mode="json"),
+        create=lambda: _create_payment(db, event_id, payload, actor_user_id),
+    )
+
+
+def _create_payment(
     db: Database, event_id: str, payload: schemas.PaymentCreate, actor_user_id: str
 ) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
