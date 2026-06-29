@@ -163,8 +163,11 @@ def test_receipt_create_validates_total_and_membership(db):
 
     assert receipt["event_id"] == EVENT_ID
     assert receipt["payer_id"] == USER_A
-    assert receipt["total_amount"] == "100.00"
+    assert receipt["total_amount_kopecks"] == 10000
     assert len(receipt["items"]) == 1
+    stored = db.receipts.find_one({"id": receipt["id"]})
+    assert stored["total_amount_kopecks"] == 10000
+    assert isinstance(stored["total_amount_kopecks"], int)
 
     fetched = receipts.get_receipt(db, receipt["id"], USER_B)
     assert fetched["id"] == receipt["id"]
@@ -193,7 +196,7 @@ def test_list_receipts_returns_paginated_active_page(db):
                 "event_id": EVENT_ID,
                 "payer_id": USER_A,
                 "title": f"Receipt {index}",
-                "total_amount": "10.00",
+                "total_amount_kopecks": 1000,
                 "created_at": base_time + timedelta(days=index),
                 "updated_at": base_time + timedelta(days=index),
                 "items": [],
@@ -208,7 +211,7 @@ def test_list_receipts_returns_paginated_active_page(db):
             "event_id": EVENT_ID,
             "payer_id": USER_A,
             "title": "Deleted",
-            "total_amount": "10.00",
+            "total_amount_kopecks": 1000,
             "created_at": base_time + timedelta(days=4),
             "updated_at": base_time + timedelta(days=4),
             "items": [],
@@ -226,21 +229,21 @@ def test_list_receipts_returns_paginated_active_page(db):
     assert page["total"] == 3
 
 
-def test_balances_use_decimal_money_math(db):
+def test_balances_use_kopeck_money_math(db):
     seed_event(db)
     payload = schemas.CreateReceiptRequest(
         payer_id=USER_A,
         title="Small amounts",
-        total_amount="0.30",
+        total_amount_kopecks=30,
         items=[
             schemas.CreateReceiptItemRequest(
                 name="A",
-                cost="0.10",
+                cost_kopecks=10,
                 share_items=[schemas.CreateShareItemRequest(user_id=USER_B, share_value="1")],
             ),
             schemas.CreateReceiptItemRequest(
                 name="B",
-                cost="0.20",
+                cost_kopecks=20,
                 share_items=[schemas.CreateShareItemRequest(user_id=USER_B, share_value="1")],
             ),
         ],
@@ -254,7 +257,66 @@ def test_balances_use_decimal_money_math(db):
             "event_id": EVENT_ID,
             "debitor_id": USER_B,
             "creditor_id": USER_A,
-            "amount": schemas.Decimal("0.30"),
+            "amount_kopecks": 30,
+        }
+    ]
+
+
+def test_legacy_decimal_money_storage_reads_as_kopecks(db):
+    seed_event(db)
+    db.receipts.insert_one(
+        {
+            "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            "event_id": EVENT_ID,
+            "payer_id": USER_A,
+            "title": "Legacy",
+            "total_amount": "10.25",
+            "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "updated_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "items": [
+                {
+                    "id": "item-1",
+                    "receipt_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                    "name": "Legacy item",
+                    "cost": "10.25",
+                    "share_items": ["share-1"],
+                }
+            ],
+            "share_items": [
+                {
+                    "id": "share-1",
+                    "receipt_item_id": "item-1",
+                    "user_id": USER_B,
+                    "share_value": "1",
+                }
+            ],
+        }
+    )
+    db.payments.insert_one(
+        {
+            "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+            "event_id": EVENT_ID,
+            "sender_id": USER_B,
+            "receiver_id": USER_A,
+            "amount": "1.25",
+            "confirmed": True,
+            "created_at": datetime(2026, 1, 2, tzinfo=UTC),
+        }
+    )
+
+    receipt = receipts.get_receipt(db, "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", USER_A)
+    payment_page = payments.list_payments_by_event(db, EVENT_ID, USER_A, limit=50, offset=0)
+    rows = balances.get_event_balances(db, EVENT_ID, USER_A)
+
+    assert receipt["total_amount_kopecks"] == 1025
+    assert receipt["items"][0]["cost_kopecks"] == 1025
+    assert payment_page["items"][0]["amount_kopecks"] == 125
+    assert rows == [
+        {
+            "event_id": EVENT_ID,
+            "debitor_id": USER_B,
+            "creditor_id": USER_A,
+            "amount_kopecks": 900,
         }
     ]
 
@@ -311,7 +373,7 @@ def test_list_payments_returns_paginated_active_page(db):
                 "event_id": EVENT_ID,
                 "sender_id": USER_A,
                 "receiver_id": USER_B,
-                "amount": "10.00",
+                "amount_kopecks": 1000,
                 "confirmed": False,
                 "created_at": base_time + timedelta(days=index),
             }
@@ -324,7 +386,7 @@ def test_list_payments_returns_paginated_active_page(db):
             "event_id": EVENT_ID,
             "sender_id": USER_A,
             "receiver_id": USER_B,
-            "amount": "10.00",
+            "amount_kopecks": 1000,
             "confirmed": False,
             "created_at": base_time + timedelta(days=4),
             "deleted_at": base_time + timedelta(days=5),

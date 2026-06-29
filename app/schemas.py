@@ -93,7 +93,7 @@ class ShareItem(BaseModel):
 
 class CreateReceiptItemRequest(BaseModel):
     name: str = ""
-    cost: Decimal = Field(gt=0)
+    cost_kopecks: int = Field(gt=0)
     share_items: list[CreateShareItemRequest] = Field(min_length=1)
 
 
@@ -101,20 +101,20 @@ class ReceiptItem(BaseModel):
     id: UUID
     receipt_id: UUID
     name: str = ""
-    cost: Decimal
+    cost_kopecks: int
     share_items: list[UUID]
 
 
 class CreateReceiptRequest(BaseModel):
     payer_id: UUID
     title: str = ""
-    total_amount: Decimal = Field(gt=0)
+    total_amount_kopecks: int = Field(gt=0)
     items: list[CreateReceiptItemRequest] = Field(min_length=1)
 
 
 class UpdateReceiptRequest(BaseModel):
     title: str | None = None
-    total_amount: Decimal | None = Field(default=None, gt=0)
+    total_amount_kopecks: int | None = Field(default=None, gt=0)
     items: list[CreateReceiptItemRequest] | None = None
 
 
@@ -123,7 +123,7 @@ class Receipt(BaseModel):
     event_id: UUID
     payer_id: UUID
     title: str = ""
-    total_amount: Decimal
+    total_amount_kopecks: int
     created_at: datetime
     updated_at: datetime
     items: list[ReceiptItem]
@@ -148,7 +148,7 @@ class ReceiptImagePresignedUrlResponse(BaseModel):
 class PaymentCreate(BaseModel):
     sender_id: UUID
     receiver_id: UUID
-    amount: Decimal = Field(gt=0)
+    amount_kopecks: int = Field(gt=0)
 
 
 class PaymentUpdate(BaseModel):
@@ -160,7 +160,7 @@ class Payment(BaseModel):
     event_id: UUID
     sender_id: UUID
     receiver_id: UUID
-    amount: Decimal
+    amount_kopecks: int
     confirmed: bool
     created_at: datetime
 
@@ -176,4 +176,4 @@ class EventBalance(BaseModel):
     event_id: UUID
     debitor_id: UUID
     creditor_id: UUID
-    amount: Decimal
+    amount_kopecks: int
