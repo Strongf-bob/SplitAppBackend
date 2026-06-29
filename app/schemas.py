@@ -25,6 +25,13 @@ class UserPage(BaseModel):
     total: int
 
 
+class UserFinancialStats(BaseModel):
+    open_events_count: int
+    closed_events_count: int
+    outstanding_owed_kopecks: int
+    outstanding_receivable_kopecks: int
+
+
 class FriendRequestCreate(BaseModel):
     user_id: UUID
 

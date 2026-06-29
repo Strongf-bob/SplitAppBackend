@@ -57,7 +57,7 @@ from app.services.receipts import (
     update_receipt,
     void_receipt,
 )
-from app.services.users import list_users, search_users
+from app.services.users import get_current_user_financial_stats, list_users, search_users
 __all__ = [
     "add_participants",
     "accept_event_invite",
@@ -85,6 +85,7 @@ __all__ = [
     "finalize_allocation_session",
     "get_event",
     "get_allocation_session",
+    "get_current_user_financial_stats",
     "get_event_balance_explanations",
     "get_event_balances",
     "list_events",

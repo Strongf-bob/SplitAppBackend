@@ -28,6 +28,14 @@ def search_users(
     return services.search_users(db, current_user_id, q, limit=limit, offset=offset)
 
 
+@router.get("/api/users/me/financial-stats", response_model=schemas.UserFinancialStats)
+def get_current_user_financial_stats(
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.get_current_user_financial_stats(db, current_user_id)
+
+
 @router.patch("/api/users/me", response_model=schemas.User)
 def update_current_user(
     payload: schemas.UserUpdate,
