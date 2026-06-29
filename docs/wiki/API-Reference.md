@@ -80,6 +80,7 @@ Event settings include settlement policies: `split_strategy`, `receipt_creation_
 | --- | --- | --- | --- |
 | `POST` | `/api/events/{id}/receipts` | Создать draft чек с items и shares. | Требуется membership; closed event запрещает mutation; нужен `Idempotency-Key`. |
 | `GET` | `/api/events/{id}/receipts` | Список чеков события. | Paginated; требуется membership. |
+| `GET` | `/api/receipt-categories` | Список стандартных категорий чеков. | Для UI metadata; custom category можно хранить на receipt. |
 | `GET` | `/api/receipts/{id}` | Детали чека. | Требуется membership через событие. |
 | `PATCH` | `/api/receipts/{id}` | Обновить чек. | Financial fields нельзя менять после confirmation; title можно обновить. |
 | `POST` | `/api/receipts/{id}/confirm` | Подтвердить draft чек. | Только confirmed receipts влияют на balances. |
@@ -122,6 +123,12 @@ Event settings include settlement policies: `split_strategy`, `receipt_creation_
 | `DELETE` | `/api/payments/{id}` | Удалить unconfirmed payment. | Для cleanup ошибочных declarations. |
 
 Payment requests may include `deadline_at`; backend rejects deadlines less than 30 minutes out.
+
+## Reports
+
+| Method | Path | Назначение | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/api/events/{id}/export.csv` | CSV export долгов, чеков и платежей события. | Требуется event membership; PDF export пока TODO. |
 
 ## Disputes
 

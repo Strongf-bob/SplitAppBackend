@@ -214,6 +214,7 @@ class ReceiptItem(BaseModel):
 class CreateReceiptRequest(BaseModel):
     payer_id: UUID
     title: str = ""
+    category: str | None = None
     total_amount_kopecks: int = Field(gt=0)
     items: list[CreateReceiptItemRequest] = Field(min_length=1)
     discount_amount_kopecks: int = 0
@@ -227,6 +228,7 @@ class CreateReceiptRequest(BaseModel):
 
 class UpdateReceiptRequest(BaseModel):
     title: str | None = None
+    category: str | None = None
     total_amount_kopecks: int | None = Field(default=None, gt=0)
     items: list[CreateReceiptItemRequest] | None = None
     expected_version: int | None = Field(default=None, ge=1)
@@ -244,6 +246,7 @@ class Receipt(BaseModel):
     event_id: UUID
     payer_id: UUID
     title: str = ""
+    category: str | None = None
     status: str
     version: int
     total_amount_kopecks: int
