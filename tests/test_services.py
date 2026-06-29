@@ -2,7 +2,7 @@ from datetime import UTC
 
 from app import schemas
 from app.core import tokens
-from app.services import auth, events, payments, receipts, users
+from app.services import auth, events, payments, receipt_image, receipts, users
 
 from tests.conftest import (
     EVENT_ID,
@@ -77,6 +77,32 @@ def test_receipt_detail_requires_event_membership(db):
         assert_status(exc, 403)
     else:
         raise AssertionError("Expected non-member receipt detail access to fail")
+
+
+def test_receipt_image_upload_presign_and_delete(db, fake_s3, monkeypatch):
+    monkeypatch.setenv("S3_BUCKET", "split-bucket")
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+
+    upload = receipt_image.upload_receipt_image(
+        db,
+        fake_s3,
+        receipt["id"],
+        b"\xff\xd8\xffjpeg",
+        "image/jpeg",
+        USER_A,
+    )
+    stored = db.receipts.find_one({"id": receipt["id"]})
+    presigned = receipt_image.get_receipt_image_presigned_url(db, fake_s3, receipt["id"], USER_B)
+
+    receipt_image.delete_receipt_image(db, fake_s3, receipt["id"], USER_A)
+    after_delete = db.receipts.find_one({"id": receipt["id"]})
+
+    assert upload["image_url"].endswith(stored["image_key"])
+    assert presigned["image_url"].startswith("https://signed.example/")
+    assert fake_s3.deleted == [("split-bucket", stored["image_key"])]
+    assert "image_url" not in after_delete
+    assert "image_key" not in after_delete
 
 
 def test_payment_create_and_confirm(db):

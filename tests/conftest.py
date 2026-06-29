@@ -25,6 +25,26 @@ def db():
     return client.splitapp_test
 
 
+@pytest.fixture
+def fake_s3():
+    class FakeS3:
+        def __init__(self):
+            self.objects = {}
+            self.deleted = []
+
+        def put_object(self, **kwargs):
+            self.objects[(kwargs["Bucket"], kwargs["Key"])] = kwargs
+
+        def delete_object(self, **kwargs):
+            self.deleted.append((kwargs["Bucket"], kwargs["Key"]))
+            self.objects.pop((kwargs["Bucket"], kwargs["Key"]), None)
+
+        def generate_presigned_url(self, operation, Params, ExpiresIn):
+            return f"https://signed.example/{Params['Bucket']}/{Params['Key']}?expires={ExpiresIn}"
+
+    return FakeS3()
+
+
 def seed_users(db) -> None:
     db.users.insert_many(
         [
