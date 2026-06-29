@@ -104,4 +104,4 @@ jobs:
               "set -euo pipefail; tar -xzf - -C '$DEPLOY_PATH'"
 
           ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "set -euo pipefail; cd '$DEPLOY_PATH'; test -f .env; docker compose up -d --build; HOST_PORT=\$(grep -E '^HOST_PORT=' .env | tail -1 | cut -d= -f2-); HOST_PORT=\${HOST_PORT:-8080}; curl -fsS \"http://127.0.0.1:\${HOST_PORT}/api/ping\""
+            "set -euo pipefail; cd '$DEPLOY_PATH'; test -f .env; docker compose up -d --build; HOST_PORT=\$(grep -E '^HOST_PORT=' .env | tail -1 | cut -d= -f2-); HOST_PORT=\${HOST_PORT:-8080}; for attempt in \$(seq 1 20); do curl -fsS \"http://127.0.0.1:\${HOST_PORT}/api/ping\" && exit 0; sleep 3; done; docker compose logs --tail=80 api; exit 1"
