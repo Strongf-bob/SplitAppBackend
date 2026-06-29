@@ -30,13 +30,14 @@
 - Обмен Yandex OAuth token на app access/refresh tokens.
 - Ротация refresh token.
 - Обновление профиля текущего пользователя.
-- Список пользователей, видимых текущему пользователю.
+- Список, opt-in поиск пользователей, friendship flow и профильная финансовая статистика.
 - Создание, чтение, обновление, закрытие и удаление событий.
-- Управление участниками события.
-- CRUD чеков, позиции чека и доли участников.
+- Управление участниками события через memberships, invite links и nearby invite codes.
+- Versioned receipt lifecycle, позиции чека, доли участников, fiscal metadata и allocation sessions.
 - Загрузка, удаление и временный доступ к изображениям чеков.
-- Расчет долгов и балансов внутри события.
-- Создание, просмотр, подтверждение и удаление платежей.
+- Расчет долгов, объяснения балансов и CSV export внутри события.
+- Payment requests, mark-paid declarations, confirmation/rejection, disputes and activity feed.
+- Lightweight rate limiting for sensitive auth/search/invite flows.
 - Явный CORS, структурные request-логи, Prometheus-метрики и optional error reporting.
 - Production-деплой через systemd.
 

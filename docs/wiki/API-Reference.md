@@ -190,13 +190,15 @@ Receipt items can carry `split_mode` metadata while `share_items` remain authori
 Financial create endpoints require `Idempotency-Key`:
 
 - `POST /api/events/{id}/receipts`;
-- `POST /api/events/{id}/payments`.
+- `POST /api/events/{id}/payments`;
+- `POST /api/events/{id}/payment-requests`;
+- `POST /api/payment-requests/{id}/mark-paid`.
 
 Повтор того же actor + endpoint scope + key + payload возвращает сохраненный response. Повтор того же key с другим payload возвращает `409`.
 
 ## Pagination
 
-List endpoints `GET /api/events`, `GET /api/users`, `GET /api/events/{id}/receipts` и `GET /api/events/{id}/payments` принимают query params:
+Paginated list endpoints, including events, users, friends, receipts, payments, payment requests, disputes, and activity feeds, accept query params:
 
 - `limit`: `1..100`, default `50`.
 - `offset`: `>= 0`, default `0`.
