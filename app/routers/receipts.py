@@ -32,6 +32,15 @@ def list_receipts_by_event(
     return services.list_receipts_by_event(db, str(id), current_user_id)
 
 
+@router.get("/api/receipts/{id}", response_model=schemas.Receipt)
+def get_receipt(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.get_receipt(db, str(id), current_user_id)
+
+
 @router.patch("/api/receipts/{id}", response_model=schemas.Receipt)
 def update_receipt(
     id: UUID,
@@ -81,4 +90,3 @@ async def upload_receipt_image(
     return services.upload_receipt_image(
         db, s3, str(id), body, upload.content_type, current_user_id
     )
-

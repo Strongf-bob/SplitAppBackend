@@ -41,6 +41,22 @@ def test_receipt_create_validates_total_and_membership(db):
     assert receipt["total_amount"] == 100
     assert len(receipt["items"]) == 1
 
+    fetched = receipts.get_receipt(db, receipt["id"], USER_B)
+    assert fetched["id"] == receipt["id"]
+    assert "share_items" not in fetched
+
+
+def test_receipt_detail_requires_event_membership(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+
+    try:
+        receipts.get_receipt(db, receipt["id"], USER_C)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-member receipt detail access to fail")
+
 
 def test_payment_create_and_confirm(db):
     seed_event(db)

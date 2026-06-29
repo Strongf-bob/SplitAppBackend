@@ -281,6 +281,23 @@ paths:
           $ref: "#/components/responses/Forbidden"
 
   /api/receipts/{id}:
+    get:
+      tags: [Receipts]
+      summary: Get receipt details
+      operationId: getReceipt
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      responses:
+        "200":
+          description: Receipt details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receipt"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
     patch:
       tags: [Receipts]
       summary: Update receipt
