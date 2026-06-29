@@ -68,6 +68,28 @@ def test_only_payment_receiver_can_confirm(db):
         raise AssertionError("Expected sender confirmation to fail")
 
 
+def test_unconfirmed_payment_can_be_deleted_by_sender_or_receiver(db):
+    seed_event(db)
+    payment = payments.create_payment(db, EVENT_ID, payment_payload(), USER_A)
+
+    payments.delete_payment(db, payment["id"], USER_A)
+
+    assert db.payments.find_one({"id": payment["id"]}) is None
+
+
+def test_confirmed_payment_cannot_be_deleted(db):
+    seed_event(db)
+    payment = payments.create_payment(db, EVENT_ID, payment_payload(), USER_A)
+    payments.update_payment(db, payment["id"], schemas.PaymentUpdate(confirmed=True), USER_B)
+
+    try:
+        payments.delete_payment(db, payment["id"], USER_B)
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected confirmed payment delete to fail")
+
+
 def test_event_access_blocks_non_members(db):
     seed_event(db)
 

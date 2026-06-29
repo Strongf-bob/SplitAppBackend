@@ -58,3 +58,20 @@ def update_payment(
         )
     db.payments.update_one({"id": payment_id}, {"$set": {"confirmed": payload.confirmed}})
     return strip_mongo_id(get_payment_or_404(db, payment_id))
+
+
+def delete_payment(db: Database, payment_id: str, actor_user_id: str) -> None:
+    payment = get_payment_or_404(db, payment_id)
+    event = assert_event_access(db, payment["event_id"], actor_user_id)
+    assert_event_open(event)
+
+    if payment.get("confirmed"):
+        raise HTTPException(status_code=409, detail="Confirmed payments cannot be deleted.")
+
+    if actor_user_id not in {payment["sender_id"], payment["receiver_id"]}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the payment sender or receiver can delete this payment.",
+        )
+
+    db.payments.delete_one({"id": payment_id})

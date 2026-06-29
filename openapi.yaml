@@ -449,6 +449,26 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Payments]
+      summary: Delete unconfirmed payment
+      operationId: deletePayment
+      description: Only the payment sender or receiver may delete an unconfirmed payment.
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      responses:
+        "204":
+          description: Payment deleted
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Confirmed payments cannot be deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   securitySchemes:
