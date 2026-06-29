@@ -405,6 +405,42 @@ def test_receipt_create_validates_total_and_membership(db):
     assert "share_items" not in fetched
 
 
+def test_receipt_stores_split_and_fiscal_metadata(db):
+    seed_event(db)
+    payload = receipt_payload()
+    payload.items[0].split_mode = "selected_equal"
+    payload.service_fee_amount_kopecks = 500
+    payload.tip_amount_kopecks = 1000
+    payload.fiscal_total_amount_kopecks = 11500
+    payload.vat_amount_kopecks = 0
+
+    receipt = receipts.create_receipt(db, EVENT_ID, payload, USER_A)
+
+    assert receipt["items"][0]["split_mode"] == "selected_equal"
+    assert receipt["service_fee_amount_kopecks"] == 500
+    assert receipt["tip_amount_kopecks"] == 1000
+    assert receipt["fiscal_total_amount_kopecks"] == 11500
+    assert receipt["vat_amount_kopecks"] == 0
+
+
+def test_confirmed_receipt_fiscal_metadata_cannot_be_changed(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    receipts.confirm_receipt(db, receipt["id"], USER_A)
+
+    try:
+        receipts.update_receipt(
+            db,
+            receipt["id"],
+            schemas.UpdateReceiptRequest(tip_amount_kopecks=500),
+            USER_A,
+        )
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected confirmed fiscal metadata update to fail")
+
+
 def test_receipt_create_is_idempotent_for_same_key_and_payload(db):
     seed_event(db)
     payload = receipt_payload()

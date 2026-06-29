@@ -2710,6 +2710,11 @@
             "exclusiveMinimum": 0.0,
             "title": "Cost Kopecks"
           },
+          "split_mode": {
+            "type": "string",
+            "title": "Split Mode",
+            "default": "custom"
+          },
           "share_items": {
             "items": {
               "$ref": "#/components/schemas/CreateShareItemRequest"
@@ -2750,6 +2755,53 @@
             "type": "array",
             "minItems": 1,
             "title": "Items"
+          },
+          "discount_amount_kopecks": {
+            "type": "integer",
+            "title": "Discount Amount Kopecks",
+            "default": 0
+          },
+          "service_fee_amount_kopecks": {
+            "type": "integer",
+            "title": "Service Fee Amount Kopecks",
+            "default": 0
+          },
+          "delivery_fee_amount_kopecks": {
+            "type": "integer",
+            "title": "Delivery Fee Amount Kopecks",
+            "default": 0
+          },
+          "tip_amount_kopecks": {
+            "type": "integer",
+            "title": "Tip Amount Kopecks",
+            "default": 0
+          },
+          "rounding_adjustment_kopecks": {
+            "type": "integer",
+            "title": "Rounding Adjustment Kopecks",
+            "default": 0
+          },
+          "fiscal_total_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiscal Total Amount Kopecks"
+          },
+          "vat_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vat Amount Kopecks"
           }
         },
         "type": "object",
@@ -3802,6 +3854,53 @@
             "type": "integer",
             "title": "Total Amount Kopecks"
           },
+          "discount_amount_kopecks": {
+            "type": "integer",
+            "title": "Discount Amount Kopecks",
+            "default": 0
+          },
+          "service_fee_amount_kopecks": {
+            "type": "integer",
+            "title": "Service Fee Amount Kopecks",
+            "default": 0
+          },
+          "delivery_fee_amount_kopecks": {
+            "type": "integer",
+            "title": "Delivery Fee Amount Kopecks",
+            "default": 0
+          },
+          "tip_amount_kopecks": {
+            "type": "integer",
+            "title": "Tip Amount Kopecks",
+            "default": 0
+          },
+          "rounding_adjustment_kopecks": {
+            "type": "integer",
+            "title": "Rounding Adjustment Kopecks",
+            "default": 0
+          },
+          "fiscal_total_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiscal Total Amount Kopecks"
+          },
+          "vat_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vat Amount Kopecks"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -3903,6 +4002,11 @@
           "cost_kopecks": {
             "type": "integer",
             "title": "Cost Kopecks"
+          },
+          "split_mode": {
+            "type": "string",
+            "title": "Split Mode",
+            "default": "custom"
           },
           "share_items": {
             "items": {
@@ -4046,6 +4150,83 @@
               }
             ],
             "title": "Expected Version"
+          },
+          "discount_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Amount Kopecks"
+          },
+          "service_fee_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Fee Amount Kopecks"
+          },
+          "delivery_fee_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Fee Amount Kopecks"
+          },
+          "tip_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tip Amount Kopecks"
+          },
+          "rounding_adjustment_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rounding Adjustment Kopecks"
+          },
+          "fiscal_total_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiscal Total Amount Kopecks"
+          },
+          "vat_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vat Amount Kopecks"
           }
         },
         "type": "object",
