@@ -140,5 +140,37 @@ def test_refresh_token_rotation_issues_new_pair(db):
 
     assert response["token_type"] == "bearer"
     assert response["expires_in"] == int(tokens.access_token_ttl().total_seconds())
-    assert db.refresh_tokens.count_documents({"user_id": USER_A}) == 1
-    assert db.refresh_tokens.find_one({"user_id": USER_A})["expires_at"].tzinfo in (UTC, None)
+    assert db.refresh_tokens.count_documents({"user_id": USER_A}) == 2
+    assert db.refresh_tokens.find_one({"token_hash": tokens.hash_refresh_token(raw)})["used_at"]
+
+
+def test_refresh_token_can_retry_within_grace(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    raw = auth._issue_refresh_token(db, USER_A)
+
+    first = auth.rotate_refresh_token(db, raw)
+    second = auth.rotate_refresh_token(db, raw)
+
+    assert first["access_token"] != second["access_token"] or first["refresh_token"] != second["refresh_token"]
+
+
+def test_refresh_token_retry_after_grace_fails(db):
+    from datetime import timedelta
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    raw = auth._issue_refresh_token(db, USER_A)
+    auth.rotate_refresh_token(db, raw)
+    db.refresh_tokens.update_one(
+        {"token_hash": tokens.hash_refresh_token(raw)},
+        {"$set": {"used_at": auth.utc_now() - timedelta(seconds=121)}},
+    )
+
+    try:
+        auth.rotate_refresh_token(db, raw)
+    except Exception as exc:
+        assert_status(exc, 401)
+    else:
+        raise AssertionError("Expected refresh reuse after grace to fail")
