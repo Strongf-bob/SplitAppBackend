@@ -1,6 +1,8 @@
 from typing import Any
 from ipaddress import ip_address
 import logging
+import os
+import secrets
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
@@ -15,6 +17,10 @@ logger = logging.getLogger("splitapp")
 INTERNAL_OPERATIONS_PATHS = frozenset(
     {
         "/api/health/db",
+    }
+)
+TOKEN_PROTECTED_OPERATIONS_PATHS = frozenset(
+    {
         "/api/metrics",
     }
 )
@@ -41,6 +47,12 @@ def _is_internal_operations_path(path: str) -> bool:
     return normalized in exempt
 
 
+def _is_token_protected_operations_path(path: str) -> bool:
+    normalized = path.rstrip("/") or "/"
+    exempt = {p.rstrip("/") for p in TOKEN_PROTECTED_OPERATIONS_PATHS}
+    return normalized in exempt
+
+
 def _is_internal_client(host: str | None) -> bool:
     if host == "testclient":
         return True
@@ -51,6 +63,15 @@ def _is_internal_client(host: str | None) -> bool:
     except ValueError:
         return False
     return address.is_loopback or address.is_private or address.is_link_local
+
+
+def _has_metrics_access_token(credentials: HTTPAuthorizationCredentials | None) -> bool:
+    expected = os.getenv("METRICS_ACCESS_TOKEN", "").strip()
+    if not expected:
+        return False
+    if not credentials or credentials.scheme.lower() != "bearer":
+        return False
+    return secrets.compare_digest(credentials.credentials, expected)
 
 
 def get_db(request: Request) -> Database:
@@ -65,6 +86,11 @@ def require_auth_token(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> None:
+    if _is_token_protected_operations_path(request.url.path):
+        if _has_metrics_access_token(credentials):
+            return
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
+
     if _is_internal_operations_path(request.url.path):
         if request.client and _is_internal_client(request.client.host):
             return
