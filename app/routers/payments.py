@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from pymongo.database import Database
 
 from app import schemas, services
@@ -23,13 +23,17 @@ def create_payment(
     return services.create_payment(db, str(id), payload, current_user_id)
 
 
-@router.get("/api/events/{id}/payments", response_model=list[schemas.Payment])
+@router.get("/api/events/{id}/payments", response_model=schemas.PaymentPage)
 def list_payments_by_event(
     id: UUID,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Database = Depends(get_db),
     current_user_id: str = Depends(get_actor_user_id),
-) -> list[dict]:
-    return services.list_payments_by_event(db, str(id), current_user_id)
+) -> dict:
+    return services.list_payments_by_event(
+        db, str(id), current_user_id, limit=limit, offset=offset
+    )
 
 
 @router.patch("/api/payments/{id}", response_model=schemas.Payment)

@@ -153,14 +153,19 @@ def update_receipt(
     return strip_mongo_id(get_receipt_or_404(db, receipt_id))
 
 
-def list_receipts_by_event(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
+def list_receipts_by_event(
+    db: Database, event_id: str, actor_user_id: str, *, limit: int, offset: int
+) -> dict:
     assert_event_access(db, event_id, actor_user_id)
+    query = active_filter({"event_id": event_id})
+    total = db.receipts.count_documents(query)
     receipts = []
-    for receipt in db.receipts.find(active_filter({"event_id": event_id})).sort("created_at", -1):
+    cursor = db.receipts.find(query).sort("created_at", -1).skip(offset).limit(limit)
+    for receipt in cursor:
         cleaned = strip_mongo_id(receipt)
         cleaned.pop("share_items", None)
         receipts.append(cleaned)
-    return receipts
+    return {"items": receipts, "limit": limit, "offset": offset, "total": total}
 
 
 def get_receipt(db: Database, receipt_id: str, actor_user_id: str) -> dict:

@@ -42,10 +42,12 @@ def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str)
     return event
 
 
-def list_events(db: Database, user_id: str) -> list[dict]:
+def list_events(db: Database, user_id: str, *, limit: int, offset: int) -> dict:
     query = active_filter({"$or": [{"users": user_id}, {"creator_id": user_id}]})
-    events = [strip_mongo_id(event) for event in db.events.find(query).sort("created_at", -1)]
-    return events
+    total = db.events.count_documents(query)
+    cursor = db.events.find(query).sort("created_at", -1).skip(offset).limit(limit)
+    events = [strip_mongo_id(event) for event in cursor]
+    return {"items": events, "limit": limit, "offset": offset, "total": total}
 
 
 def get_event(db: Database, event_id: str, actor_user_id: str) -> dict:

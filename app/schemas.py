@@ -13,6 +13,13 @@ class User(BaseModel):
     avatar_url: str | None = None
 
 
+class UserPage(BaseModel):
+    items: list[User]
+    limit: int
+    offset: int
+    total: int
+
+
 class UserUpdate(BaseModel):
     name: str | None = None
     email: str | None = None
@@ -59,6 +66,13 @@ class Event(BaseModel):
     users: list[UUID]
     created_at: datetime
     updated_at: datetime
+
+
+class EventPage(BaseModel):
+    items: list[Event]
+    limit: int
+    offset: int
+    total: int
 
 
 class AddParticipantsRequest(BaseModel):
@@ -116,6 +130,13 @@ class Receipt(BaseModel):
     image_url: str | None = None
 
 
+class ReceiptPage(BaseModel):
+    items: list[Receipt]
+    limit: int
+    offset: int
+    total: int
+
+
 class ReceiptImageUploadResponse(BaseModel):
     image_url: str
 
@@ -142,6 +163,13 @@ class Payment(BaseModel):
     amount: Decimal
     confirmed: bool
     created_at: datetime
+
+
+class PaymentPage(BaseModel):
+    items: list[Payment]
+    limit: int
+    offset: int
+    total: int
 
 
 class EventBalance(BaseModel):

@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from app import schemas
 from app.core import tokens
 from app.services import auth, balances, events, payments, receipt_image, receipts, users
@@ -26,7 +28,10 @@ def test_event_create_and_list_for_actor(db):
     assert created["name"] == "Weekend"
     assert created["creator_id"] == USER_A
     assert created["users"] == [USER_A]
-    assert [event["id"] for event in events.list_events(db, USER_A)] == [created["id"]]
+    page = events.list_events(db, USER_A, limit=50, offset=0)
+
+    assert [event["id"] for event in page["items"]] == [created["id"]]
+    assert page["total"] == 1
 
 
 def test_update_current_user_profile(db):
@@ -73,9 +78,82 @@ def test_list_users_only_returns_visible_users(db):
         }
     )
 
-    visible_ids = {user["id"] for user in users.list_users(db, USER_A)}
+    visible_ids = {user["id"] for user in users.list_users(db, USER_A, limit=50, offset=0)["items"]}
 
     assert visible_ids == {USER_A, USER_B}
+
+
+def test_list_events_returns_paginated_visible_page(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    base_time = datetime(2026, 1, 1, tzinfo=UTC)
+    db.events.insert_many(
+        [
+            {
+                "id": f"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa{index}",
+                "creator_id": USER_A,
+                "name": f"Trip {index}",
+                "is_closed": False,
+                "users": [USER_A],
+                "created_at": base_time + timedelta(days=index),
+                "updated_at": base_time + timedelta(days=index),
+            }
+            for index in range(3)
+        ]
+    )
+    db.events.insert_one(
+        {
+            "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            "creator_id": USER_C,
+            "name": "Hidden",
+            "is_closed": False,
+            "users": [USER_C],
+            "created_at": base_time + timedelta(days=4),
+            "updated_at": base_time + timedelta(days=4),
+        }
+    )
+
+    page = events.list_events(db, USER_A, limit=2, offset=1)
+
+    assert [event["name"] for event in page["items"]] == ["Trip 1", "Trip 0"]
+    assert page == {**page, "limit": 2, "offset": 1, "total": 3}
+
+
+def test_list_users_returns_paginated_visible_page(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    db.users.insert_many(
+        [
+            {
+                "id": "44444444-4444-4444-4444-444444444444",
+                "name": "Dina",
+                "phone_number": "+10000000004",
+            },
+            {
+                "id": "55555555-5555-5555-5555-555555555555",
+                "name": "Hidden",
+                "phone_number": "+10000000005",
+            },
+        ]
+    )
+    db.events.insert_one(
+        {
+            "id": EVENT_ID,
+            "creator_id": USER_A,
+            "name": "Trip",
+            "is_closed": False,
+            "users": [USER_A, USER_B, "44444444-4444-4444-4444-444444444444"],
+        }
+    )
+
+    page = users.list_users(db, USER_A, limit=2, offset=1)
+
+    assert [user["name"] for user in page["items"]] == ["Bob", "Dina"]
+    assert page["limit"] == 2
+    assert page["offset"] == 1
+    assert page["total"] == 3
 
 
 def test_receipt_create_validates_total_and_membership(db):
@@ -103,6 +181,49 @@ def test_receipt_detail_requires_event_membership(db):
         assert_status(exc, 403)
     else:
         raise AssertionError("Expected non-member receipt detail access to fail")
+
+
+def test_list_receipts_returns_paginated_active_page(db):
+    seed_event(db)
+    base_time = datetime(2026, 1, 1, tzinfo=UTC)
+    db.receipts.insert_many(
+        [
+            {
+                "id": f"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb{index}",
+                "event_id": EVENT_ID,
+                "payer_id": USER_A,
+                "title": f"Receipt {index}",
+                "total_amount": "10.00",
+                "created_at": base_time + timedelta(days=index),
+                "updated_at": base_time + timedelta(days=index),
+                "items": [],
+                "share_items": [{"id": f"share-{index}"}],
+            }
+            for index in range(3)
+        ]
+    )
+    db.receipts.insert_one(
+        {
+            "id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+            "event_id": EVENT_ID,
+            "payer_id": USER_A,
+            "title": "Deleted",
+            "total_amount": "10.00",
+            "created_at": base_time + timedelta(days=4),
+            "updated_at": base_time + timedelta(days=4),
+            "items": [],
+            "share_items": [],
+            "deleted_at": base_time + timedelta(days=5),
+        }
+    )
+
+    page = receipts.list_receipts_by_event(db, EVENT_ID, USER_A, limit=2, offset=1)
+
+    assert [receipt["title"] for receipt in page["items"]] == ["Receipt 1", "Receipt 0"]
+    assert all("share_items" not in receipt for receipt in page["items"])
+    assert page["limit"] == 2
+    assert page["offset"] == 1
+    assert page["total"] == 3
 
 
 def test_balances_use_decimal_money_math(db):
@@ -180,6 +301,47 @@ def test_payment_create_and_confirm(db):
     assert updated["confirmed"] is True
 
 
+def test_list_payments_returns_paginated_active_page(db):
+    seed_event(db)
+    base_time = datetime(2026, 1, 1, tzinfo=UTC)
+    db.payments.insert_many(
+        [
+            {
+                "id": f"cccccccc-cccc-cccc-cccc-ccccccccccc{index}",
+                "event_id": EVENT_ID,
+                "sender_id": USER_A,
+                "receiver_id": USER_B,
+                "amount": "10.00",
+                "confirmed": False,
+                "created_at": base_time + timedelta(days=index),
+            }
+            for index in range(3)
+        ]
+    )
+    db.payments.insert_one(
+        {
+            "id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+            "event_id": EVENT_ID,
+            "sender_id": USER_A,
+            "receiver_id": USER_B,
+            "amount": "10.00",
+            "confirmed": False,
+            "created_at": base_time + timedelta(days=4),
+            "deleted_at": base_time + timedelta(days=5),
+        }
+    )
+
+    page = payments.list_payments_by_event(db, EVENT_ID, USER_A, limit=2, offset=1)
+
+    assert [payment["id"] for payment in page["items"]] == [
+        "cccccccc-cccc-cccc-cccc-ccccccccccc1",
+        "cccccccc-cccc-cccc-cccc-ccccccccccc0",
+    ]
+    assert page["limit"] == 2
+    assert page["offset"] == 1
+    assert page["total"] == 3
+
+
 def test_payment_sender_must_match_authenticated_user(db):
     seed_event(db)
 
@@ -211,7 +373,7 @@ def test_unconfirmed_payment_can_be_deleted_by_sender_or_receiver(db):
 
     stored = db.payments.find_one({"id": payment["id"]})
     assert stored["deleted_at"] is not None
-    assert payments.list_payments_by_event(db, EVENT_ID, USER_A) == []
+    assert payments.list_payments_by_event(db, EVENT_ID, USER_A, limit=50, offset=0)["items"] == []
     assert db.audit_events.find_one({"action": "payment.deleted", "resource_id": payment["id"]})
 
 
@@ -236,7 +398,7 @@ def test_receipt_delete_soft_deletes_and_hides_from_reads(db):
 
     stored = db.receipts.find_one({"id": receipt["id"]})
     assert stored["deleted_at"] is not None
-    assert receipts.list_receipts_by_event(db, EVENT_ID, USER_A) == []
+    assert receipts.list_receipts_by_event(db, EVENT_ID, USER_A, limit=50, offset=0)["items"] == []
     assert db.audit_events.find_one({"action": "receipt.deleted", "resource_id": receipt["id"]})
 
 
@@ -244,7 +406,7 @@ def test_event_access_blocks_non_members(db):
     seed_event(db)
 
     try:
-        receipts.list_receipts_by_event(db, EVENT_ID, USER_C)
+        receipts.list_receipts_by_event(db, EVENT_ID, USER_C, limit=50, offset=0)
     except Exception as exc:
         assert_status(exc, 403)
     else:
@@ -254,7 +416,7 @@ def test_event_access_blocks_non_members(db):
 def test_closed_event_blocks_mutations_but_allows_reads(db):
     seed_event(db, is_closed=True)
 
-    assert receipts.list_receipts_by_event(db, EVENT_ID, USER_A) == []
+    assert receipts.list_receipts_by_event(db, EVENT_ID, USER_A, limit=50, offset=0)["items"] == []
 
     for action in (
         lambda: receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A),

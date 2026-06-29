@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from pymongo.database import Database
 
 from app import schemas, services
@@ -23,13 +23,17 @@ def create_receipt(
     return services.create_receipt(db, str(id), payload, current_user_id)
 
 
-@router.get("/api/events/{id}/receipts", response_model=list[schemas.Receipt])
+@router.get("/api/events/{id}/receipts", response_model=schemas.ReceiptPage)
 def list_receipts_by_event(
     id: UUID,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Database = Depends(get_db),
     current_user_id: str = Depends(get_actor_user_id),
-) -> list[dict]:
-    return services.list_receipts_by_event(db, str(id), current_user_id)
+) -> dict:
+    return services.list_receipts_by_event(
+        db, str(id), current_user_id, limit=limit, offset=offset
+    )
 
 
 @router.get("/api/receipts/{id}", response_model=schemas.Receipt)
