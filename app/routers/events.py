@@ -128,6 +128,38 @@ def revoke_event_invite(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post(
+    "/api/events/{id}/nearby-code",
+    response_model=schemas.NearbyInviteCode,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_nearby_invite_code(
+    id: UUID,
+    payload: schemas.CreateNearbyInviteCodeRequest,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.create_nearby_invite_code(db, str(id), payload, current_user_id)
+
+
+@router.get("/api/nearby-invites/{code}/preview", response_model=schemas.EventInvitePreview)
+def preview_nearby_invite_code(
+    code: str,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.preview_nearby_invite_code(db, code, current_user_id)
+
+
+@router.post("/api/nearby-invites/{code}/accept", response_model=schemas.Event)
+def accept_nearby_invite_code(
+    code: str,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.accept_nearby_invite_code(db, code, current_user_id)
+
+
 @router.get("/api/events/{id}/balances", response_model=list[schemas.EventBalance])
 def get_event_balances(
     id: UUID,

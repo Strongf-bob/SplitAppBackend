@@ -745,6 +745,158 @@
         }
       }
     },
+    "/api/events/{id}/nearby-code": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Create Nearby Invite Code",
+        "operationId": "create_nearby_invite_code_api_events__id__nearby_code_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNearbyInviteCodeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NearbyInviteCode"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/nearby-invites/{code}/preview": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Preview Nearby Invite Code",
+        "operationId": "preview_nearby_invite_code_api_nearby_invites__code__preview_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventInvitePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/nearby-invites/{code}/accept": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Accept Nearby Invite Code",
+        "operationId": "accept_nearby_invite_code_api_nearby_invites__code__accept_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/events/{id}/balances": {
       "get": {
         "tags": [
@@ -2437,6 +2589,19 @@
         "type": "object",
         "title": "CreateEventInviteRequest"
       },
+      "CreateNearbyInviteCodeRequest": {
+        "properties": {
+          "expires_in_seconds": {
+            "type": "integer",
+            "maximum": 300.0,
+            "minimum": 60.0,
+            "title": "Expires In Seconds",
+            "default": 180
+          }
+        },
+        "type": "object",
+        "title": "CreateNearbyInviteCodeRequest"
+      },
       "CreateReceiptItemRequest": {
         "properties": {
           "name": {
@@ -3046,6 +3211,54 @@
           "yandex_token"
         ],
         "title": "LoginYandexRequest"
+      },
+      "NearbyInviteCode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "code",
+          "status",
+          "created_by",
+          "expires_at",
+          "created_at"
+        ],
+        "title": "NearbyInviteCode"
       },
       "Payment": {
         "properties": {
