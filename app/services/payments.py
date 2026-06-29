@@ -41,12 +41,19 @@ def create_payment(
     return payment
 
 
-def list_payments_by_event(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
+def list_payments_by_event(
+    db: Database, event_id: str, actor_user_id: str, *, limit: int, offset: int
+) -> dict:
     assert_event_access(db, event_id, actor_user_id)
-    return [
-        strip_mongo_id(item)
-        for item in db.payments.find(active_filter({"event_id": event_id})).sort("created_at", -1)
-    ]
+    query = active_filter({"event_id": event_id})
+    total = db.payments.count_documents(query)
+    cursor = db.payments.find(query).sort("created_at", -1).skip(offset).limit(limit)
+    return {
+        "items": [strip_mongo_id(item) for item in cursor],
+        "limit": limit,
+        "offset": offset,
+        "total": total,
+    }
 
 
 def update_payment(

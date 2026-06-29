@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from pymongo.database import Database
 
 from app import schemas, services
@@ -18,12 +18,14 @@ def create_event(
     return services.create_event(db, payload, current_user_id)
 
 
-@router.get("/api/events", response_model=list[schemas.Event])
+@router.get("/api/events", response_model=schemas.EventPage)
 def list_events(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Database = Depends(get_db),
     current_user_id: str = Depends(get_actor_user_id),
-) -> list[dict]:
-    return services.list_events(db, current_user_id)
+) -> dict:
+    return services.list_events(db, current_user_id, limit=limit, offset=offset)
 
 
 @router.get("/api/events/{id}", response_model=schemas.Event)
@@ -87,4 +89,3 @@ def get_event_balances(
     current_user_id: str = Depends(get_actor_user_id),
 ) -> list[dict]:
     return services.get_event_balances(db, str(id), current_user_id)
-
