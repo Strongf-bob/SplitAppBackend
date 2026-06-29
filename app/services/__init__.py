@@ -26,12 +26,16 @@ from app.services.friends import (
 )
 from app.services.indexes import ensure_indexes
 from app.services.payments import (
+    acknowledge_payment_request,
+    cancel_payment_request,
     confirm_payment,
     create_payment,
     create_payment_request,
+    dispute_payment_request,
     list_payment_requests_by_event,
     list_payments_by_event,
     mark_payment_request_paid,
+    request_payment_extension,
     reject_payment,
     update_payment,
 )
@@ -57,7 +61,9 @@ __all__ = [
     "accept_event_invite",
     "accept_nearby_invite_code",
     "accept_friend_request",
+    "acknowledge_payment_request",
     "block_friendship",
+    "cancel_payment_request",
     "claim_receipt_item",
     "confirm_payment",
     "confirm_receipt",
@@ -68,6 +74,7 @@ __all__ = [
     "delete_event",
     "create_payment",
     "create_payment_request",
+    "dispute_payment_request",
     "create_receipt",
     "create_receipt_correction",
     "delete_receipt",
@@ -85,6 +92,7 @@ __all__ = [
     "list_users",
     "login_with_yandex_oauth",
     "mark_payment_request_paid",
+    "request_payment_extension",
     "mark_allocation_session_ready",
     "preview_event_invite",
     "preview_nearby_invite_code",

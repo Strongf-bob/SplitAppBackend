@@ -1,5 +1,6 @@
 from fastapi import HTTPException
 from pymongo.database import Database
+from datetime import timedelta
 
 from app import schemas
 from app.core.monitoring import observe_money_amount, record_domain_event, track_service_operation
@@ -8,6 +9,8 @@ from app.services.access import assert_event_access, assert_event_open, get_paym
 from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
 from app.services.common import money_to_storage, stored_money_to_kopecks
 from app.services.idempotency import run_idempotent_create
+
+_MIN_PAYMENT_REQUEST_DEADLINE = timedelta(minutes=30)
 
 
 def _payment_to_api(payment: dict) -> dict:
@@ -23,6 +26,18 @@ def _payment_request_to_api(payment_request: dict) -> dict:
     cleaned["amount_kopecks"] = stored_money_to_kopecks(cleaned, "amount_kopecks", "amount")
     cleaned.pop("amount", None)
     return cleaned
+
+
+def _get_payment_request_or_404(db: Database, payment_request_id: str) -> dict:
+    payment_request = db.payment_requests.find_one(active_filter({"id": payment_request_id}))
+    if not payment_request:
+        raise HTTPException(status_code=404, detail="Payment request not found.")
+    return payment_request
+
+
+def _assert_payment_request_party(payment_request: dict, actor_user_id: str) -> None:
+    if actor_user_id not in {payment_request["debtor_id"], payment_request["creditor_id"]}:
+        raise HTTPException(status_code=403, detail="Not a party to this payment request.")
 
 
 @track_service_operation("payments.create")
@@ -265,6 +280,15 @@ def _create_payment_request(
         )
 
     now = utc_now()
+    if payload.deadline_at is not None:
+        deadline_at = payload.deadline_at
+        if deadline_at.tzinfo is None:
+            raise HTTPException(status_code=400, detail="deadline_at must include timezone.")
+        if deadline_at < now + _MIN_PAYMENT_REQUEST_DEADLINE:
+            raise HTTPException(status_code=400, detail="deadline_at must be at least 30 minutes out.")
+    else:
+        deadline_at = None
+
     payment_request = {
         "id": new_uuid(),
         "event_id": event_id,
@@ -274,6 +298,7 @@ def _create_payment_request(
         "note": payload.note,
         "status": "requested",
         "created_by": actor_user_id,
+        "deadline_at": deadline_at,
         "created_at": now,
         "updated_at": now,
     }
@@ -320,9 +345,7 @@ def mark_payment_request_paid(
 def _mark_payment_request_paid(
     db: Database, payment_request_id: str, actor_user_id: str
 ) -> dict:
-    payment_request = db.payment_requests.find_one(active_filter({"id": payment_request_id}))
-    if not payment_request:
-        raise HTTPException(status_code=404, detail="Payment request not found.")
+    payment_request = _get_payment_request_or_404(db, payment_request_id)
     event = assert_event_access(db, payment_request["event_id"], actor_user_id)
     assert_event_open(event)
     if actor_user_id != payment_request["debtor_id"]:
@@ -351,3 +374,82 @@ def _mark_payment_request_paid(
     record_domain_event("payment_requests", "marked_paid")
     record_domain_event("payments", "created")
     return _payment_to_api(payment)
+
+
+@track_service_operation("payment_requests.acknowledge")
+def acknowledge_payment_request(
+    db: Database, payment_request_id: str, actor_user_id: str
+) -> dict:
+    payment_request = _get_payment_request_or_404(db, payment_request_id)
+    event = assert_event_access(db, payment_request["event_id"], actor_user_id)
+    assert_event_open(event)
+    if actor_user_id != payment_request["debtor_id"]:
+        raise HTTPException(status_code=403, detail="Only the debtor can acknowledge.")
+    if payment_request["status"] != "requested":
+        raise HTTPException(status_code=409, detail="Payment request cannot be acknowledged.")
+
+    now = utc_now()
+    db.payment_requests.update_one(
+        {"id": payment_request_id},
+        {"$set": {"acknowledged_at": now, "updated_at": now}},
+    )
+    record_domain_event("payment_requests", "acknowledged")
+    return _payment_request_to_api(_get_payment_request_or_404(db, payment_request_id))
+
+
+@track_service_operation("payment_requests.cancel")
+def cancel_payment_request(db: Database, payment_request_id: str, actor_user_id: str) -> dict:
+    payment_request = _get_payment_request_or_404(db, payment_request_id)
+    event = assert_event_access(db, payment_request["event_id"], actor_user_id)
+    assert_event_open(event)
+    if actor_user_id != payment_request["creditor_id"]:
+        raise HTTPException(status_code=403, detail="Only the creditor can cancel.")
+    if payment_request["status"] not in {"requested", "paid", "rejected", "disputed"}:
+        raise HTTPException(status_code=409, detail="Payment request cannot be cancelled.")
+
+    now = utc_now()
+    db.payment_requests.update_one(
+        {"id": payment_request_id},
+        {"$set": {"status": "cancelled", "cancelled_at": now, "updated_at": now}},
+    )
+    record_domain_event("payment_requests", "cancelled")
+    return _payment_request_to_api(_get_payment_request_or_404(db, payment_request_id))
+
+
+@track_service_operation("payment_requests.extension_requested")
+def request_payment_extension(
+    db: Database, payment_request_id: str, actor_user_id: str
+) -> dict:
+    payment_request = _get_payment_request_or_404(db, payment_request_id)
+    event = assert_event_access(db, payment_request["event_id"], actor_user_id)
+    assert_event_open(event)
+    if actor_user_id != payment_request["debtor_id"]:
+        raise HTTPException(status_code=403, detail="Only the debtor can request extension.")
+    if payment_request["status"] != "requested":
+        raise HTTPException(status_code=409, detail="Payment request is not active.")
+
+    now = utc_now()
+    db.payment_requests.update_one(
+        {"id": payment_request_id},
+        {"$set": {"extension_requested_at": now, "updated_at": now}},
+    )
+    record_domain_event("payment_requests", "extension_requested")
+    return _payment_request_to_api(_get_payment_request_or_404(db, payment_request_id))
+
+
+@track_service_operation("payment_requests.dispute")
+def dispute_payment_request(db: Database, payment_request_id: str, actor_user_id: str) -> dict:
+    payment_request = _get_payment_request_or_404(db, payment_request_id)
+    event = assert_event_access(db, payment_request["event_id"], actor_user_id)
+    assert_event_open(event)
+    _assert_payment_request_party(payment_request, actor_user_id)
+    if payment_request["status"] not in {"requested", "paid", "rejected"}:
+        raise HTTPException(status_code=409, detail="Payment request cannot be disputed.")
+
+    now = utc_now()
+    db.payment_requests.update_one(
+        {"id": payment_request_id},
+        {"$set": {"status": "disputed", "disputed_at": now, "updated_at": now}},
+    )
+    record_domain_event("payment_requests", "disputed")
+    return _payment_request_to_api(_get_payment_request_or_404(db, payment_request_id))

@@ -333,6 +333,7 @@ class PaymentRequestCreate(BaseModel):
     creditor_id: UUID
     amount_kopecks: int = Field(gt=0)
     note: str = ""
+    deadline_at: datetime | None = None
 
 
 class PaymentRequest(BaseModel):
@@ -347,6 +348,11 @@ class PaymentRequest(BaseModel):
     created_at: datetime
     updated_at: datetime
     payment_id: UUID | None = None
+    deadline_at: datetime | None = None
+    acknowledged_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    disputed_at: datetime | None = None
+    extension_requested_at: datetime | None = None
 
 
 class PaymentRequestPage(BaseModel):

@@ -1046,6 +1046,78 @@ def test_payment_request_requires_creditor_actor_and_debtor_mark_paid(db):
         raise AssertionError("Expected non-debtor mark-paid to fail")
 
 
+def test_payment_request_deadline_acknowledge_extension_cancel_and_dispute(db):
+    seed_event(db)
+    deadline = datetime.now(UTC) + timedelta(hours=1)
+    request = payments.create_payment_request(
+        db,
+        EVENT_ID,
+        schemas.PaymentRequestCreate(
+            debtor_id=USER_B,
+            creditor_id=USER_A,
+            amount_kopecks=3000,
+            deadline_at=deadline,
+        ),
+        USER_A,
+    )
+
+    acknowledged = payments.acknowledge_payment_request(db, request["id"], USER_B)
+    extended = payments.request_payment_extension(db, request["id"], USER_B)
+    disputed = payments.dispute_payment_request(db, request["id"], USER_B)
+
+    assert acknowledged["acknowledged_at"] is not None
+    assert extended["extension_requested_at"] is not None
+    assert disputed["status"] == "disputed"
+    assert disputed["disputed_at"] is not None
+
+    cancelled = payments.cancel_payment_request(db, request["id"], USER_A)
+    assert cancelled["status"] == "cancelled"
+    assert cancelled["cancelled_at"] is not None
+
+
+def test_payment_request_deadline_must_be_at_least_30_minutes(db):
+    seed_event(db)
+
+    try:
+        payments.create_payment_request(
+            db,
+            EVENT_ID,
+            schemas.PaymentRequestCreate(
+                debtor_id=USER_B,
+                creditor_id=USER_A,
+                amount_kopecks=3000,
+                deadline_at=datetime.now(UTC) + timedelta(minutes=10),
+            ),
+            USER_A,
+        )
+    except Exception as exc:
+        assert_status(exc, 400)
+    else:
+        raise AssertionError("Expected too-soon deadline to fail")
+
+
+def test_payment_request_lifecycle_authorization(db):
+    seed_event(db)
+    request = payments.create_payment_request(
+        db,
+        EVENT_ID,
+        schemas.PaymentRequestCreate(debtor_id=USER_B, creditor_id=USER_A, amount_kopecks=3000),
+        USER_A,
+    )
+
+    for action in (
+        lambda: payments.acknowledge_payment_request(db, request["id"], USER_A),
+        lambda: payments.request_payment_extension(db, request["id"], USER_A),
+        lambda: payments.cancel_payment_request(db, request["id"], USER_B),
+    ):
+        try:
+            action()
+        except Exception as exc:
+            assert_status(exc, 403)
+        else:
+            raise AssertionError("Expected unauthorized payment request lifecycle action to fail")
+
+
 def test_only_payment_receiver_can_confirm_or_reject_payment(db):
     seed_event(db)
     payment = payments.create_payment(db, EVENT_ID, payment_payload(), USER_A)

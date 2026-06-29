@@ -81,6 +81,42 @@ def mark_payment_request_paid(
     )
 
 
+@router.post("/api/payment-requests/{id}/acknowledge", response_model=schemas.PaymentRequest)
+def acknowledge_payment_request(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.acknowledge_payment_request(db, str(id), current_user_id)
+
+
+@router.post("/api/payment-requests/{id}/cancel", response_model=schemas.PaymentRequest)
+def cancel_payment_request(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.cancel_payment_request(db, str(id), current_user_id)
+
+
+@router.post("/api/payment-requests/{id}/request-extension", response_model=schemas.PaymentRequest)
+def request_payment_extension(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.request_payment_extension(db, str(id), current_user_id)
+
+
+@router.post("/api/payment-requests/{id}/dispute", response_model=schemas.PaymentRequest)
+def dispute_payment_request(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.dispute_payment_request(db, str(id), current_user_id)
+
+
 @router.post("/api/payments/{id}/confirm", response_model=schemas.Payment)
 def confirm_payment(
     id: UUID,
