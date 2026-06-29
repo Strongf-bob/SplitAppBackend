@@ -40,6 +40,22 @@ Date: 2026-06-30
   - `ce7b266 fix(receipts): validate item allocations against memberships`
   - `75f7665 feat(balances): explain simplified event debts`
   - `e41a70a feat(payments): add request and confirmation workflow`
+  - `e8a35f6 docs(api): document backend v2 financial flows`
+- Completed backend-feasible product-spec extensions without AI/OCR:
+  - `c63560f feat(users): add discovery and payment hints`
+  - `d9c9d98 feat(friends): add private friendship flow`
+  - `31274a2 feat(events): add nearby invite codes`
+  - `05b9348 feat(events): add event settlement policies`
+  - `de50b39 feat(receipts): add versioned lifecycle states`
+  - `e0cfc70 feat(receipts): store split and fiscal metadata`
+  - `c868478 feat(receipts): add allocation sessions`
+  - `fb21b1c feat(payments): add request lifecycle actions`
+  - `6151e0c feat(disputes): add event dispute tracking`
+  - `df48e0f feat(audit): expose event activity feed`
+  - `a2e6261 feat(users): add profile financial stats`
+  - `a4e8954 feat(reports): add categories and CSV export`
+  - `e246716 feat(security): add rate limiting for sensitive endpoints`
+  - `b00f682 docs(ai): record receipt agent backlog`
 
 ## Branches Pushed
 - `strongf/docs-security-baseline`
@@ -53,7 +69,7 @@ Date: 2026-06-30
 - `strongf/backend-v2-money-members-receipts-debts`
 
 ## Verification
-- `make test`: 59 passed, 4 warnings.
+- `make test`: 86 passed, 4 warnings.
 - `make lint`: all checks passed.
 - Warnings are from `fastapi.testclient` deprecation and short test-only JWT secret length.
 
@@ -81,3 +97,5 @@ These items belong to `/Users/strongf/Developer/SplitApp Yandex/SplitApp` and we
 - Invite link/QR backend support is implemented with token preview, accept, and revoke endpoints.
 - New receipts start as `draft` and affect balances only after `POST /api/receipts/{id}/confirm`.
 - Balance explanation and payment request flows are backend-supported; frontend integration remains out of scope for this backend branch.
+- AI/OCR receipt parsing is intentionally not implemented. The future receipt draft agent boundary is documented in `docs/wiki/Receipt-Agent-Backlog.md` and blocked on OCR/model/provider/privacy contracts.
+- CSV export is implemented for event debts, receipts, and payments. PDF export remains future work.
