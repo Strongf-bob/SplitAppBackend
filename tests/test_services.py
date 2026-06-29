@@ -214,6 +214,7 @@ def test_receipt_create_validates_total_and_membership(db):
 
     assert receipt["event_id"] == EVENT_ID
     assert receipt["payer_id"] == USER_A
+    assert receipt["status"] == "draft"
     assert receipt["total_amount_kopecks"] == 10000
     assert len(receipt["items"]) == 1
     stored = db.receipts.find_one({"id": receipt["id"]})
@@ -333,7 +334,10 @@ def test_balances_use_kopeck_money_math(db):
             ),
         ],
     )
-    receipts.create_receipt(db, EVENT_ID, payload, USER_A)
+    receipt = receipts.create_receipt(db, EVENT_ID, payload, USER_A)
+
+    assert balances.get_event_balances(db, EVENT_ID, USER_A) == []
+    receipts.confirm_receipt(db, receipt["id"], USER_A)
 
     rows = balances.get_event_balances(db, EVENT_ID, USER_A)
 
@@ -345,6 +349,34 @@ def test_balances_use_kopeck_money_math(db):
             "amount_kopecks": 30,
         }
     ]
+
+
+def test_confirmed_receipt_financial_fields_cannot_be_changed(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    receipts.confirm_receipt(db, receipt["id"], USER_A)
+
+    try:
+        receipts.update_receipt(
+            db,
+            receipt["id"],
+            schemas.UpdateReceiptRequest(total_amount_kopecks=10000, items=receipt_payload().items),
+            USER_A,
+        )
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected confirmed receipt financial update to fail")
+
+    updated = receipts.update_receipt(
+        db,
+        receipt["id"],
+        schemas.UpdateReceiptRequest(title="Updated title"),
+        USER_A,
+    )
+
+    assert updated["title"] == "Updated title"
+    assert updated["status"] == "confirmed"
 
 
 def test_legacy_decimal_money_storage_reads_as_kopecks(db):

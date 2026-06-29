@@ -159,6 +159,7 @@ class Receipt(BaseModel):
     event_id: UUID
     payer_id: UUID
     title: str = ""
+    status: str
     total_amount_kopecks: int
     created_at: datetime
     updated_at: datetime

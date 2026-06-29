@@ -1184,6 +1184,54 @@
         }
       }
     },
+    "/api/receipts/{id}/confirm": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Confirm Receipt",
+        "operationId": "confirm_receipt_api_receipts__id__confirm_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/receipts/{id}/image": {
       "post": {
         "tags": [
@@ -2251,6 +2299,10 @@
             "title": "Title",
             "default": ""
           },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
           "total_amount_kopecks": {
             "type": "integer",
             "title": "Total Amount Kopecks"
@@ -2289,6 +2341,7 @@
           "id",
           "event_id",
           "payer_id",
+          "status",
           "total_amount_kopecks",
           "created_at",
           "updated_at",

@@ -82,6 +82,7 @@ def _build_receipt_items(
 
 def _receipt_to_api(receipt: dict, *, include_internal_shares: bool = False) -> dict:
     cleaned = strip_mongo_id(receipt)
+    cleaned["status"] = cleaned.get("status", "confirmed")
     cleaned["total_amount_kopecks"] = stored_money_to_kopecks(
         cleaned, "total_amount_kopecks", "total_amount"
     )
@@ -146,6 +147,7 @@ def _create_receipt(
         "event_id": event_id,
         "payer_id": payer_id,
         "title": payload.title,
+        "status": "draft",
         "total_amount_kopecks": money_to_storage(payload.total_amount_kopecks),
         "created_at": now,
         "updated_at": now,
@@ -166,6 +168,7 @@ def update_receipt(
     event = assert_event_access(db, receipt["event_id"], actor_user_id)
     assert_event_open(event)
     update_fields: dict = {}
+    is_confirmed = receipt.get("status", "confirmed") == "confirmed"
 
     if payload.title is not None:
         update_fields["title"] = payload.title
@@ -177,6 +180,11 @@ def update_receipt(
         )
 
     if payload.items is not None:
+        if is_confirmed:
+            raise HTTPException(
+                status_code=409,
+                detail="Confirmed receipt financial fields cannot be changed.",
+            )
         _validate_receipt_users(event, receipt["payer_id"], payload.items)
         _validate_share_sum(payload.items)
 
@@ -246,3 +254,30 @@ def delete_receipt(db: Database, receipt_id: str, actor_user_id: str) -> None:
         resource_id=receipt_id,
         actor_user_id=actor_user_id,
     )
+
+
+@track_service_operation("receipts.confirm")
+def confirm_receipt(db: Database, receipt_id: str, actor_user_id: str) -> dict:
+    receipt = get_receipt_or_404(db, receipt_id)
+    event = assert_event_access(db, receipt["event_id"], actor_user_id)
+    assert_event_open(event)
+    status = receipt.get("status", "confirmed")
+    if status == "confirmed":
+        return _receipt_to_api(receipt)
+    if status != "draft":
+        raise HTTPException(status_code=409, detail="Only draft receipts can be confirmed.")
+
+    now = utc_now()
+    db.receipts.update_one(
+        active_filter({"id": receipt_id}),
+        {"$set": {"status": "confirmed", "confirmed_at": now, "updated_at": now}},
+    )
+    record_domain_event("receipts", "confirmed")
+    record_audit_event(
+        db,
+        action="receipt.confirmed",
+        resource_type="receipt",
+        resource_id=receipt_id,
+        actor_user_id=actor_user_id,
+    )
+    return _receipt_to_api(get_receipt_or_404(db, receipt_id))
