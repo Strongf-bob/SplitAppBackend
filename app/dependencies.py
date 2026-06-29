@@ -1,4 +1,5 @@
 from typing import Any
+import logging
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
@@ -7,6 +8,8 @@ from pymongo.database import Database
 
 from app.core import tokens
 from app.core.s3 import get_s3_client
+
+logger = logging.getLogger("splitapp")
 
 UNAUTHENTICATED_PATHS = frozenset(
     {
@@ -52,9 +55,10 @@ def require_auth_token(
     try:
         tokens.ensure_jwt_secret_configured()
     except RuntimeError:
+        logger.error("JWT_SECRET is not configured.", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="JWT_SECRET is not configured.",
+            detail="Internal server error.",
         )
 
     try:
@@ -82,4 +86,3 @@ def get_actor_user_id(request: Request) -> str:
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user_id
-

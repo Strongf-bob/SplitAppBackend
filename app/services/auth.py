@@ -1,4 +1,5 @@
 from datetime import UTC
+import logging
 
 import httpx
 from fastapi import HTTPException
@@ -9,6 +10,7 @@ from app.core import tokens
 from app.services.common import new_uuid, utc_now, user_to_api_dict
 
 YANDEX_INFO_URL = "https://login.yandex.ru/info"
+logger = logging.getLogger("splitapp")
 
 
 def _fetch_yandex_profile(oauth_token: str) -> dict:
@@ -96,7 +98,8 @@ def login_with_yandex_oauth(db: Database, oauth_token: str) -> dict:
     try:
         tokens.ensure_jwt_secret_configured()
     except RuntimeError:
-        raise HTTPException(status_code=500, detail="JWT_SECRET is not configured.")
+        logger.error("JWT_SECRET is not configured.", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error.")
 
     profile = _fetch_yandex_profile(oauth_token)
     fields = _yandex_profile_to_fields(profile)
@@ -161,7 +164,8 @@ def rotate_refresh_token(db: Database, raw_refresh: str) -> dict:
     try:
         tokens.ensure_jwt_secret_configured()
     except RuntimeError:
-        raise HTTPException(status_code=500, detail="JWT_SECRET is not configured.")
+        logger.error("JWT_SECRET is not configured.", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error.")
 
     now = utc_now()
     rt_hash = tokens.hash_refresh_token(raw_refresh)
