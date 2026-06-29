@@ -69,6 +69,49 @@ services:
     networks:
       - backend
 
+  mongodb-exporter:
+    image: percona/mongodb_exporter:0.43.1
+    container_name: splitapp-backend-mongodb-exporter
+    restart: unless-stopped
+    command:
+      - "--mongodb.uri=mongodb://mongo:27017"
+      - "--collector.diagnosticdata"
+      - "--collector.replicasetstatus"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - backend
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: splitapp-backend-cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    networks:
+      - backend
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: splitapp-backend-node-exporter
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+|var/lib/containers/.+)($$|/)"
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - backend
+
   loki:
     image: grafana/loki:3.3.2
     container_name: splitapp-backend-loki

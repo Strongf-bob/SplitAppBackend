@@ -5,6 +5,7 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.monitoring import metrics_response, monitor_db_operation, monitor_service_operation
+from app.core.monitoring import record_domain_event, refresh_database_metrics
 from app.dependencies import _is_internal_client, require_auth_token
 from app.main import configure_cors, cors_allowed_origins
 from app.main import configure_exception_handlers, configure_request_logging
@@ -183,3 +184,18 @@ def test_operation_metrics_record_success_and_error():
         in metrics
     )
     assert 'splitapp_db_operations_total{operation="tests.db_error",status="error"}' in metrics
+
+
+def test_domain_and_collection_metrics_are_exported(db):
+    db.users.insert_one({"id": "user-1"})
+    db.events.insert_one({"id": "event-1"})
+    db.events.insert_one({"id": "event-2", "deleted_at": "2026-01-01T00:00:00Z"})
+    record_domain_event("tests", "created")
+    refresh_database_metrics(db)
+
+    body, _ = metrics_response()
+    metrics = body.decode()
+    assert 'splitapp_domain_events_total{action="created",domain="tests"}' in metrics
+    assert 'splitapp_collection_documents{collection="users",state="all"} 1.0' in metrics
+    assert 'splitapp_collection_documents{collection="events",state="active"} 1.0' in metrics
+    assert 'splitapp_collection_documents{collection="events",state="deleted"} 1.0' in metrics

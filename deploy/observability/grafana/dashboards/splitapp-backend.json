@@ -26,19 +26,70 @@
         "type": "prometheus",
         "uid": "Prometheus"
       },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "up{job=\"splitapp-backend\"}",
+          "legendFormat": "backend",
+          "refId": "A"
+        }
+      ],
+      "title": "Backend Up",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bool"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 7,
+        "x": 4,
+        "y": 0
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "sum(rate(splitapp_http_requests_total{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])) or vector(0)",
+          "legendFormat": "all",
+          "refId": "A"
+        }
+      ],
+      "title": "Request Rate",
+      "type": "timeseries",
       "fieldConfig": {
         "defaults": {
           "unit": "reqps"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -48,35 +99,35 @@
           "mode": "multi",
           "sort": "desc"
         }
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(splitapp_http_requests_total[5m])) or vector(0)",
-          "legendFormat": "requests/sec",
-          "refId": "A"
-        }
-      ],
-      "title": "Request Rate",
-      "type": "timeseries"
+      }
     },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
       },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 11,
+        "y": 0
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "(sum(rate(splitapp_http_requests_total{status_code=~\"5..\"}[5m])) / clamp_min(sum(rate(splitapp_http_requests_total[5m])), 0.001)) or vector(0)",
+          "legendFormat": "5xx",
+          "refId": "A"
+        }
+      ],
+      "title": "5xx Error Ratio",
+      "type": "timeseries",
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 0
-      },
-      "id": 2,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -86,115 +137,230 @@
           "mode": "multi",
           "sort": "desc"
         }
-      },
-      "targets": [
-        {
-          "expr": "(sum(rate(splitapp_http_requests_total{status_code=~\"5..\"}[5m])) / clamp_min(sum(rate(splitapp_http_requests_total[5m])), 0.001)) or vector(0)",
-          "legendFormat": "5xx error ratio",
-          "refId": "A"
-        }
-      ],
-      "title": "5xx Error Ratio",
-      "type": "timeseries"
+      }
     },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
-        },
-        "overrides": []
-      },
       "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
+        "h": 5,
+        "w": 7,
+        "x": 17,
         "y": 0
       },
-      "id": 3,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
+      "id": 4,
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(splitapp_http_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(splitapp_http_request_duration_seconds_bucket{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(splitapp_http_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(splitapp_http_request_duration_seconds_bucket{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])) by (le))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(splitapp_http_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(splitapp_http_request_duration_seconds_bucket{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
         }
       ],
-      "title": "Latency",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
+      "title": "Latency p50/p95/p99",
+      "type": "timeseries",
       "fieldConfig": {
         "defaults": {
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      },
-      "id": 4,
       "options": {
-        "showHeader": true
-      },
-      "targets": [
-        {
-          "expr": "sort_desc(histogram_quantile(0.95, sum(rate(splitapp_http_request_duration_seconds_bucket[5m])) by (le, path)))",
-          "format": "table",
-          "instant": true,
-          "refId": "A"
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      ],
-      "title": "Slow Endpoints p95",
-      "type": "table"
+      }
     },
     {
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
       },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "sum by (path) (rate(splitapp_http_requests_total{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m]))",
+          "legendFormat": "{{path}}",
+          "refId": "A"
+        }
+      ],
+      "title": "RPS by Endpoint",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 6,
+      "targets": [
+        {
+          "expr": "sum by (status_code) (rate(splitapp_http_requests_total{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m]))",
+          "legendFormat": "{{status_code}}",
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP Status Families",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "id": 7,
+      "targets": [
+        {
+          "expr": "sort_desc(histogram_quantile(0.95, sum(rate(splitapp_http_request_duration_seconds_bucket{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])) by (le, path)))",
+          "legendFormat": "{{path}}",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "title": "Slow Endpoints p95",
+      "type": "table",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "id": 8,
+      "targets": [
+        {
+          "expr": "sum by (path, status_code) (rate(splitapp_http_requests_total{status_code=~\"4..|5..\"}[5m]))",
+          "legendFormat": "{{path}} {{status_code}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Client and Server Errors by Endpoint",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "id": 9,
+      "targets": [
+        {
+          "expr": "sum by (domain, action) (rate(splitapp_domain_events_total[15m]))",
+          "legendFormat": "{{domain}} {{action}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Business Events",
+      "type": "timeseries",
       "fieldConfig": {
         "defaults": {
           "unit": "ops"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 8
-      },
-      "id": 5,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -204,21 +370,538 @@
           "mode": "multi",
           "sort": "desc"
         }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
       },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "id": 10,
       "targets": [
         {
           "expr": "sum by (operation, status) (rate(splitapp_service_operations_total[5m])) or vector(0)",
           "legendFormat": "{{operation}} {{status}}",
           "refId": "A"
-        },
-        {
-          "expr": "sum by (operation, status) (rate(splitapp_db_operations_total[5m])) or vector(0)",
-          "legendFormat": "db {{operation}} {{status}}",
-          "refId": "B"
         }
       ],
-      "title": "Service and DB Operations",
-      "type": "timeseries"
+      "title": "Service Operations",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 29
+      },
+      "id": 11,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(splitapp_money_amount_bucket[30m])) by (le, kind))",
+          "legendFormat": "{{kind}} p95",
+          "refId": "A"
+        }
+      ],
+      "title": "Money Amount p95",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 29
+      },
+      "id": 12,
+      "targets": [
+        {
+          "expr": "sum by (kind) (rate(splitapp_money_amount_sum[30m])) / clamp_min(sum by (kind) (rate(splitapp_money_amount_count[30m])), 0.001)",
+          "legendFormat": "{{kind}} avg",
+          "refId": "A"
+        }
+      ],
+      "title": "Money Amount Average",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 29
+      },
+      "id": 13,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(splitapp_event_participants_bucket[30m])) by (le))",
+          "legendFormat": "participants p95",
+          "refId": "A"
+        }
+      ],
+      "title": "Event Participant Count p95",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 37
+      },
+      "id": 14,
+      "targets": [
+        {
+          "expr": "splitapp_collection_documents",
+          "legendFormat": "{{collection}} {{state}}",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "title": "Mongo Collection Counts",
+      "type": "table",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 37
+      },
+      "id": 15,
+      "targets": [
+        {
+          "expr": "sum by (operation, status) (rate(splitapp_db_operations_total[5m])) or vector(0)",
+          "legendFormat": "{{operation}} {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "DB Operations",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 45
+      },
+      "id": 16,
+      "targets": [
+        {
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"splitapp-backend-.*\"}[5m]))",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Container CPU",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cores"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 45
+      },
+      "id": 17,
+      "targets": [
+        {
+          "expr": "container_memory_working_set_bytes{name=~\"splitapp-backend-.*\"}",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Container Memory",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 53
+      },
+      "id": 18,
+      "targets": [
+        {
+          "expr": "(1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))) or vector(0)",
+          "legendFormat": "cpu busy",
+          "refId": "A"
+        }
+      ],
+      "title": "Host CPU Busy",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 53
+      },
+      "id": 19,
+      "targets": [
+        {
+          "expr": "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) or vector(0)",
+          "legendFormat": "memory used",
+          "refId": "A"
+        }
+      ],
+      "title": "Host Memory Used",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 53
+      },
+      "id": 20,
+      "targets": [
+        {
+          "expr": "max by (mountpoint) (1 - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\"}) or vector(0)",
+          "legendFormat": "{{mountpoint}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Host Disk Used",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 0,
+        "y": 61
+      },
+      "id": 21,
+      "targets": [
+        {
+          "expr": "up{job=\"mongodb-exporter\"}",
+          "legendFormat": "mongo exporter",
+          "refId": "A"
+        }
+      ],
+      "title": "Mongo Exporter Up",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bool"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 10,
+        "x": 4,
+        "y": 61
+      },
+      "id": 22,
+      "targets": [
+        {
+          "expr": "mongodb_connections{state=~\"current|available\"}",
+          "legendFormat": "{{state}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Mongo Connections",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 10,
+        "x": 14,
+        "y": 61
+      },
+      "id": 23,
+      "targets": [
+        {
+          "expr": "sum by (type) (rate(mongodb_ss_opcounters[5m]))",
+          "legendFormat": "{{type}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Mongo Opcounters",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "datasource": {
@@ -229,9 +912,9 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 66
       },
-      "id": 6,
+      "id": 24,
       "options": {
         "dedupStrategy": "none",
         "enableLogDetails": true,
@@ -268,6 +951,6 @@
   "timezone": "browser",
   "title": "SplitApp Backend",
   "uid": "splitapp-backend",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

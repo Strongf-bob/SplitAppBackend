@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from pymongo.database import Database
 
 from app import schemas
-from app.core.monitoring import track_service_operation
+from app.core.monitoring import observe_money_amount, record_domain_event, track_service_operation
 
 from app.services.access import assert_event_access, assert_event_open, get_receipt_or_404
 from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
@@ -107,6 +107,8 @@ def create_receipt(
         "share_items": stored_share_items,
     }
     db.receipts.insert_one(receipt)
+    record_domain_event("receipts", "created")
+    observe_money_amount("receipt_total", payload.total_amount)
     return strip_mongo_id(receipt)
 
 
@@ -155,6 +157,9 @@ def update_receipt(
 
     update_fields["updated_at"] = utc_now()
     db.receipts.update_one({"id": receipt_id}, {"$set": update_fields})
+    record_domain_event("receipts", "updated")
+    if "total_amount" in update_fields:
+        observe_money_amount("receipt_total", update_fields["total_amount"])
     return strip_mongo_id(get_receipt_or_404(db, receipt_id))
 
 
@@ -193,6 +198,7 @@ def delete_receipt(db: Database, receipt_id: str, actor_user_id: str) -> None:
         active_filter({"id": receipt_id}),
         {"$set": {"deleted_at": now, "deleted_by": actor_user_id, "updated_at": now}},
     )
+    record_domain_event("receipts", "deleted")
     record_audit_event(
         db,
         action="receipt.deleted",

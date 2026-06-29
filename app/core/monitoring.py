@@ -6,7 +6,7 @@ from functools import wraps
 from typing import Callable, TypeVar
 
 import sentry_sdk
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
 F = TypeVar("F", bound=Callable)
 
@@ -40,6 +40,27 @@ DB_OPERATION_DURATION = Histogram(
     "Database operation duration in seconds.",
     ["operation"],
 )
+DOMAIN_EVENT_COUNT = Counter(
+    "splitapp_domain_events_total",
+    "Total SplitApp domain events recorded by backend services.",
+    ["domain", "action"],
+)
+MONEY_AMOUNT = Histogram(
+    "splitapp_money_amount",
+    "Observed money amounts handled by SplitApp backend.",
+    ["kind"],
+    buckets=(1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, float("inf")),
+)
+EVENT_PARTICIPANT_COUNT = Histogram(
+    "splitapp_event_participants",
+    "Observed participant counts on event mutations.",
+    buckets=(1, 2, 3, 4, 5, 8, 13, 21, 34, float("inf")),
+)
+COLLECTION_DOCUMENT_COUNT = Gauge(
+    "splitapp_collection_documents",
+    "Current MongoDB document counts for key SplitApp collections.",
+    ["collection", "state"],
+)
 
 
 def init_sentry() -> None:
@@ -54,6 +75,36 @@ def record_request_metrics(
 ) -> None:
     REQUEST_COUNT.labels(method=method, path=path, status_code=str(status_code)).inc()
     REQUEST_DURATION.labels(method=method, path=path).observe(duration_seconds)
+
+
+def record_domain_event(domain: str, action: str) -> None:
+    DOMAIN_EVENT_COUNT.labels(domain=domain, action=action).inc()
+
+
+def observe_money_amount(kind: str, amount: object) -> None:
+    MONEY_AMOUNT.labels(kind=kind).observe(float(amount))
+
+
+def observe_event_participants(count: int) -> None:
+    EVENT_PARTICIPANT_COUNT.observe(count)
+
+
+def refresh_database_metrics(db) -> None:
+    collection_names = ("users", "events", "receipts", "payments", "audit_events")
+    for collection_name in collection_names:
+        collection = getattr(db, collection_name)
+        if collection_name == "users" or collection_name == "audit_events":
+            COLLECTION_DOCUMENT_COUNT.labels(collection=collection_name, state="all").set(
+                collection.count_documents({})
+            )
+            continue
+
+        COLLECTION_DOCUMENT_COUNT.labels(collection=collection_name, state="active").set(
+            collection.count_documents({"deleted_at": {"$exists": False}})
+        )
+        COLLECTION_DOCUMENT_COUNT.labels(collection=collection_name, state="deleted").set(
+            collection.count_documents({"deleted_at": {"$exists": True}})
+        )
 
 
 @contextmanager

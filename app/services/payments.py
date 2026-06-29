@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from pymongo.database import Database
 
 from app import schemas
-from app.core.monitoring import track_service_operation
+from app.core.monitoring import observe_money_amount, record_domain_event, track_service_operation
 
 from app.services.access import assert_event_access, assert_event_open, get_payment_or_404
 from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
@@ -40,6 +40,8 @@ def create_payment(
         "created_at": utc_now(),
     }
     db.payments.insert_one(payment)
+    record_domain_event("payments", "created")
+    observe_money_amount("payment_amount", payload.amount)
     return payment
 
 
@@ -72,6 +74,7 @@ def update_payment(
             detail="Only the payment receiver can update confirmation.",
         )
     db.payments.update_one({"id": payment_id}, {"$set": {"confirmed": payload.confirmed}})
+    record_domain_event("payments", "confirmed" if payload.confirmed else "unconfirmed")
     record_audit_event(
         db,
         action="payment.confirmation_updated",
@@ -102,6 +105,7 @@ def delete_payment(db: Database, payment_id: str, actor_user_id: str) -> None:
         active_filter({"id": payment_id}),
         {"$set": {"deleted_at": now, "deleted_by": actor_user_id, "updated_at": now}},
     )
+    record_domain_event("payments", "deleted")
     record_audit_event(
         db,
         action="payment.deleted",
