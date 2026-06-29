@@ -394,6 +394,22 @@ class DisputePage(BaseModel):
     total: int
 
 
+class AuditEvent(BaseModel):
+    id: UUID
+    action: str
+    resource_type: str
+    resource_id: str
+    actor_user_id: UUID
+    created_at: datetime
+
+
+class AuditEventPage(BaseModel):
+    items: list[AuditEvent]
+    limit: int
+    offset: int
+    total: int
+
+
 class EventBalance(BaseModel):
     event_id: UUID
     debitor_id: UUID
