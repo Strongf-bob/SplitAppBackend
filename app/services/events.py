@@ -1,4 +1,5 @@
 from fastapi import HTTPException
+from pymongo.errors import ConfigurationError, InvalidOperation, OperationFailure
 from pymongo.database import Database
 
 from app import schemas
@@ -48,9 +49,41 @@ def get_event(db: Database, event_id: str, actor_user_id: str) -> dict:
 def delete_event(db: Database, event_id: str, actor_user_id: str) -> None:
     event = get_event_or_404(db, event_id)
     assert_event_creator(event, actor_user_id)
-    db.receipts.delete_many({"event_id": event_id})
-    db.payments.delete_many({"event_id": event_id})
-    db.events.delete_one({"id": event_id})
+    now = utc_now()
+
+    def delete_with_session(session) -> None:
+        db.audit_events.insert_one(
+            {
+                "id": new_uuid(),
+                "action": "event.deleted",
+                "resource_type": "event",
+                "resource_id": event_id,
+                "actor_user_id": actor_user_id,
+                "created_at": now,
+            },
+            session=session,
+        )
+        db.receipts.delete_many({"event_id": event_id}, session=session)
+        db.payments.delete_many({"event_id": event_id}, session=session)
+        db.events.delete_one({"id": event_id}, session=session)
+
+    try:
+        with db.client.start_session() as session:
+            with session.start_transaction():
+                delete_with_session(session)
+    except (ConfigurationError, InvalidOperation, NotImplementedError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Transactional deletes require MongoDB transaction support.",
+        ) from exc
+    except OperationFailure as exc:
+        message = str(exc).lower()
+        if "transaction" in message or "replica set" in message:
+            raise HTTPException(
+                status_code=503,
+                detail="Transactional deletes require MongoDB transaction support.",
+            ) from exc
+        raise
 
 
 def update_event(db: Database, event_id: str, payload: schemas.EventUpdate, actor_user_id: str) -> dict:

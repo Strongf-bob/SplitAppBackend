@@ -105,6 +105,19 @@ def test_only_event_creator_can_close_or_reopen_event(db):
     assert updated["is_closed"] is True
 
 
+def test_event_delete_requires_transaction_support(db):
+    seed_event(db)
+
+    try:
+        events.delete_event(db, EVENT_ID, USER_A)
+    except Exception as exc:
+        assert_status(exc, 503)
+    else:
+        raise AssertionError("Expected unsupported test transaction to fail")
+
+    assert db.events.find_one({"id": EVENT_ID}) is not None
+
+
 def test_refresh_token_rotation_issues_new_pair(db):
     from tests.conftest import seed_users
 
