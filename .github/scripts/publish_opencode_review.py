@@ -100,7 +100,7 @@ def derive_title(message: str) -> str:
         return first_sentence
     truncated = first_sentence[:117].rstrip()
     last_space = truncated.rfind(" ")
-    if last_space > 60:
+    if last_space > 0:
         truncated = truncated[:last_space]
     return f"{truncated}..."
 
@@ -242,13 +242,6 @@ def parse_review_result(data: Any) -> ReviewResult:
     if isinstance(data, dict):
         status = first_string(data, ("status",))
         message = first_string(data, ("message", "summary"))
-        for key in ("findings", "issues", "comments", "reviews", "results", "data", "items"):
-            if key in data:
-                return ReviewResult(
-                    findings=extract_findings(data[key]),
-                    status=status,
-                    message=message,
-                )
     return ReviewResult(findings=extract_findings(data), status=status, message=message)
 
 
@@ -312,13 +305,13 @@ def parse_patch_changed_lines(filename: str, patch: str) -> set[tuple[str, int]]
 
 
 def format_finding_body(finding: Finding) -> str:
-    location = f"{finding.path}:{finding.line}" if finding.path and finding.line else "summary"
+    location = f"{finding.path}:{finding.line}" if finding.path and finding.line else "сводка"
     return (
         f"{COMMENT_MARKER}\n"
         f"**Серьезность:** `{finding.severity}`\n\n"
         f"**{finding.title}**\n\n"
         f"{finding.body}\n\n"
-        f"_OpenCodeReview location: `{location}`_"
+        f"_Расположение: `{location}`_"
     )
 
 
@@ -347,15 +340,15 @@ def build_summary(result: ReviewResult, inline_count: int, blocking: set[str]) -
 
     lines.extend(["", "| Серьезность | Количество | Блокирует merge |", "| --- | ---: | --- |"])
     for severity in ("critical", "high", "medium", "low", "style"):
-        blocks = "yes" if severity in blocking else "no"
+        blocks = "да" if severity in blocking else "нет"
         lines.append(f"| {severity} | {counts.get(severity, 0)} | {blocks} |")
 
     lines.extend(["", "### Замечания"])
     for finding in findings[:50]:
-        location = f"{finding.path}:{finding.line}" if finding.path and finding.line else "summary"
+        location = f"{finding.path}:{finding.line}" if finding.path and finding.line else "сводка"
         lines.append(f"- `{finding.severity}` `{location}` - {finding.title}")
     if len(findings) > 50:
-        lines.append(f"- ...and {len(findings) - 50} more findings. See the uploaded artifact.")
+        lines.append(f"- ...и еще {len(findings) - 50} замечаний. См. загруженный artifact.")
     return "\n".join(lines)
 
 
