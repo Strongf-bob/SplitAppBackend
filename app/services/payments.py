@@ -3,7 +3,7 @@ from pymongo.database import Database
 
 from app import schemas
 
-from app.services.access import assert_event_access, get_payment_or_404
+from app.services.access import assert_event_access, assert_event_open, get_payment_or_404
 from app.services.common import new_uuid, strip_mongo_id, utc_now
 
 
@@ -11,6 +11,7 @@ def create_payment(
     db: Database, event_id: str, payload: schemas.PaymentCreate, actor_user_id: str
 ) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
+    assert_event_open(event)
     sender_id = str(payload.sender_id)
     receiver_id = str(payload.receiver_id)
 
@@ -48,6 +49,7 @@ def update_payment(
     db: Database, payment_id: str, payload: schemas.PaymentUpdate, actor_user_id: str
 ) -> dict:
     payment = get_payment_or_404(db, payment_id)
-    assert_event_access(db, payment["event_id"], actor_user_id)
+    event = assert_event_access(db, payment["event_id"], actor_user_id)
+    assert_event_open(event)
     db.payments.update_one({"id": payment_id}, {"$set": {"confirmed": payload.confirmed}})
     return strip_mongo_id(get_payment_or_404(db, payment_id))

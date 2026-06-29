@@ -3,7 +3,7 @@ from pymongo.database import Database
 
 from app import schemas
 
-from app.services.access import assert_event_access, get_receipt_or_404
+from app.services.access import assert_event_access, assert_event_open, get_receipt_or_404
 from app.services.common import new_uuid, strip_mongo_id, utc_now
 
 
@@ -72,6 +72,7 @@ def create_receipt(
     db: Database, event_id: str, payload: schemas.CreateReceiptRequest, actor_user_id: str
 ) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
+    assert_event_open(event)
     payer_id = str(payload.payer_id)
     _validate_receipt_users(event, payer_id, payload.items)
     _validate_share_sum(payload.items)
@@ -107,6 +108,7 @@ def update_receipt(
 ) -> dict:
     receipt = get_receipt_or_404(db, receipt_id)
     event = assert_event_access(db, receipt["event_id"], actor_user_id)
+    assert_event_open(event)
     update_fields: dict = {}
 
     if payload.title is not None:
@@ -156,5 +158,6 @@ def list_receipts_by_event(db: Database, event_id: str, actor_user_id: str) -> l
 
 def delete_receipt(db: Database, receipt_id: str, actor_user_id: str) -> None:
     receipt = get_receipt_or_404(db, receipt_id)
-    assert_event_access(db, receipt["event_id"], actor_user_id)
+    event = assert_event_access(db, receipt["event_id"], actor_user_id)
+    assert_event_open(event)
     db.receipts.delete_one({"id": receipt_id})
