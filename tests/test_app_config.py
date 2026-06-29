@@ -89,12 +89,24 @@ def test_metrics_endpoint_exposes_prometheus_payload():
     assert "splitapp_http_requests_total" in response.text
 
 
-def test_metrics_endpoint_bypasses_global_auth_dependency():
+def test_metrics_endpoint_requires_metrics_token(monkeypatch):
+    monkeypatch.setenv("METRICS_ACCESS_TOKEN", "metrics-secret")
     api = FastAPI(dependencies=[Depends(require_auth_token)])
     api.include_router(health_router)
 
     client = TestClient(api)
     response = client.get("/api/metrics")
+
+    assert response.status_code == 404
+
+
+def test_metrics_endpoint_accepts_metrics_token(monkeypatch):
+    monkeypatch.setenv("METRICS_ACCESS_TOKEN", "metrics-secret")
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+    api.include_router(health_router)
+
+    client = TestClient(api)
+    response = client.get("/api/metrics", headers={"Authorization": "Bearer metrics-secret"})
 
     assert response.status_code == 200
     assert "splitapp_http_requests_total" in response.text

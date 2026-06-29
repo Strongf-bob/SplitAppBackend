@@ -45,13 +45,22 @@ services:
     image: prom/prometheus:v2.55.1
     container_name: splitapp-backend-prometheus
     restart: unless-stopped
+    env_file:
+      - .env
     command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--storage.tsdb.retention.time=15d"
-      - "--web.enable-lifecycle"
+      - "sh"
+      - "-ec"
+      - |
+        test -n "$${METRICS_ACCESS_TOKEN:-}"
+        escaped_token=$$(printf '%s' "$${METRICS_ACCESS_TOKEN}" | sed 's/[\/&]/\\&/g')
+        sed "s/__METRICS_ACCESS_TOKEN__/$${escaped_token}/g" /etc/prometheus/prometheus.yml.template > /tmp/prometheus.yml
+        exec /bin/prometheus \
+          --config.file=/tmp/prometheus.yml \
+          --storage.tsdb.path=/prometheus \
+          --storage.tsdb.retention.time=15d \
+          --web.enable-lifecycle
     volumes:
-      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml.template:ro
       - prometheus-data:/prometheus
     depends_on:
       api:
