@@ -1,3 +1,6 @@
+import secrets
+from datetime import UTC, datetime, timedelta
+
 from fastapi import HTTPException
 from pymongo.errors import ConfigurationError, InvalidOperation, OperationFailure
 from pymongo.database import Database
@@ -44,6 +47,12 @@ def _event_to_api(db: Database, event: dict) -> dict:
     return cleaned
 
 
+def _invite_to_api(invite: dict) -> dict:
+    cleaned = strip_mongo_id(invite)
+    cleaned["invite_url"] = f"splitapp://invites/{cleaned['token']}"
+    return cleaned
+
+
 def _upsert_membership(
     db: Database,
     *,
@@ -82,6 +91,24 @@ def _upsert_membership(
             "updated_at": now,
         }
     )
+
+
+def _get_active_invite_or_error(db: Database, token: str) -> dict:
+    invite = db.event_invites.find_one({"token": token, "deleted_at": {"$exists": False}})
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found.")
+    if invite["status"] != "active":
+        raise HTTPException(status_code=410, detail="Invite is no longer active.")
+    expires_at = invite["expires_at"]
+    if isinstance(expires_at, datetime) and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at <= utc_now():
+        db.event_invites.update_one(
+            {"id": invite["id"]},
+            {"$set": {"status": "expired", "updated_at": utc_now()}},
+        )
+        raise HTTPException(status_code=410, detail="Invite has expired.")
+    return invite
 
 
 @track_service_operation("events.create")
@@ -260,3 +287,99 @@ def remove_participant(db: Database, event_id: str, user_id: str, actor_user_id:
     )
     record_domain_event("events", "participants_removed")
     observe_event_participants(len(active_event_user_ids(db, event_id)))
+
+
+@track_service_operation("events.invites.create")
+def create_event_invite(
+    db: Database,
+    event_id: str,
+    payload: schemas.CreateEventInviteRequest,
+    actor_user_id: str,
+) -> dict:
+    event = assert_event_access(db, event_id, actor_user_id)
+    assert_event_creator(event, actor_user_id)
+    assert_event_open(event)
+
+    now = utc_now()
+    invite = {
+        "id": new_uuid(),
+        "event_id": event_id,
+        "token": secrets.token_urlsafe(24),
+        "status": "active",
+        "created_by": actor_user_id,
+        "expires_at": now + timedelta(seconds=payload.expires_in_seconds),
+        "created_at": now,
+        "updated_at": now,
+        "accepted_by": None,
+        "accepted_at": None,
+        "revoked_at": None,
+    }
+    db.event_invites.insert_one(invite)
+    record_domain_event("events", "invite_created")
+    return _invite_to_api(invite)
+
+
+@track_service_operation("events.invites.preview")
+def preview_event_invite(db: Database, token: str, actor_user_id: str) -> dict:
+    get_user_or_404(db, actor_user_id)
+    invite = _get_active_invite_or_error(db, token)
+    event = get_event_or_404(db, invite["event_id"])
+    return {
+        "event_id": event["id"],
+        "event_name": event["name"],
+        "creator_id": event["creator_id"],
+        "expires_at": invite["expires_at"],
+        "participant_count": len(active_event_user_ids(db, event["id"])),
+    }
+
+
+@track_service_operation("events.invites.accept")
+def accept_event_invite(db: Database, token: str, actor_user_id: str) -> dict:
+    get_user_or_404(db, actor_user_id)
+    invite = _get_active_invite_or_error(db, token)
+    event = get_event_or_404(db, invite["event_id"])
+    assert_event_open(event)
+
+    now = utc_now()
+    _upsert_membership(
+        db,
+        event_id=event["id"],
+        user_id=actor_user_id,
+        role="member" if actor_user_id != event["creator_id"] else "creator",
+        now=now,
+    )
+    db.event_invites.update_one(
+        {"id": invite["id"]},
+        {
+            "$set": {
+                "accepted_by": actor_user_id,
+                "accepted_at": now,
+                "updated_at": now,
+            }
+        },
+    )
+    db.events.update_one({"id": event["id"]}, {"$set": {"updated_at": now}})
+    record_domain_event("events", "invite_accepted")
+    observe_event_participants(len(active_event_user_ids(db, event["id"])))
+    return _event_to_api(db, get_event_or_404(db, event["id"]))
+
+
+@track_service_operation("events.invites.revoke")
+def revoke_event_invite(
+    db: Database, event_id: str, invite_id: str, actor_user_id: str
+) -> None:
+    event = assert_event_access(db, event_id, actor_user_id)
+    assert_event_creator(event, actor_user_id)
+    invite = db.event_invites.find_one(
+        {"id": invite_id, "event_id": event_id, "deleted_at": {"$exists": False}}
+    )
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found.")
+    if invite["status"] != "active":
+        raise HTTPException(status_code=409, detail="Invite is not active.")
+    now = utc_now()
+    db.event_invites.update_one(
+        {"id": invite_id},
+        {"$set": {"status": "revoked", "revoked_at": now, "updated_at": now}},
+    )
+    record_domain_event("events", "invite_revoked")

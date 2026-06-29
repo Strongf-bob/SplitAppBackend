@@ -89,6 +89,32 @@ class AddParticipantsRequest(BaseModel):
     user_ids: list[UUID] = Field(min_length=1)
 
 
+class CreateEventInviteRequest(BaseModel):
+    expires_in_seconds: int = Field(default=60 * 60 * 24 * 7, ge=60, le=60 * 60 * 24 * 30)
+
+
+class EventInvite(BaseModel):
+    id: UUID
+    event_id: UUID
+    token: str
+    invite_url: str
+    status: str
+    created_by: UUID
+    expires_at: datetime
+    created_at: datetime
+    accepted_by: UUID | None = None
+    accepted_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+
+class EventInvitePreview(BaseModel):
+    event_id: UUID
+    event_name: str
+    creator_id: UUID
+    expires_at: datetime
+    participant_count: int
+
+
 class CreateShareItemRequest(BaseModel):
     user_id: UUID
     share_value: Decimal = Field(gt=0, le=1)

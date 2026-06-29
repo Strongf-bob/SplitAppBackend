@@ -611,6 +611,103 @@ def test_removed_event_member_loses_access(db):
         raise AssertionError("Expected removed event member access to fail")
 
 
+def test_event_invite_preview_accept_and_duplicate_accept(db):
+    seed_event(db)
+    invite = events.create_event_invite(
+        db,
+        EVENT_ID,
+        schemas.CreateEventInviteRequest(expires_in_seconds=3600),
+        USER_A,
+    )
+
+    preview = events.preview_event_invite(db, invite["token"], USER_C)
+    accepted = events.accept_event_invite(db, invite["token"], USER_C)
+    accepted_again = events.accept_event_invite(db, invite["token"], USER_C)
+
+    assert preview["event_id"] == EVENT_ID
+    assert preview["event_name"] == "Trip"
+    assert preview["creator_id"] == USER_A
+    assert preview["participant_count"] == 2
+    assert preview["expires_at"].date() == invite["expires_at"].date()
+    assert any(item["user_id"] == USER_C and item["role"] == "member" for item in accepted["participants"])
+    assert len(
+        [
+            membership
+            for membership in db.event_memberships.find({"event_id": EVENT_ID, "user_id": USER_C})
+        ]
+    ) == 1
+    assert any(item["user_id"] == USER_C for item in accepted_again["participants"])
+
+
+def test_event_invite_revoke_blocks_accept(db):
+    seed_event(db)
+    invite = events.create_event_invite(
+        db,
+        EVENT_ID,
+        schemas.CreateEventInviteRequest(expires_in_seconds=3600),
+        USER_A,
+    )
+
+    events.revoke_event_invite(db, EVENT_ID, invite["id"], USER_A)
+
+    try:
+        events.accept_event_invite(db, invite["token"], USER_C)
+    except Exception as exc:
+        assert_status(exc, 410)
+    else:
+        raise AssertionError("Expected revoked invite accept to fail")
+
+
+def test_event_invite_expiry_blocks_preview(db):
+    seed_event(db)
+    invite = events.create_event_invite(
+        db,
+        EVENT_ID,
+        schemas.CreateEventInviteRequest(expires_in_seconds=3600),
+        USER_A,
+    )
+    db.event_invites.update_one(
+        {"id": invite["id"]},
+        {"$set": {"expires_at": datetime(2025, 1, 1, tzinfo=UTC)}},
+    )
+
+    try:
+        events.preview_event_invite(db, invite["token"], USER_C)
+    except Exception as exc:
+        assert_status(exc, 410)
+    else:
+        raise AssertionError("Expected expired invite preview to fail")
+
+
+def test_only_event_creator_can_create_or_revoke_invites(db):
+    seed_event(db)
+
+    try:
+        events.create_event_invite(
+            db,
+            EVENT_ID,
+            schemas.CreateEventInviteRequest(expires_in_seconds=3600),
+            USER_B,
+        )
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-creator invite creation to fail")
+
+    invite = events.create_event_invite(
+        db,
+        EVENT_ID,
+        schemas.CreateEventInviteRequest(expires_in_seconds=3600),
+        USER_A,
+    )
+    try:
+        events.revoke_event_invite(db, EVENT_ID, invite["id"], USER_B)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-creator invite revoke to fail")
+
+
 def test_closed_event_blocks_mutations_but_allows_reads(db):
     seed_event(db, is_closed=True)
 
