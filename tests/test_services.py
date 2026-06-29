@@ -50,6 +50,7 @@ def test_update_current_user_profile(db):
     assert user["email"] == "updated@example.com"
     assert user["avatar_url"] == "https://cdn.example.com/a.jpg"
     assert db.users.find_one({"id": USER_A})["phone_number"] == "+10000000001"
+    assert db.audit_events.find_one({"action": "user.profile_updated", "resource_id": USER_A})
 
 
 def test_receipt_create_validates_total_and_membership(db):
@@ -137,7 +138,10 @@ def test_unconfirmed_payment_can_be_deleted_by_sender_or_receiver(db):
 
     payments.delete_payment(db, payment["id"], USER_A)
 
-    assert db.payments.find_one({"id": payment["id"]}) is None
+    stored = db.payments.find_one({"id": payment["id"]})
+    assert stored["deleted_at"] is not None
+    assert payments.list_payments_by_event(db, EVENT_ID, USER_A) == []
+    assert db.audit_events.find_one({"action": "payment.deleted", "resource_id": payment["id"]})
 
 
 def test_confirmed_payment_cannot_be_deleted(db):
@@ -151,6 +155,18 @@ def test_confirmed_payment_cannot_be_deleted(db):
         assert_status(exc, 409)
     else:
         raise AssertionError("Expected confirmed payment delete to fail")
+
+
+def test_receipt_delete_soft_deletes_and_hides_from_reads(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+
+    receipts.delete_receipt(db, receipt["id"], USER_A)
+
+    stored = db.receipts.find_one({"id": receipt["id"]})
+    assert stored["deleted_at"] is not None
+    assert receipts.list_receipts_by_event(db, EVENT_ID, USER_A) == []
+    assert db.audit_events.find_one({"action": "receipt.deleted", "resource_id": receipt["id"]})
 
 
 def test_event_access_blocks_non_members(db):

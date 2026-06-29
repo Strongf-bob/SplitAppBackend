@@ -4,7 +4,7 @@ from pymongo.database import Database
 from app import schemas
 
 from app.services.access import assert_event_access, assert_event_open, get_receipt_or_404
-from app.services.common import new_uuid, strip_mongo_id, utc_now
+from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
 
 
 def _validate_receipt_users(event: dict, payer_id: str, items: list[schemas.CreateReceiptItemRequest]) -> None:
@@ -149,7 +149,7 @@ def update_receipt(
 def list_receipts_by_event(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
     assert_event_access(db, event_id, actor_user_id)
     receipts = []
-    for receipt in db.receipts.find({"event_id": event_id}).sort("created_at", -1):
+    for receipt in db.receipts.find(active_filter({"event_id": event_id})).sort("created_at", -1):
         cleaned = strip_mongo_id(receipt)
         cleaned.pop("share_items", None)
         receipts.append(cleaned)
@@ -168,4 +168,15 @@ def delete_receipt(db: Database, receipt_id: str, actor_user_id: str) -> None:
     receipt = get_receipt_or_404(db, receipt_id)
     event = assert_event_access(db, receipt["event_id"], actor_user_id)
     assert_event_open(event)
-    db.receipts.delete_one({"id": receipt_id})
+    now = utc_now()
+    db.receipts.update_one(
+        active_filter({"id": receipt_id}),
+        {"$set": {"deleted_at": now, "deleted_by": actor_user_id, "updated_at": now}},
+    )
+    record_audit_event(
+        db,
+        action="receipt.deleted",
+        resource_type="receipt",
+        resource_id=receipt_id,
+        actor_user_id=actor_user_id,
+    )

@@ -11,7 +11,14 @@ from app.services.access import (
     get_event_or_404,
     get_user_or_404,
 )
-from app.services.common import new_uuid, strip_mongo_id, utc_now, user_to_api_dict
+from app.services.common import (
+    active_filter,
+    new_uuid,
+    record_audit_event,
+    strip_mongo_id,
+    utc_now,
+    user_to_api_dict,
+)
 
 
 def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str) -> dict:
@@ -36,7 +43,7 @@ def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str)
 
 
 def list_events(db: Database, user_id: str) -> list[dict]:
-    query = {"$or": [{"users": user_id}, {"creator_id": user_id}]}
+    query = active_filter({"$or": [{"users": user_id}, {"creator_id": user_id}]})
     events = [strip_mongo_id(event) for event in db.events.find(query).sort("created_at", -1)]
     return events
 
@@ -52,20 +59,30 @@ def delete_event(db: Database, event_id: str, actor_user_id: str) -> None:
     now = utc_now()
 
     def delete_with_session(session) -> None:
-        db.audit_events.insert_one(
-            {
-                "id": new_uuid(),
-                "action": "event.deleted",
-                "resource_type": "event",
-                "resource_id": event_id,
-                "actor_user_id": actor_user_id,
-                "created_at": now,
-            },
+        record_audit_event(
+            db,
+            action="event.deleted",
+            resource_type="event",
+            resource_id=event_id,
+            actor_user_id=actor_user_id,
             session=session,
         )
-        db.receipts.delete_many({"event_id": event_id}, session=session)
-        db.payments.delete_many({"event_id": event_id}, session=session)
-        db.events.delete_one({"id": event_id}, session=session)
+        delete_fields = {"deleted_at": now, "deleted_by": actor_user_id, "updated_at": now}
+        db.receipts.update_many(
+            active_filter({"event_id": event_id}),
+            {"$set": delete_fields},
+            session=session,
+        )
+        db.payments.update_many(
+            active_filter({"event_id": event_id}),
+            {"$set": delete_fields},
+            session=session,
+        )
+        db.events.update_one(
+            active_filter({"id": event_id}),
+            {"$set": delete_fields},
+            session=session,
+        )
 
     try:
         with db.client.start_session() as session:

@@ -4,7 +4,7 @@ from pymongo.database import Database
 from app import schemas
 
 from app.services.access import assert_event_access, assert_event_open, get_payment_or_404
-from app.services.common import new_uuid, strip_mongo_id, utc_now
+from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
 
 
 def create_payment(
@@ -41,7 +41,7 @@ def list_payments_by_event(db: Database, event_id: str, actor_user_id: str) -> l
     assert_event_access(db, event_id, actor_user_id)
     return [
         strip_mongo_id(item)
-        for item in db.payments.find({"event_id": event_id}).sort("created_at", -1)
+        for item in db.payments.find(active_filter({"event_id": event_id})).sort("created_at", -1)
     ]
 
 
@@ -57,6 +57,13 @@ def update_payment(
             detail="Only the payment receiver can update confirmation.",
         )
     db.payments.update_one({"id": payment_id}, {"$set": {"confirmed": payload.confirmed}})
+    record_audit_event(
+        db,
+        action="payment.confirmation_updated",
+        resource_type="payment",
+        resource_id=payment_id,
+        actor_user_id=actor_user_id,
+    )
     return strip_mongo_id(get_payment_or_404(db, payment_id))
 
 
@@ -74,4 +81,15 @@ def delete_payment(db: Database, payment_id: str, actor_user_id: str) -> None:
             detail="Only the payment sender or receiver can delete this payment.",
         )
 
-    db.payments.delete_one({"id": payment_id})
+    now = utc_now()
+    db.payments.update_one(
+        active_filter({"id": payment_id}),
+        {"$set": {"deleted_at": now, "deleted_by": actor_user_id, "updated_at": now}},
+    )
+    record_audit_event(
+        db,
+        action="payment.deleted",
+        resource_type="payment",
+        resource_id=payment_id,
+        actor_user_id=actor_user_id,
+    )

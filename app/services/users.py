@@ -3,7 +3,7 @@ from pymongo.database import Database
 
 from app import schemas
 from app.services.access import get_user_or_404
-from app.services.common import user_to_api_dict
+from app.services.common import record_audit_event, user_to_api_dict
 from app.services.common import utc_now
 
 
@@ -34,4 +34,11 @@ def update_current_user(db: Database, actor_user_id: str, payload: schemas.UserU
 
     update_fields["updated_at"] = utc_now()
     db.users.update_one({"id": actor_user_id}, {"$set": update_fields})
+    record_audit_event(
+        db,
+        action="user.profile_updated",
+        resource_type="user",
+        resource_id=actor_user_id,
+        actor_user_id=actor_user_id,
+    )
     return user_to_api_dict(get_user_or_404(db, actor_user_id))
