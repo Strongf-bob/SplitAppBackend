@@ -30,6 +30,13 @@ class Finding:
     body: str
 
 
+@dataclass(frozen=True)
+class ReviewResult:
+    findings: list[Finding]
+    status: str | None
+    message: str | None
+
+
 def log(message: str) -> None:
     print(f"[opencode-review] {message}", flush=True)
 
@@ -138,6 +145,22 @@ def finding_from_dict(item: dict[str, Any]) -> Finding | None:
     if not message:
         return None
 
+    has_location = path is not None or line is not None or start_line is not None
+    has_explicit_finding_signal = any(
+        key in item
+        for key in (
+            "severity",
+            "level",
+            "priority",
+            "rule",
+            "category",
+            "recommendation",
+            "suggestion",
+        )
+    )
+    if not has_location and not has_explicit_finding_signal:
+        return None
+
     severity = normalize_severity(
         item.get("severity") or item.get("level") or item.get("priority"),
         f"{title}\n{message}",
@@ -191,6 +214,15 @@ def extract_findings(data: Any) -> list[Finding]:
             seen.add(identity)
             unique.append(finding)
     return unique
+
+
+def parse_review_result(data: Any) -> ReviewResult:
+    status = None
+    message = None
+    if isinstance(data, dict):
+        status = first_string(data, ("status",))
+        message = first_string(data, ("message", "summary"))
+    return ReviewResult(findings=extract_findings(data), status=status, message=message)
 
 
 def github_request(method: str, url: str, token: str, payload: dict[str, Any] | None = None) -> Any:
@@ -263,7 +295,8 @@ def format_finding_body(finding: Finding) -> str:
     )
 
 
-def build_summary(findings: list[Finding], inline_count: int, blocking: set[str]) -> str:
+def build_summary(result: ReviewResult, inline_count: int, blocking: set[str]) -> str:
+    findings = result.findings
     counts = {severity: 0 for severity in SEVERITY_ORDER}
     for finding in findings:
         counts[finding.severity] = counts.get(finding.severity, 0) + 1
@@ -276,23 +309,26 @@ def build_summary(findings: list[Finding], inline_count: int, blocking: set[str]
         f"Findings: {len(findings)}",
         f"Inline comments posted: {inline_count}",
         f"Blocking findings: {blocking_count}",
-        "",
-        "| Severity | Count | Blocks merge |",
-        "| --- | ---: | --- |",
     ]
+    if result.status:
+        lines.append(f"Status: `{result.status}`")
+    if not findings:
+        if result.message:
+            lines.extend(["", f"OpenCodeReview: {result.message}"])
+        lines.extend(["", "**Итог:** все нормально, блокирующих замечаний нет."])
+        return "\n".join(lines)
+
+    lines.extend(["", "| Severity | Count | Blocks merge |", "| --- | ---: | --- |"])
     for severity in ("critical", "high", "medium", "low", "style"):
         blocks = "yes" if severity in blocking else "no"
         lines.append(f"| {severity} | {counts.get(severity, 0)} | {blocks} |")
 
-    if findings:
-        lines.extend(["", "### Findings"])
-        for finding in findings[:50]:
-            location = f"{finding.path}:{finding.line}" if finding.path and finding.line else "summary"
-            lines.append(f"- `{finding.severity}` `{location}` - {finding.title}")
-        if len(findings) > 50:
-            lines.append(f"- ...and {len(findings) - 50} more findings. See the uploaded artifact.")
-    else:
-        lines.extend(["", "No findings were reported by OpenCodeReview."])
+    lines.extend(["", "### Findings"])
+    for finding in findings[:50]:
+        location = f"{finding.path}:{finding.line}" if finding.path and finding.line else "summary"
+        lines.append(f"- `{finding.severity}` `{location}` - {finding.title}")
+    if len(findings) > 50:
+        lines.append(f"- ...and {len(findings) - 50} more findings. See the uploaded artifact.")
     return "\n".join(lines)
 
 
@@ -325,7 +361,8 @@ def main() -> int:
         log("This script must run on a pull_request event with a head SHA.")
         return 1
 
-    findings = extract_findings(load_json(output_file))
+    result = parse_review_result(load_json(output_file))
+    findings = result.findings
     log(f"Extracted {len(findings)} finding(s) from {output_file}.")
 
     try:
@@ -355,7 +392,7 @@ def main() -> int:
                 comment["start_side"] = "RIGHT"
             comments.append(comment)
 
-    summary = build_summary(findings, len(comments), blocking)
+    summary = build_summary(result, len(comments), blocking)
     review_payload: dict[str, Any] = {"commit_id": commit_id, "body": summary, "event": "COMMENT"}
     if comments:
         review_payload["comments"] = comments
