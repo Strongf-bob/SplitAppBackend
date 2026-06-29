@@ -90,6 +90,14 @@ def normalize_severity(raw: Any, text: str = "") -> str:
     return "medium"
 
 
+def derive_title(message: str) -> str:
+    first_line = message.strip().splitlines()[0].strip()
+    first_sentence = re.split(r"(?<=[.!?。！？])\s+", first_line, maxsplit=1)[0].strip()
+    if len(first_sentence) <= 120:
+        return first_sentence
+    return f"{first_sentence[:117].rstrip()}..."
+
+
 def finding_from_dict(item: dict[str, Any]) -> Finding | None:
     path = first_string(
         item,
@@ -119,7 +127,7 @@ def finding_from_dict(item: dict[str, Any]) -> Finding | None:
     )
     if line is None:
         line = start_line
-    title = first_string(item, ("title", "rule", "category", "type", "summary")) or "OpenCodeReview finding"
+    title = first_string(item, ("title", "rule", "category", "type", "summary"))
     message = first_string(
         item,
         (
@@ -145,7 +153,9 @@ def finding_from_dict(item: dict[str, Any]) -> Finding | None:
     if not message:
         return None
 
-    has_location = path is not None or line is not None or start_line is not None
+    has_location = bool(path) or (line is not None and line > 0) or (
+        start_line is not None and start_line > 0
+    )
     has_explicit_finding_signal = any(
         key in item
         for key in (
@@ -170,7 +180,7 @@ def finding_from_dict(item: dict[str, Any]) -> Finding | None:
         start_line=start_line,
         line=line,
         severity=severity,
-        title=title,
+        title=title or derive_title(message),
         body=message,
     )
 
@@ -288,7 +298,7 @@ def format_finding_body(finding: Finding) -> str:
     location = f"{finding.path}:{finding.line}" if finding.path and finding.line else "summary"
     return (
         f"{COMMENT_MARKER}\n"
-        f"**Severity:** `{finding.severity}`\n\n"
+        f"**Серьезность:** `{finding.severity}`\n\n"
         f"**{finding.title}**\n\n"
         f"{finding.body}\n\n"
         f"_OpenCodeReview location: `{location}`_"
@@ -304,26 +314,26 @@ def build_summary(result: ReviewResult, inline_count: int, blocking: set[str]) -
 
     lines = [
         COMMENT_MARKER,
-        "## OpenCodeReview summary",
+        "## Сводка OpenCodeReview",
         "",
-        f"Findings: {len(findings)}",
-        f"Inline comments posted: {inline_count}",
-        f"Blocking findings: {blocking_count}",
+        f"Замечаний: {len(findings)}",
+        f"Inline-комментариев опубликовано: {inline_count}",
+        f"Блокирующих замечаний: {blocking_count}",
     ]
     if result.status:
-        lines.append(f"Status: `{result.status}`")
+        lines.append(f"Статус: `{result.status}`")
+    if result.message:
+        lines.extend(["", f"OpenCodeReview: {result.message}"])
     if not findings:
-        if result.message:
-            lines.extend(["", f"OpenCodeReview: {result.message}"])
         lines.extend(["", "**Итог:** блокирующих замечаний не найдено."])
         return "\n".join(lines)
 
-    lines.extend(["", "| Severity | Count | Blocks merge |", "| --- | ---: | --- |"])
+    lines.extend(["", "| Серьезность | Количество | Блокирует merge |", "| --- | ---: | --- |"])
     for severity in ("critical", "high", "medium", "low", "style"):
         blocks = "yes" if severity in blocking else "no"
         lines.append(f"| {severity} | {counts.get(severity, 0)} | {blocks} |")
 
-    lines.extend(["", "### Findings"])
+    lines.extend(["", "### Замечания"])
     for finding in findings[:50]:
         location = f"{finding.path}:{finding.line}" if finding.path and finding.line else "summary"
         lines.append(f"- `{finding.severity}` `{location}` - {finding.title}")
