@@ -101,10 +101,11 @@ def sanitize_llm_markdown(text: str) -> str:
     return f"{text[:MAX_ANALYSIS_CHARS]}\n\n... [analysis truncated] ..."
 
 
-def github_request(method: str, url: str, token: str, payload: dict[str, Any]) -> Any:
+def github_request(method: str, url: str, token: str, payload: dict[str, Any] | None = None) -> Any:
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
     request = urllib.request.Request(
         url,
-        data=json.dumps(payload).encode("utf-8"),
+        data=data,
         method=method,
         headers={
             "Accept": "application/vnd.github+json",
@@ -121,6 +122,49 @@ def github_request(method: str, url: str, token: str, payload: dict[str, Any]) -
         return json.loads(body)
     except json.JSONDecodeError as exc:
         raise RuntimeError("GitHub API response is not valid JSON.") from exc
+
+
+def find_existing_comment(api_url: str, repo: str, pr_number: str, token: str) -> int | None:
+    page = 1
+    while True:
+        comments = github_request(
+            "GET",
+            f"{api_url}/repos/{repo}/issues/{pr_number}/comments?per_page=100&page={page}",
+            token,
+        )
+        if not isinstance(comments, list) or not comments:
+            return None
+        for comment in comments:
+            if not isinstance(comment, dict):
+                continue
+            body = comment.get("body")
+            comment_id = comment.get("id")
+            if isinstance(body, str) and COMMENT_MARKER in body and isinstance(comment_id, int):
+                return comment_id
+        if len(comments) < 100:
+            return None
+        page += 1
+
+
+def upsert_pr_comment(api_url: str, repo: str, pr_number: str, token: str, body: str) -> None:
+    existing_comment_id = find_existing_comment(api_url, repo, pr_number, token)
+    if existing_comment_id is None:
+        github_request(
+            "POST",
+            f"{api_url}/repos/{repo}/issues/{pr_number}/comments",
+            token,
+            {"body": body},
+        )
+        log("Posted AI test failure analysis comment.")
+        return
+
+    github_request(
+        "PATCH",
+        f"{api_url}/repos/{repo}/issues/comments/{existing_comment_id}",
+        token,
+        {"body": body},
+    )
+    log(f"Updated AI test failure analysis comment {existing_comment_id}.")
 
 
 def validate_llm_url(url: str) -> None:
@@ -263,16 +307,10 @@ def main() -> int:
         "Полный лог и diff доступны в artifact `ai-test-failure-context`."
     )
     try:
-        github_request(
-            "POST",
-            f"{api_url}/repos/{repo}/issues/{pr_number}/comments",
-            github_token,
-            {"body": body},
-        )
+        upsert_pr_comment(api_url, repo, pr_number, github_token, body)
     except (urllib.error.URLError, RuntimeError) as exc:
         log(f"Unable to post PR comment: {exc}")
         return 1
-    log("Posted AI test failure analysis comment.")
     return 0
 
 
