@@ -5,3 +5,5 @@ PyJWT
 httpx
 python-multipart
 boto3
+mongomock
+pytest
