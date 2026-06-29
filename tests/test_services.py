@@ -59,6 +59,67 @@ def test_update_current_user_profile(db):
     assert db.audit_events.find_one({"action": "user.profile_updated", "resource_id": USER_A})
 
 
+def test_update_current_user_discovery_and_payment_hints(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+
+    user = users.update_current_user(
+        db,
+        USER_A,
+        schemas.UserUpdate(
+            public_handle="@Alice_1",
+            discovery_enabled=True,
+            payment_phone="+79990000000",
+            payment_phone_visibility="event_members",
+        ),
+    )
+    stored = db.users.find_one({"id": USER_A})
+
+    assert user["public_handle"] == "alice_1"
+    assert user["discovery_enabled"] is True
+    assert user["payment_phone"] == "+79990000000"
+    assert user["phone_verified"] is False
+    assert stored["search_name"] == "alice"
+
+
+def test_user_search_is_opt_in_and_does_not_search_phone(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    users.update_current_user(
+        db,
+        USER_B,
+        schemas.UserUpdate(
+            public_handle="bob_split",
+            discovery_enabled=True,
+            payment_phone="+79990000002",
+        ),
+    )
+
+    by_handle = users.search_users(db, USER_A, "bob", limit=20, offset=0)
+    by_phone = users.search_users(db, USER_A, "79990000002", limit=20, offset=0)
+
+    assert [user["id"] for user in by_handle["items"]] == [USER_B]
+    assert by_phone["items"] == []
+
+
+def test_payment_phone_visibility_respects_event_membership(db):
+    seed_event(db)
+    users.update_current_user(
+        db,
+        USER_B,
+        schemas.UserUpdate(payment_phone="+79990000002", payment_phone_visibility="event_members"),
+    )
+
+    visible = users.list_users(db, USER_A, limit=50, offset=0)
+    hidden = users.search_users(db, USER_C, "bob", limit=20, offset=0)
+
+    bob_visible = next(user for user in visible["items"] if user["id"] == USER_B)
+    assert bob_visible["payment_phone"] == "+79990000002"
+    assert hidden["items"] == []
+
+
 def test_list_users_only_returns_visible_users(db):
     from tests.conftest import seed_users
 

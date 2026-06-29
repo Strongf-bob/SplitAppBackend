@@ -11,6 +11,11 @@ class User(BaseModel):
     phone_number: str
     email: str | None = None
     avatar_url: str | None = None
+    public_handle: str | None = None
+    discovery_enabled: bool = False
+    payment_phone: str | None = None
+    phone_verified: bool = False
+    payment_phone_visibility: str = "nobody"
 
 
 class UserPage(BaseModel):
@@ -24,6 +29,10 @@ class UserUpdate(BaseModel):
     name: str | None = None
     email: str | None = None
     avatar_url: str | None = None
+    public_handle: str | None = None
+    discovery_enabled: bool | None = None
+    payment_phone: str | None = None
+    payment_phone_visibility: str | None = None
 
 
 class LoginYandexRequest(BaseModel):
