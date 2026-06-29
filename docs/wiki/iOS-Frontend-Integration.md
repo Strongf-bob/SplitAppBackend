@@ -27,22 +27,22 @@ iOS app использует:
 | --- | --- | --- |
 | `AuthUserEndpoint` | `POST /api/login` | Реализовано. |
 | `RefreshTokenEndpoint` | `POST /api/refresh` | Реализовано. |
-| `ListUsersEndpoint` | `GET /api/users` | Реализовано, visibility-limited. |
+| `ListUsersEndpoint` | `GET /api/users` | Реализовано, visibility-limited, paginated. |
 | `CreateEventEndpoint` | `POST /api/events` | Реализовано. |
-| `ListEventsEndpoint` | `GET /api/events` | Реализовано. |
+| `ListEventsEndpoint` | `GET /api/events` | Реализовано, paginated. |
 | `GetEventEndpoint` | `GET /api/events/{id}` | Реализовано. |
 | `UpdateEventEndpoint` | `PATCH /api/events/{id}` | Реализовано. |
 | `DeleteEventEndpoint` | `DELETE /api/events/{id}` | Реализовано. |
 | `AddParticipantsEndpoint` | `POST /api/events/{id}/participants` | Реализовано. |
 | `RemoveParticipantEndpoint` | `DELETE /api/events/{id}/participants/{user_id}` | Реализовано. |
 | `CreateReceiptEndpoint` | `POST /api/events/{id}/receipts` | Реализовано. |
-| `ListReceiptsEndpoint` | `GET /api/events/{id}/receipts` | Реализовано. |
+| `ListReceiptsEndpoint` | `GET /api/events/{id}/receipts` | Реализовано, paginated. |
 | `UpdateReceiptEndpoint` | `PATCH /api/receipts/{id}` | Реализовано. |
 | `DeleteReceiptEndpoint` | `DELETE /api/receipts/{id}` | Реализовано. |
 | `UploadReceiptImageEndpoint` | `POST /api/receipts/{id}/image` | Реализовано. |
 | `GetBalancesEndpoint` | `GET /api/events/{id}/balances` | Реализовано. |
 | `CreatePaymentEndpoint` | `POST /api/events/{id}/payments` | Реализовано. |
-| `ListPaymentsEndpoint` | `GET /api/events/{id}/payments` | Реализовано. |
+| `ListPaymentsEndpoint` | `GET /api/events/{id}/payments` | Реализовано, paginated. |
 | `UpdatePaymentEndpoint` | `PATCH /api/payments/{id}` | Реализовано. |
 
 ## Backend endpoints, которые еще стоит явно отразить во frontend
@@ -76,5 +76,4 @@ iOS app использует:
 - Сделать переключение API base URL для local development вместо hard-coded production `https://splitapp.tech`.
 - Держать `FriendsView` и settlement UI привязанными к backend balances/payments.
 - Нормализовать server error presentation для user-facing alerts.
-- Добавить frontend pagination behavior после проектирования backend pagination contracts.
-
+- Обновить frontend list decoders под backend pagination envelope: `items`, `limit`, `offset`, `total`.
