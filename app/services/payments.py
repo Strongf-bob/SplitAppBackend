@@ -5,6 +5,7 @@ from app import schemas
 
 from app.services.access import assert_event_access, assert_event_open, get_payment_or_404
 from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
+from app.services.common import money_to_storage
 
 
 def create_payment(
@@ -32,7 +33,7 @@ def create_payment(
         "event_id": event_id,
         "sender_id": sender_id,
         "receiver_id": receiver_id,
-        "amount": payload.amount,
+        "amount": money_to_storage(payload.amount),
         "confirmed": False,
         "created_at": utc_now(),
     }
