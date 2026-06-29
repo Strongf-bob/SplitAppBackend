@@ -13,6 +13,7 @@
 - [Операции и деплой](Operations-And-Deployment) - production runtime, env-переменные, systemd, логи и метрики.
 - [Тесты и CI](Testing-And-CI) - локальные проверки, GitHub Actions и правила для backend-изменений.
 - [Поддержка Wiki](Wiki-Maintenance) - как Wiki синхронизируется из репозитория.
+- [AI Code Review](https://github.com/Strongf-bob/SplitAppBackend/blob/main/docs/ai-code-review.md) - настройка OpenCodeReview и правила блокировки PR.
 
 ## Репозитории
 
@@ -46,4 +47,3 @@
 - `openapi.yaml`.
 - Tests.
 - Wiki source pages в `docs/wiki/`, если изменение влияет на использование API или разработку.
-

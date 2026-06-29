@@ -30,6 +30,13 @@ class Finding:
     body: str
 
 
+@dataclass(frozen=True)
+class ReviewResult:
+    findings: list[Finding]
+    status: str | None
+    message: str | None
+
+
 def log(message: str) -> None:
     print(f"[opencode-review] {message}", flush=True)
 
@@ -71,6 +78,17 @@ def first_int(mapping: dict[str, Any], keys: tuple[str, ...]) -> int | None:
     return None
 
 
+def has_non_empty_value(mapping: dict[str, Any], key: str) -> bool:
+    value = mapping.get(key)
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, dict, tuple, set)):
+        return bool(value)
+    return True
+
+
 def normalize_severity(raw: Any, text: str = "") -> str:
     candidates: list[str] = []
     if isinstance(raw, str):
@@ -81,6 +99,21 @@ def normalize_severity(raw: Any, text: str = "") -> str:
         if normalized in SEVERITY_ORDER:
             return normalized
     return "medium"
+
+
+def derive_title(message: str) -> str:
+    stripped = message.strip()
+    if not stripped:
+        return "OpenCodeReview finding"
+    first_line = stripped.splitlines()[0].strip()
+    first_sentence = re.split(r"(?<=[.!?。！？])\s+", first_line, maxsplit=1)[0].strip()
+    if len(first_sentence) <= 120:
+        return first_sentence
+    truncated = first_sentence[:117].rstrip()
+    last_space = truncated.rfind(" ")
+    if last_space > 0:
+        truncated = truncated[:last_space]
+    return f"{truncated}..."
 
 
 def finding_from_dict(item: dict[str, Any]) -> Finding | None:
@@ -112,7 +145,7 @@ def finding_from_dict(item: dict[str, Any]) -> Finding | None:
     )
     if line is None:
         line = start_line
-    title = first_string(item, ("title", "rule", "category", "type", "summary")) or "OpenCodeReview finding"
+    title = first_string(item, ("title", "rule", "category", "type", "summary"))
     message = first_string(
         item,
         (
@@ -138,6 +171,33 @@ def finding_from_dict(item: dict[str, Any]) -> Finding | None:
     if not message:
         return None
 
+    has_location = bool(path) or (line is not None and line > 0) or (
+        start_line is not None and start_line > 0
+    )
+    has_explicit_finding_signal = any(
+        has_non_empty_value(item, key)
+        for key in (
+            "severity",
+            "level",
+            "priority",
+            "body",
+            "message",
+            "comment",
+            "description",
+            "content",
+            "detail",
+            "details",
+            "rule",
+            "category",
+            "recommendation",
+            "suggestion",
+            "title",
+            "type",
+        )
+    )
+    if not has_location and not has_explicit_finding_signal:
+        return None
+
     severity = normalize_severity(
         item.get("severity") or item.get("level") or item.get("priority"),
         f"{title}\n{message}",
@@ -147,7 +207,7 @@ def finding_from_dict(item: dict[str, Any]) -> Finding | None:
         start_line=start_line,
         line=line,
         severity=severity,
-        title=title,
+        title=title or derive_title(message),
         body=message,
     )
 
@@ -191,6 +251,15 @@ def extract_findings(data: Any) -> list[Finding]:
             seen.add(identity)
             unique.append(finding)
     return unique
+
+
+def parse_review_result(data: Any) -> ReviewResult:
+    status = None
+    message = None
+    if isinstance(data, dict):
+        status = first_string(data, ("status",))
+        message = first_string(data, ("message", "summary"))
+    return ReviewResult(findings=extract_findings(data), status=status, message=message)
 
 
 def github_request(method: str, url: str, token: str, payload: dict[str, Any] | None = None) -> Any:
@@ -253,17 +322,18 @@ def parse_patch_changed_lines(filename: str, patch: str) -> set[tuple[str, int]]
 
 
 def format_finding_body(finding: Finding) -> str:
-    location = f"{finding.path}:{finding.line}" if finding.path and finding.line else "summary"
+    location = f"{finding.path}:{finding.line}" if finding.path and finding.line else "сводка"
     return (
         f"{COMMENT_MARKER}\n"
-        f"**Severity:** `{finding.severity}`\n\n"
+        f"**Серьезность:** `{finding.severity}`\n\n"
         f"**{finding.title}**\n\n"
         f"{finding.body}\n\n"
-        f"_OpenCodeReview location: `{location}`_"
+        f"_Расположение: `{location}`_"
     )
 
 
-def build_summary(findings: list[Finding], inline_count: int, blocking: set[str]) -> str:
+def build_summary(result: ReviewResult, inline_count: int, blocking: set[str]) -> str:
+    findings = result.findings
     counts = {severity: 0 for severity in SEVERITY_ORDER}
     for finding in findings:
         counts[finding.severity] = counts.get(finding.severity, 0) + 1
@@ -271,28 +341,31 @@ def build_summary(findings: list[Finding], inline_count: int, blocking: set[str]
 
     lines = [
         COMMENT_MARKER,
-        "## OpenCodeReview summary",
+        "## Сводка OpenCodeReview",
         "",
-        f"Findings: {len(findings)}",
-        f"Inline comments posted: {inline_count}",
-        f"Blocking findings: {blocking_count}",
-        "",
-        "| Severity | Count | Blocks merge |",
-        "| --- | ---: | --- |",
+        f"Замечаний: {len(findings)}",
+        f"Inline-комментариев опубликовано: {inline_count}",
+        f"Блокирующих замечаний: {blocking_count}",
     ]
+    if result.status:
+        lines.append(f"Статус: `{result.status}`")
+    if result.message:
+        lines.extend(["", f"OpenCodeReview: {result.message}"])
+    if not findings:
+        lines.extend(["", "**Итог:** блокирующих замечаний не найдено."])
+        return "\n".join(lines)
+
+    lines.extend(["", "| Серьезность | Количество | Блокирует merge |", "| --- | ---: | --- |"])
     for severity in ("critical", "high", "medium", "low", "style"):
-        blocks = "yes" if severity in blocking else "no"
+        blocks = "да" if severity in blocking else "нет"
         lines.append(f"| {severity} | {counts.get(severity, 0)} | {blocks} |")
 
-    if findings:
-        lines.extend(["", "### Findings"])
-        for finding in findings[:50]:
-            location = f"{finding.path}:{finding.line}" if finding.path and finding.line else "summary"
-            lines.append(f"- `{finding.severity}` `{location}` - {finding.title}")
-        if len(findings) > 50:
-            lines.append(f"- ...and {len(findings) - 50} more findings. See the uploaded artifact.")
-    else:
-        lines.extend(["", "No findings were reported by OpenCodeReview."])
+    lines.extend(["", "### Замечания"])
+    for finding in findings[:50]:
+        location = f"{finding.path}:{finding.line}" if finding.path and finding.line else "сводка"
+        lines.append(f"- `{finding.severity}` `{location}` - {finding.title}")
+    if len(findings) > 50:
+        lines.append(f"- ...и еще {len(findings) - 50} замечаний. См. загруженный artifact.")
     return "\n".join(lines)
 
 
@@ -325,7 +398,8 @@ def main() -> int:
         log("This script must run on a pull_request event with a head SHA.")
         return 1
 
-    findings = extract_findings(load_json(output_file))
+    result = parse_review_result(load_json(output_file))
+    findings = result.findings
     log(f"Extracted {len(findings)} finding(s) from {output_file}.")
 
     try:
@@ -355,7 +429,7 @@ def main() -> int:
                 comment["start_side"] = "RIGHT"
             comments.append(comment)
 
-    summary = build_summary(findings, len(comments), blocking)
+    summary = build_summary(result, len(comments), blocking)
     review_payload: dict[str, Any] = {"commit_id": commit_id, "body": summary, "event": "COMMENT"}
     if comments:
         review_payload["comments"] = comments
