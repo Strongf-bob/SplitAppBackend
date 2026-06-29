@@ -57,6 +57,29 @@ MongoDB connection health is available at `GET /api/health/db`.
 
 ## Run on remote server
 
+### Docker Compose
+
+The backend can run in an isolated Docker Compose project with a private MongoDB
+container. Only the API port is published to the host.
+
+1. `cp .env.docker.example .env`
+2. Generate a long random `JWT_SECRET` and update `.env`.
+3. Optionally change `HOST_PORT` if `8080` is already used.
+4. `docker compose up -d --build`
+5. `docker compose ps`
+
+The API listens on `http://<server-ip>:${HOST_PORT:-8080}`. MongoDB data is kept
+in the `mongo-data` Docker volume and is not exposed outside the Compose network.
+
+Receipt image endpoints require S3 settings in `.env`; without them, those
+endpoints return a configuration error while the rest of the API remains usable.
+
+GitHub Actions deploy uses the same Compose runtime on pushes to `main`. Configure
+`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, and `DEPLOY_PATH` repository
+secrets; keep production runtime secrets in the server-side `.env`.
+
+### Systemd
+
 For production, prefer the systemd unit in `deploy/splitapp-backend.service`.
 Install the app under `/opt/splitapp/backend`, put environment variables in
 `/etc/splitapp/backend.env`, then enable the service:
