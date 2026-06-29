@@ -51,6 +51,33 @@ def test_update_current_user_profile(db):
     assert db.audit_events.find_one({"action": "user.profile_updated", "resource_id": USER_A})
 
 
+def test_list_users_only_returns_visible_users(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    db.users.insert_one(
+        {
+            "id": "44444444-4444-4444-4444-444444444444",
+            "name": "Hidden",
+            "phone_number": "+10000000004",
+            "email": "hidden@example.com",
+        }
+    )
+    db.events.insert_one(
+        {
+            "id": EVENT_ID,
+            "creator_id": USER_A,
+            "name": "Trip",
+            "is_closed": False,
+            "users": [USER_A, USER_B],
+        }
+    )
+
+    visible_ids = {user["id"] for user in users.list_users(db, USER_A)}
+
+    assert visible_ids == {USER_A, USER_B}
+
+
 def test_receipt_create_validates_total_and_membership(db):
     seed_event(db)
 

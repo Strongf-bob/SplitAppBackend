@@ -7,8 +7,18 @@ from app.services.common import record_audit_event, user_to_api_dict
 from app.services.common import utc_now
 
 
-def list_users(db: Database) -> list[dict]:
-    return [user_to_api_dict(user) for user in db.users.find({}).sort("name", 1)]
+def list_users(db: Database, actor_user_id: str) -> list[dict]:
+    visible_user_ids = {actor_user_id}
+    for event in db.events.find(
+        {"deleted_at": {"$exists": False}, "$or": [{"users": actor_user_id}, {"creator_id": actor_user_id}]}
+    ):
+        visible_user_ids.update(event.get("users", []))
+        visible_user_ids.add(event["creator_id"])
+
+    return [
+        user_to_api_dict(user)
+        for user in db.users.find({"id": {"$in": sorted(visible_user_ids)}}).sort("name", 1)
+    ]
 
 
 def update_current_user(db: Database, actor_user_id: str, payload: schemas.UserUpdate) -> dict:
