@@ -1909,6 +1909,305 @@
         }
       }
     },
+    "/api/receipts/{id}/allocation-session": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Start Allocation Session",
+        "operationId": "start_allocation_session_api_receipts__id__allocation_session_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationSessionState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/allocation-sessions/{id}": {
+      "get": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Get Allocation Session",
+        "operationId": "get_allocation_session_api_allocation_sessions__id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationSessionState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/allocation-sessions/{id}/claims": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Claim Receipt Item",
+        "operationId": "claim_receipt_item_api_allocation_sessions__id__claims_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptItemClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptItemClaim"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Unclaim Receipt Item",
+        "operationId": "unclaim_receipt_item_api_allocation_sessions__id__claims_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptItemClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/allocation-sessions/{id}/ready": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Mark Allocation Session Ready",
+        "operationId": "mark_allocation_session_ready_api_allocation_sessions__id__ready_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationSessionState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/allocation-sessions/{id}/finalize": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Finalize Allocation Session",
+        "operationId": "finalize_allocation_session_api_allocation_sessions__id__finalize_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/receipts/{id}/image": {
       "post": {
         "tags": [
@@ -2598,6 +2897,75 @@
           "user_ids"
         ],
         "title": "AddParticipantsRequest"
+      },
+      "AllocationSession": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "receipt_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Receipt Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "receipt_id",
+          "status",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AllocationSession"
+      },
+      "AllocationSessionState": {
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/AllocationSession"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ReceiptItemClaim"
+            },
+            "type": "array",
+            "title": "Claims"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session",
+          "claims"
+        ],
+        "title": "AllocationSessionState"
       },
       "BalanceContribution": {
         "properties": {
@@ -4025,6 +4393,69 @@
           "share_items"
         ],
         "title": "ReceiptItem"
+      },
+      "ReceiptItemClaim": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "receipt_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Receipt Id"
+          },
+          "receipt_item_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Receipt Item Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "receipt_id",
+          "receipt_item_id",
+          "user_id",
+          "status",
+          "created_at"
+        ],
+        "title": "ReceiptItemClaim"
+      },
+      "ReceiptItemClaimRequest": {
+        "properties": {
+          "receipt_item_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Receipt Item Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "receipt_item_id"
+        ],
+        "title": "ReceiptItemClaimRequest"
       },
       "ReceiptPage": {
         "properties": {

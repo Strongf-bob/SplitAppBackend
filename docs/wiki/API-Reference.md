@@ -84,6 +84,12 @@ Event settings include settlement policies: `split_strategy`, `receipt_creation_
 | `POST` | `/api/receipts/{id}/confirm` | Подтвердить draft чек. | Только confirmed receipts влияют на balances. |
 | `POST` | `/api/receipts/{id}/void` | Аннулировать confirmed чек. | Voided receipts не влияют на balances. |
 | `POST` | `/api/receipts/{id}/corrections` | Создать correction draft для confirmed чека. | Original получает `corrected`, новая draft требует confirmation. |
+| `POST` | `/api/receipts/{id}/allocation-session` | Запустить collaborative allocation session. | Только draft receipt; creator/payer. |
+| `GET` | `/api/allocation-sessions/{id}` | Получить session state и item claims. | Требуется event membership. |
+| `POST` | `/api/allocation-sessions/{id}/claims` | Claim receipt item для текущего user. | Session должна быть collecting. |
+| `DELETE` | `/api/allocation-sessions/{id}/claims` | Unclaim receipt item. | Удаляет claim текущего user. |
+| `POST` | `/api/allocation-sessions/{id}/ready` | Отметить session ready for review. | Creator/payer. |
+| `POST` | `/api/allocation-sessions/{id}/finalize` | Пересобрать shares по claims. | Receipt становится `ready_for_review`, но balances меняются только после confirm. |
 | `DELETE` | `/api/receipts/{id}` | Удалить чек. | Требуется authorization; delete behavior реализован в service layer. |
 | `POST` | `/api/receipts/{id}/image` | Загрузить JPEG изображения чека. | Multipart field: `file` или `image`. |
 | `DELETE` | `/api/receipts/{id}/image` | Удалить изображение чека. | Storage state должен быть очищен. |

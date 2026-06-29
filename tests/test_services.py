@@ -726,6 +726,87 @@ def test_receipt_correction_marks_original_and_creates_draft(db):
     assert balances.get_event_balances(db, EVENT_ID, USER_A) == []
 
 
+def test_allocation_session_claim_finalize_and_confirm(db):
+    seed_event(db)
+    payload = schemas.CreateReceiptRequest(
+        payer_id=USER_A,
+        title="Allocation",
+        total_amount_kopecks=3000,
+        items=[
+            schemas.CreateReceiptItemRequest(
+                name="Shared",
+                cost_kopecks=3000,
+                share_items=[schemas.CreateShareItemRequest(user_id=USER_A, share_value="1")],
+            )
+        ],
+    )
+    receipt = receipts.create_receipt(db, EVENT_ID, payload, USER_A)
+    item_id = receipt["items"][0]["id"]
+
+    state = receipts.start_allocation_session(db, receipt["id"], USER_A)
+    claim_a = receipts.claim_receipt_item(
+        db,
+        state["session"]["id"],
+        schemas.ReceiptItemClaimRequest(receipt_item_id=item_id),
+        USER_A,
+    )
+    claim_b = receipts.claim_receipt_item(
+        db,
+        state["session"]["id"],
+        schemas.ReceiptItemClaimRequest(receipt_item_id=item_id),
+        USER_B,
+    )
+    ready = receipts.mark_allocation_session_ready(db, state["session"]["id"], USER_A)
+    finalized = receipts.finalize_allocation_session(db, state["session"]["id"], USER_A)
+
+    assert claim_a["user_id"] == USER_A
+    assert claim_b["user_id"] == USER_B
+    assert ready["session"]["status"] == "ready"
+    assert finalized["status"] == "ready_for_review"
+    assert finalized["items"][0]["split_mode"] == "selected_equal"
+    assert balances.get_event_balances(db, EVENT_ID, USER_A) == []
+
+    confirmed = receipts.confirm_receipt(db, receipt["id"], USER_A)
+    rows = balances.get_event_balances(db, EVENT_ID, USER_A)
+
+    assert confirmed["status"] == "confirmed"
+    assert rows == [
+        {
+            "event_id": EVENT_ID,
+            "debitor_id": USER_B,
+            "creditor_id": USER_A,
+            "amount_kopecks": 1500,
+        }
+    ]
+
+
+def test_allocation_session_unclaim_requires_every_item_claimed(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    item_id = receipt["items"][0]["id"]
+    state = receipts.start_allocation_session(db, receipt["id"], USER_A)
+    receipts.claim_receipt_item(
+        db,
+        state["session"]["id"],
+        schemas.ReceiptItemClaimRequest(receipt_item_id=item_id),
+        USER_B,
+    )
+
+    receipts.unclaim_receipt_item(
+        db,
+        state["session"]["id"],
+        schemas.ReceiptItemClaimRequest(receipt_item_id=item_id),
+        USER_B,
+    )
+
+    try:
+        receipts.finalize_allocation_session(db, state["session"]["id"], USER_A)
+    except Exception as exc:
+        assert_status(exc, 400)
+    else:
+        raise AssertionError("Expected allocation finalize without claims to fail")
+
+
 def test_legacy_decimal_money_storage_reads_as_kopecks(db):
     seed_event(db)
     db.receipts.insert_one(
