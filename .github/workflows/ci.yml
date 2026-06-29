@@ -89,4 +89,19 @@ jobs:
         run: |
           SSH_PORT="${DEPLOY_PORT:-22}"
           ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "set -euo pipefail; cd '$DEPLOY_PATH'; git fetch origin main; git checkout main; git reset --hard origin/main; make setup; sudo systemctl restart splitapp-backend; sudo systemctl --no-pager --full status splitapp-backend"
+            "set -euo pipefail; mkdir -p '$DEPLOY_PATH'; find '$DEPLOY_PATH' -mindepth 1 ! -name .env -exec rm -rf {} +"
+
+          tar \
+            --exclude='.git' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='.venv' \
+            --exclude='__pycache__' \
+            --exclude='.pytest_cache' \
+            --exclude='.ruff_cache' \
+            -czf - . \
+            | ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+              "set -euo pipefail; tar -xzf - -C '$DEPLOY_PATH'"
+
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "set -euo pipefail; cd '$DEPLOY_PATH'; test -f .env; docker compose up -d --build; HOST_PORT=\$(grep -E '^HOST_PORT=' .env | tail -1 | cut -d= -f2-); HOST_PORT=\${HOST_PORT:-8080}; curl -fsS \"http://127.0.0.1:\${HOST_PORT}/api/ping\""
