@@ -3,7 +3,7 @@ from uuid import UUID
 
 from app import schemas
 from app.core import tokens
-from app.services import auth, balances, disputes, events, friends, payments, receipt_image, receipts, users
+from app.services import audit, auth, balances, disputes, events, friends, payments, receipt_image, receipts, users
 
 from tests.conftest import (
     EVENT_ID,
@@ -1187,6 +1187,25 @@ def test_dispute_requires_event_membership_and_valid_resource(db):
         assert_status(exc, 400)
     else:
         raise AssertionError("Expected invalid dispute resource type to fail")
+
+
+def test_event_activity_feed_lists_related_audit_events_for_members(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    payment = payments.create_payment(db, EVENT_ID, payment_payload(), USER_A)
+    payments.confirm_payment(db, payment["id"], USER_B)
+
+    page = audit.list_event_activity(db, EVENT_ID, USER_A, limit=50, offset=0)
+    actions = {item["action"] for item in page["items"]}
+
+    assert {"receipt.confirmed", "payment.confirmed"}.issubset(actions)
+    try:
+        audit.list_event_activity(db, EVENT_ID, USER_C, limit=50, offset=0)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-member activity feed access to fail")
 
 
 def test_only_payment_receiver_can_confirm_or_reject_payment(db):

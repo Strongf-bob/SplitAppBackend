@@ -130,6 +130,12 @@ Payment requests may include `deadline_at`; backend rejects deadlines less than 
 | `GET` | `/api/events/{id}/disputes` | Список споров события. | Paginated; требуется event membership. |
 | `POST` | `/api/disputes/{id}/resolve` | Закрыть спор. | Creator-only MVP resolution. |
 
+## Activity
+
+| Method | Path | Назначение | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/api/events/{id}/activity` | Event activity/audit feed. | Paginated; виден active event members. |
+
 ## Health и operations
 
 | Method | Path | Назначение | Notes |

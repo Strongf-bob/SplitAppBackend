@@ -1,3 +1,4 @@
+from .audit import router as audit_router
 from .auth import router as auth_router
 from .disputes import router as disputes_router
 from .events import router as events_router
@@ -8,6 +9,7 @@ from .receipts import router as receipts_router
 from .users import router as users_router
 
 __all__ = [
+    "audit_router",
     "auth_router",
     "disputes_router",
     "events_router",

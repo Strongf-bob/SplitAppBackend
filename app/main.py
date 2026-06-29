@@ -14,6 +14,7 @@ from app.core.monitoring import init_sentry, record_request_metrics
 from app.core.s3 import connect_s3
 from app.dependencies import require_auth_token
 from app.routers import (
+    audit_router,
     auth_router,
     disputes_router,
     events_router,
@@ -144,6 +145,7 @@ def create_app() -> FastAPI:
         dependencies=[Depends(require_auth_token)],
     )
     api.include_router(health_router)
+    api.include_router(audit_router)
     api.include_router(auth_router)
     api.include_router(disputes_router)
     api.include_router(events_router)
