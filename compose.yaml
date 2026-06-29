@@ -47,9 +47,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    command:
+    entrypoint:
       - "sh"
       - "-ec"
+    command:
       - |
         test -n "$${METRICS_ACCESS_TOKEN:-}"
         escaped_token=$$(printf '%s' "$${METRICS_ACCESS_TOKEN}" | sed 's/[\/&]/\\&/g')
