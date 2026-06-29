@@ -16,6 +16,35 @@ def strip_mongo_id(document: dict) -> dict:
     return cleaned
 
 
+def active_filter(extra: dict | None = None) -> dict:
+    query = {"deleted_at": {"$exists": False}}
+    if extra:
+        query.update(extra)
+    return query
+
+
+def record_audit_event(
+    db,
+    *,
+    action: str,
+    resource_type: str,
+    resource_id: str,
+    actor_user_id: str,
+    session=None,
+) -> None:
+    db.audit_events.insert_one(
+        {
+            "id": new_uuid(),
+            "action": action,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "actor_user_id": actor_user_id,
+            "created_at": utc_now(),
+        },
+        session=session,
+    )
+
+
 def yandex_avatar_url(default_avatar_id: str | None) -> str | None:
     if not default_avatar_id:
         return None
