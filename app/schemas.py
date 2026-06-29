@@ -198,12 +198,43 @@ class Payment(BaseModel):
     sender_id: UUID
     receiver_id: UUID
     amount_kopecks: int
+    status: str
     confirmed: bool
     created_at: datetime
+    payment_request_id: UUID | None = None
+    rejected_at: datetime | None = None
 
 
 class PaymentPage(BaseModel):
     items: list[Payment]
+    limit: int
+    offset: int
+    total: int
+
+
+class PaymentRequestCreate(BaseModel):
+    debtor_id: UUID
+    creditor_id: UUID
+    amount_kopecks: int = Field(gt=0)
+    note: str = ""
+
+
+class PaymentRequest(BaseModel):
+    id: UUID
+    event_id: UUID
+    debtor_id: UUID
+    creditor_id: UUID
+    amount_kopecks: int
+    note: str = ""
+    status: str
+    created_by: UUID
+    created_at: datetime
+    updated_at: datetime
+    payment_id: UUID | None = None
+
+
+class PaymentRequestPage(BaseModel):
+    items: list[PaymentRequest]
     limit: int
     offset: int
     total: int

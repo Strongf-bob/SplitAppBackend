@@ -1565,6 +1565,297 @@
         }
       }
     },
+    "/api/events/{id}/payment-requests": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Create Payment Request",
+        "operationId": "create_payment_request_api_events__id__payment_requests_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentRequestCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRequest"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "List Payment Requests By Event",
+        "operationId": "list_payment_requests_by_event_api_events__id__payment_requests_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRequestPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payment-requests/{id}/mark-paid": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Mark Payment Request Paid",
+        "operationId": "mark_payment_request_paid_api_payment_requests__id__mark_paid_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/confirm": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Confirm Payment",
+        "operationId": "confirm_payment_api_payments__id__confirm_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/reject": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Reject Payment",
+        "operationId": "reject_payment_api_payments__id__reject_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/payments/{id}": {
       "patch": {
         "tags": [
@@ -2317,6 +2608,10 @@
             "type": "integer",
             "title": "Amount Kopecks"
           },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
           "confirmed": {
             "type": "boolean",
             "title": "Confirmed"
@@ -2325,6 +2620,30 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "payment_request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Request Id"
+          },
+          "rejected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected At"
           }
         },
         "type": "object",
@@ -2334,6 +2653,7 @@
           "sender_id",
           "receiver_id",
           "amount_kopecks",
+          "status",
           "confirmed",
           "created_at"
         ],
@@ -2395,6 +2715,145 @@
           "total"
         ],
         "title": "PaymentPage"
+      },
+      "PaymentRequest": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "debtor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Debtor Id"
+          },
+          "creditor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creditor Id"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "title": "Amount Kopecks"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": ""
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "payment_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "debtor_id",
+          "creditor_id",
+          "amount_kopecks",
+          "status",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PaymentRequest"
+      },
+      "PaymentRequestCreate": {
+        "properties": {
+          "debtor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Debtor Id"
+          },
+          "creditor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creditor Id"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Kopecks"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "debtor_id",
+          "creditor_id",
+          "amount_kopecks"
+        ],
+        "title": "PaymentRequestCreate"
+      },
+      "PaymentRequestPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentRequest"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "total"
+        ],
+        "title": "PaymentRequestPage"
       },
       "PaymentUpdate": {
         "properties": {
