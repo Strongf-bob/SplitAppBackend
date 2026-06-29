@@ -17,6 +17,17 @@ def list_users(
     return services.list_users(db, current_user_id, limit=limit, offset=offset)
 
 
+@router.get("/api/users/search", response_model=schemas.UserPage)
+def search_users(
+    q: str = Query(min_length=2),
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.search_users(db, current_user_id, q, limit=limit, offset=offset)
+
+
 @router.patch("/api/users/me", response_model=schemas.User)
 def update_current_user(
     payload: schemas.UserUpdate,

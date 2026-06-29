@@ -91,4 +91,9 @@ def user_to_api_dict(user: dict) -> dict:
         "phone_number": user["phone_number"],
         "email": user.get("email"),
         "avatar_url": user.get("avatar_url") or yandex_avatar_url(user.get("default_avatar_id")),
+        "public_handle": user.get("public_handle"),
+        "discovery_enabled": bool(user.get("discovery_enabled", False)),
+        "payment_phone": user.get("payment_phone"),
+        "phone_verified": bool(user.get("phone_verified", False)),
+        "payment_phone_visibility": user.get("payment_phone_visibility", "nobody"),
     }

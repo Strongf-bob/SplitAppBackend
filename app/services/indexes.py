@@ -5,6 +5,8 @@ def ensure_indexes(db: Database) -> None:
     db.users.create_index("id", unique=True)
     db.users.create_index("phone_number", unique=True)
     db.users.create_index("yandex_id", unique=True, sparse=True)
+    db.users.create_index("public_handle", unique=True, sparse=True)
+    db.users.create_index([("discovery_enabled", 1), ("search_name", 1)])
     db.refresh_tokens.create_index("token_hash", unique=True)
     db.refresh_tokens.create_index("expires_at", expireAfterSeconds=0)
     db.events.create_index("id", unique=True)

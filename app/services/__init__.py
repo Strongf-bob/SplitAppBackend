@@ -32,7 +32,7 @@ from app.services.receipts import (
     list_receipts_by_event,
     update_receipt,
 )
-from app.services.users import list_users
+from app.services.users import list_users, search_users
 __all__ = [
     "add_participants",
     "accept_event_invite",
@@ -61,6 +61,7 @@ __all__ = [
     "remove_participant",
     "revoke_event_invite",
     "rotate_refresh_token",
+    "search_users",
     "update_event",
     "update_payment",
     "update_receipt",
