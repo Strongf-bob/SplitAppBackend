@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -98,9 +99,16 @@ def github_request(method: str, url: str, token: str, payload: dict[str, Any]) -
         return json.loads(body) if body else None
 
 
+def validate_llm_url(url: str) -> None:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise RuntimeError("LLM URL must be an absolute HTTPS URL.")
+    if parsed.username or parsed.password:
+        raise RuntimeError("LLM URL must not contain credentials.")
+
+
 def llm_request(url: str, token: str, model: str, test_log: str, pr_diff: str) -> str:
-    if not url.startswith("https://"):
-        raise RuntimeError("LLM URL must use HTTPS.")
+    validate_llm_url(url)
     system_prompt = (
         "Ты senior backend engineer. Анализируй упавшие тесты в Pull Request. "
         "Пиши на русском, официально и кратко. Не выдумывай факты. "
@@ -161,7 +169,11 @@ def llm_request(url: str, token: str, model: str, test_log: str, pr_diff: str) -
         },
     )
     with urllib.request.urlopen(request, timeout=120) as response:
-        body = json.loads(response.read().decode("utf-8"))
+        raw_body = response.read().decode("utf-8", errors="replace")
+    try:
+        body = json.loads(raw_body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("LLM response is not valid JSON.") from exc
 
     choices = body.get("choices")
     if not isinstance(choices, list) or not choices:
@@ -215,7 +227,7 @@ def main() -> int:
         analysis = (
             "## AI Test Failure Analysis\n\n"
             "**Краткий вывод:** тесты упали, но AI-анализ не удалось выполнить.\n\n"
-            f"**Техническая причина:** `{exc}`\n\n"
+            "**Техническая причина:** LLM endpoint вернул ошибку или некорректный ответ.\n\n"
             "Проверьте artifact `ai-test-failure-context` с полным test log и PR diff."
         )
 

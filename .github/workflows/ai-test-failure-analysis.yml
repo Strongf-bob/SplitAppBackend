@@ -56,6 +56,7 @@ jobs:
 
       - name: Save PR diff
         id: diff
+        shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -95,7 +96,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: collect-test-context
-    if: needs.collect-test-context.outputs.test_exit_code != '0'
+    if: needs.collect-test-context.result == 'success' && needs.collect-test-context.outputs.test_exit_code != '0'
     permissions:
       contents: read
       pull-requests: write
