@@ -12,3 +12,7 @@ def ensure_indexes(db: Database) -> None:
     db.receipts.create_index([("event_id", 1), ("created_at", -1)])
     db.payments.create_index("id", unique=True)
     db.payments.create_index([("event_id", 1), ("created_at", -1)])
+    db.idempotency_keys.create_index(
+        [("actor_user_id", 1), ("scope", 1), ("key", 1)], unique=True
+    )
+    db.idempotency_keys.create_index("created_at", expireAfterSeconds=60 * 60 * 24)
