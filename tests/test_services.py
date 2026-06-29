@@ -216,6 +216,37 @@ def test_only_event_creator_can_close_or_reopen_event(db):
     assert updated["is_closed"] is True
 
 
+def test_only_event_creator_can_rename_event(db):
+    seed_event(db)
+
+    try:
+        events.update_event(db, EVENT_ID, schemas.EventUpdate(name="New name"), USER_B)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-creator rename to fail")
+
+
+def test_only_event_creator_can_manage_participants(db):
+    seed_event(db)
+
+    for action in (
+        lambda: events.add_participants(
+            db,
+            EVENT_ID,
+            schemas.AddParticipantsRequest(user_ids=[USER_C]),
+            USER_B,
+        ),
+        lambda: events.remove_participant(db, EVENT_ID, USER_A, USER_B),
+    ):
+        try:
+            action()
+        except Exception as exc:
+            assert_status(exc, 403)
+        else:
+            raise AssertionError("Expected non-creator participant management to fail")
+
+
 def test_event_delete_requires_transaction_support(db):
     seed_event(db)
 

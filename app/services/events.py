@@ -105,6 +105,7 @@ def delete_event(db: Database, event_id: str, actor_user_id: str) -> None:
 
 def update_event(db: Database, event_id: str, payload: schemas.EventUpdate, actor_user_id: str) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
+    assert_event_creator(event, actor_user_id)
     update_fields: dict = {}
 
     if payload.name is not None:
@@ -114,7 +115,6 @@ def update_event(db: Database, event_id: str, payload: schemas.EventUpdate, acto
         update_fields["name"] = name
 
     if payload.is_closed is not None:
-        assert_event_creator(event, actor_user_id)
         update_fields["is_closed"] = payload.is_closed
 
     if not update_fields:
@@ -129,6 +129,7 @@ def add_participants(
     db: Database, event_id: str, payload: schemas.AddParticipantsRequest, actor_user_id: str
 ) -> list[dict]:
     event = assert_event_access(db, event_id, actor_user_id)
+    assert_event_creator(event, actor_user_id)
     assert_event_open(event)
     incoming_ids = [str(user_id) for user_id in payload.user_ids]
     unknown_ids = [user_id for user_id in incoming_ids if not db.users.find_one({"id": user_id})]
@@ -152,6 +153,7 @@ def add_participants(
 
 def remove_participant(db: Database, event_id: str, user_id: str, actor_user_id: str) -> None:
     event = assert_event_access(db, event_id, actor_user_id)
+    assert_event_creator(event, actor_user_id)
     assert_event_open(event)
     if user_id not in event["users"]:
         raise HTTPException(status_code=404, detail="Participant not found in event.")
