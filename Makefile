@@ -8,12 +8,19 @@ PORT ?= 8000
 PID_FILE ?= uvicorn.pid
 LOG_FILE ?= uvicorn.log
 
-.PHONY: setup run run-dev stop status logs
+.PHONY: setup test run run-dev stop status logs
 
 setup:
 	$(PYTHON) -m venv $(VENV_DIR)
 	$(VENV_PIP) install --upgrade pip
 	$(VENV_PIP) install -r requirements.txt
+
+test:
+	@if [ -x "$(VENV_PYTHON)" ]; then \
+		$(VENV_PYTHON) -m pytest; \
+	else \
+		$(PYTHON) -m pytest; \
+	fi
 
 run:
 	@if [ -f "$(PID_FILE)" ] && kill -0 $$(cat "$(PID_FILE)") 2>/dev/null; then \
