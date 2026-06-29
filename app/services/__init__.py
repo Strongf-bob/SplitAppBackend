@@ -1,5 +1,6 @@
 from app.services.auth import login_with_yandex_oauth, rotate_refresh_token
 from app.services.balances import get_event_balance_explanations, get_event_balances
+from app.services.disputes import create_dispute, list_event_disputes, resolve_dispute
 from app.services.events import (
     accept_event_invite,
     accept_nearby_invite_code,
@@ -67,6 +68,7 @@ __all__ = [
     "claim_receipt_item",
     "confirm_payment",
     "confirm_receipt",
+    "create_dispute",
     "create_event",
     "create_event_invite",
     "create_nearby_invite_code",
@@ -85,6 +87,7 @@ __all__ = [
     "get_event_balance_explanations",
     "get_event_balances",
     "list_events",
+    "list_event_disputes",
     "list_friendships",
     "list_payment_requests_by_event",
     "list_payments_by_event",
@@ -100,6 +103,7 @@ __all__ = [
     "reject_friend_request",
     "remove_participant",
     "remove_friendship",
+    "resolve_dispute",
     "revoke_event_invite",
     "rotate_refresh_token",
     "search_users",

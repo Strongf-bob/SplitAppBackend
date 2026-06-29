@@ -3,7 +3,7 @@ from uuid import UUID
 
 from app import schemas
 from app.core import tokens
-from app.services import auth, balances, events, friends, payments, receipt_image, receipts, users
+from app.services import auth, balances, disputes, events, friends, payments, receipt_image, receipts, users
 
 from tests.conftest import (
     EVENT_ID,
@@ -1116,6 +1116,77 @@ def test_payment_request_lifecycle_authorization(db):
             assert_status(exc, 403)
         else:
             raise AssertionError("Expected unauthorized payment request lifecycle action to fail")
+
+
+def test_dispute_create_list_and_creator_resolve(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+
+    dispute = disputes.create_dispute(
+        db,
+        schemas.DisputeCreate(
+            resource_type="receipt",
+            resource_id=receipt["id"],
+            reason="Wrong split",
+        ),
+        USER_B,
+    )
+    page = disputes.list_event_disputes(db, EVENT_ID, USER_A, limit=50, offset=0)
+
+    assert dispute["status"] == "open"
+    assert page["items"][0]["id"] == dispute["id"]
+
+    try:
+        disputes.resolve_dispute(
+            db, dispute["id"], schemas.DisputeResolve(resolution_note="Fixed"), USER_B
+        )
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-creator dispute resolve to fail")
+
+    resolved = disputes.resolve_dispute(
+        db, dispute["id"], schemas.DisputeResolve(resolution_note="Fixed"), USER_A
+    )
+
+    assert resolved["status"] == "resolved"
+    assert resolved["resolved_by"] == USER_A
+    assert resolved["resolution_note"] == "Fixed"
+
+
+def test_dispute_requires_event_membership_and_valid_resource(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+
+    try:
+        disputes.create_dispute(
+            db,
+            schemas.DisputeCreate(
+                resource_type="receipt",
+                resource_id=receipt["id"],
+                reason="Wrong split",
+            ),
+            USER_C,
+        )
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-member dispute creation to fail")
+
+    try:
+        disputes.create_dispute(
+            db,
+            schemas.DisputeCreate(
+                resource_type="unknown",
+                resource_id=receipt["id"],
+                reason="Wrong split",
+            ),
+            USER_A,
+        )
+    except Exception as exc:
+        assert_status(exc, 400)
+    else:
+        raise AssertionError("Expected invalid dispute resource type to fail")
 
 
 def test_only_payment_receiver_can_confirm_or_reject_payment(db):
