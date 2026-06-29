@@ -1,0 +1,92 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  opencode-review:
+    name: OpenCodeReview
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    env:
+      OCR_LLM_URL: ${{ secrets.OCR_LLM_URL }}
+      OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+      OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+      OCR_LLM_MODEL: ${{ secrets.OCR_LLM_MODEL }}
+      OCR_LANGUAGE: Russian
+      OCR_OUTPUT_FILE: opencode-review.json
+      OCR_SYSTEM_PROMPT: >-
+        Пиши все комментарии code review на русском языке. Оценивай только diff
+        pull request. Для каждой проблемы указывай severity: critical, high,
+        medium, low или style.
+    steps:
+      - name: Checkout pull request
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Validate LLM secrets
+        run: |
+          test -n "$OCR_LLM_URL"
+          test -n "$OCR_LLM_AUTH_TOKEN"
+          test -n "$OCR_LLM_MODEL"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+
+      - name: Install Alibaba OpenCodeReview
+        run: npm install -g @alibaba-group/open-code-review
+
+      - name: Fetch base branch
+        run: |
+          git fetch --no-tags --prune --depth=1 origin \
+            "${{ github.event.pull_request.base.sha }}"
+
+      - name: Run OpenCodeReview
+        run: |
+          ocr config set provider github-actions
+          ocr config set custom_providers.github-actions.url "$OCR_LLM_URL"
+          ocr config set custom_providers.github-actions.protocol openai
+          ocr config set custom_providers.github-actions.api_key "$OCR_LLM_AUTH_TOKEN"
+          ocr config set custom_providers.github-actions.model "$OCR_LLM_MODEL"
+          ocr config set language "$OCR_LANGUAGE"
+          ocr review \
+            --from "${{ github.event.pull_request.base.sha }}" \
+            --to "${{ github.event.pull_request.head.sha }}" \
+            --format json \
+            --audience agent \
+            --background "$OCR_SYSTEM_PROMPT" \
+            > "$OCR_OUTPUT_FILE"
+
+      - name: Upload raw OpenCodeReview result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-review-result
+          path: ${{ env.OCR_OUTPUT_FILE }}
+          if-no-files-found: warn
+
+      - name: Publish PR review
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OCR_OUTPUT_FILE: ${{ env.OCR_OUTPUT_FILE }}
+          OCR_BLOCKING_SEVERITIES: critical,high
+        run: python3 .github/scripts/publish_opencode_review.py
