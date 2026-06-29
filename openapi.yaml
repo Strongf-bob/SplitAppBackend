@@ -401,6 +401,38 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Receipts]
+      summary: Delete receipt image
+      operationId: deleteReceiptImage
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      responses:
+        "204":
+          description: Receipt image deleted
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/receipts/{id}/image/presigned-url:
+    get:
+      tags: [Receipts]
+      summary: Get presigned receipt image URL
+      operationId: getReceiptImagePresignedUrl
+      parameters:
+        - $ref: "#/components/parameters/IdPathParam"
+      responses:
+        "200":
+          description: Temporary URL for reading the receipt image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptImagePresignedUrlResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/events/{id}/balances:
     get:
@@ -817,6 +849,15 @@ components:
           type: string
           format: uri
           description: Absolute URL to fetch the uploaded image (same as Receipt.image_url after upload).
+      required: [image_url]
+
+    ReceiptImagePresignedUrlResponse:
+      type: object
+      properties:
+        image_url:
+          type: string
+          format: uri
+          description: Temporary URL for reading the uploaded receipt image.
       required: [image_url]
 
     CreateReceiptRequest:

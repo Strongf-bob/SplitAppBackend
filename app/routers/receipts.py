@@ -90,3 +90,27 @@ async def upload_receipt_image(
     return services.upload_receipt_image(
         db, s3, str(id), body, upload.content_type, current_user_id
     )
+
+
+@router.delete("/api/receipts/{id}/image", status_code=status.HTTP_204_NO_CONTENT)
+def delete_receipt_image(
+    id: UUID,
+    db: Database = Depends(get_db),
+    s3=Depends(get_s3),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> Response:
+    services.delete_receipt_image(db, s3, str(id), current_user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/api/receipts/{id}/image/presigned-url",
+    response_model=schemas.ReceiptImagePresignedUrlResponse,
+)
+def get_receipt_image_presigned_url(
+    id: UUID,
+    db: Database = Depends(get_db),
+    s3=Depends(get_s3),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict[str, str]:
+    return services.get_receipt_image_presigned_url(db, s3, str(id), current_user_id)

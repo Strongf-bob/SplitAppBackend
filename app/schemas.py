@@ -119,6 +119,10 @@ class ReceiptImageUploadResponse(BaseModel):
     image_url: str
 
 
+class ReceiptImagePresignedUrlResponse(BaseModel):
+    image_url: str
+
+
 class PaymentCreate(BaseModel):
     sender_id: UUID
     receiver_id: UUID
