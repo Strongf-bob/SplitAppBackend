@@ -28,6 +28,8 @@ def test_event_create_and_list_for_actor(db):
 
     assert created["name"] == "Weekend"
     assert created["creator_id"] == USER_A
+    assert created["receipt_creation_policy"] == "participants_can_add"
+    assert created["participants_invite_policy"] == "creator_only"
     assert [(item["user_id"], item["role"], item["status"]) for item in created["participants"]] == [
         (USER_A, "creator", "active")
     ]
@@ -35,6 +37,49 @@ def test_event_create_and_list_for_actor(db):
 
     assert [event["id"] for event in page["items"]] == [created["id"]]
     assert page["total"] == 1
+
+
+def test_event_policies_are_validated_and_enforced(db):
+    seed_event(db)
+
+    updated = events.update_event(
+        db,
+        EVENT_ID,
+        schemas.EventUpdate(
+            receipt_creation_policy="creator_only",
+            receipt_finalization_policy="creator_finalizes",
+            participants_invite_policy="participants_can_invite_directly",
+        ),
+        USER_A,
+    )
+
+    assert updated["receipt_creation_policy"] == "creator_only"
+    try:
+        receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_B)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected creator-only receipt creation to fail for member")
+
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    confirmed = receipts.confirm_receipt(db, receipt["id"], USER_A)
+    invite = events.create_event_invite(
+        db, EVENT_ID, schemas.CreateEventInviteRequest(expires_in_seconds=3600), USER_B
+    )
+
+    assert confirmed["status"] == "confirmed"
+    assert invite["status"] == "active"
+
+
+def test_event_policy_rejects_invalid_values(db):
+    seed_event(db)
+
+    try:
+        events.update_event(db, EVENT_ID, schemas.EventUpdate(debt_display_mode="bad"), USER_A)
+    except Exception as exc:
+        assert_status(exc, 400)
+    else:
+        raise AssertionError("Expected invalid event policy to fail")
 
 
 def test_update_current_user_profile(db):

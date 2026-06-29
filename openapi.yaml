@@ -2713,6 +2713,36 @@
             "type": "boolean",
             "title": "Is Closed"
           },
+          "split_strategy": {
+            "type": "string",
+            "title": "Split Strategy",
+            "default": "equal_default"
+          },
+          "receipt_creation_policy": {
+            "type": "string",
+            "title": "Receipt Creation Policy",
+            "default": "participants_can_add"
+          },
+          "receipt_finalization_policy": {
+            "type": "string",
+            "title": "Receipt Finalization Policy",
+            "default": "payer_finalizes"
+          },
+          "participants_invite_policy": {
+            "type": "string",
+            "title": "Participants Invite Policy",
+            "default": "creator_only"
+          },
+          "debt_display_mode": {
+            "type": "string",
+            "title": "Debt Display Mode",
+            "default": "simplified_default"
+          },
+          "settlement_deadline_policy": {
+            "type": "string",
+            "title": "Settlement Deadline Policy",
+            "default": "disabled"
+          },
           "participants": {
             "items": {
               "$ref": "#/components/schemas/EventMembership"
@@ -2818,6 +2848,36 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "split_strategy": {
+            "type": "string",
+            "title": "Split Strategy",
+            "default": "equal_default"
+          },
+          "receipt_creation_policy": {
+            "type": "string",
+            "title": "Receipt Creation Policy",
+            "default": "participants_can_add"
+          },
+          "receipt_finalization_policy": {
+            "type": "string",
+            "title": "Receipt Finalization Policy",
+            "default": "payer_finalizes"
+          },
+          "participants_invite_policy": {
+            "type": "string",
+            "title": "Participants Invite Policy",
+            "default": "creator_only"
+          },
+          "debt_display_mode": {
+            "type": "string",
+            "title": "Debt Display Mode",
+            "default": "simplified_default"
+          },
+          "settlement_deadline_policy": {
+            "type": "string",
+            "title": "Settlement Deadline Policy",
+            "default": "disabled"
           }
         },
         "type": "object",
@@ -3059,6 +3119,72 @@
               }
             ],
             "title": "Is Closed"
+          },
+          "split_strategy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split Strategy"
+          },
+          "receipt_creation_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Creation Policy"
+          },
+          "receipt_finalization_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Finalization Policy"
+          },
+          "participants_invite_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Participants Invite Policy"
+          },
+          "debt_display_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debt Display Mode"
+          },
+          "settlement_deadline_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settlement Deadline Policy"
           }
         },
         "type": "object",

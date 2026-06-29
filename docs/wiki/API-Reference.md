@@ -71,6 +71,8 @@ Payment phone visibility is conservative: `nobody`, `event_members`, or `friends
 
 Events return `participants` as membership records with `role` (`creator`, `member`) and `status`. Authorization uses `event_memberships`, not legacy `events.users`.
 
+Event settings include settlement policies: `split_strategy`, `receipt_creation_policy`, `receipt_finalization_policy`, `participants_invite_policy`, `debt_display_mode`, and `settlement_deadline_policy`. Backend enforces receipt creation, receipt confirmation, and participant invite policies.
+
 ## Receipts
 
 | Method | Path | Назначение | Notes |
