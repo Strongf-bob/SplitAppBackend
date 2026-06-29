@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from app import schemas
 from app.core import tokens
@@ -270,6 +271,63 @@ def test_receipt_detail_requires_event_membership(db):
         assert_status(exc, 403)
     else:
         raise AssertionError("Expected non-member receipt detail access to fail")
+
+
+def test_receipt_create_rejects_non_member_payer(db):
+    seed_event(db)
+    payload = receipt_payload()
+    payload.payer_id = UUID(USER_C)
+
+    try:
+        receipts.create_receipt(db, EVENT_ID, payload, USER_A)
+    except Exception as exc:
+        assert_status(exc, 400)
+    else:
+        raise AssertionError("Expected non-member payer to fail")
+
+
+def test_receipt_create_rejects_non_member_share_user(db):
+    seed_event(db)
+    payload = receipt_payload()
+    payload.items[0].share_items = [
+        schemas.CreateShareItemRequest(user_id=USER_C, share_value="1")
+    ]
+
+    try:
+        receipts.create_receipt(db, EVENT_ID, payload, USER_A)
+    except Exception as exc:
+        assert_status(exc, 400)
+    else:
+        raise AssertionError("Expected non-member share user to fail")
+
+
+def test_receipt_create_rejects_invalid_share_sum(db):
+    seed_event(db)
+    payload = receipt_payload()
+    payload.items[0].share_items = [
+        schemas.CreateShareItemRequest(user_id=USER_A, share_value="0.25"),
+        schemas.CreateShareItemRequest(user_id=USER_B, share_value="0.25"),
+    ]
+
+    try:
+        receipts.create_receipt(db, EVENT_ID, payload, USER_A)
+    except Exception as exc:
+        assert_status(exc, 400)
+    else:
+        raise AssertionError("Expected invalid share sum to fail")
+
+
+def test_receipt_create_rejects_total_mismatch(db):
+    seed_event(db)
+    payload = receipt_payload()
+    payload.total_amount_kopecks = 9999
+
+    try:
+        receipts.create_receipt(db, EVENT_ID, payload, USER_A)
+    except Exception as exc:
+        assert_status(exc, 400)
+    else:
+        raise AssertionError("Expected total mismatch to fail")
 
 
 def test_list_receipts_returns_paginated_active_page(db):
