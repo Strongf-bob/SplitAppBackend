@@ -164,7 +164,7 @@ def finding_from_dict(item: dict[str, Any]) -> Finding | None:
         start_line is not None and start_line > 0
     )
     has_explicit_finding_signal = any(
-        key in item
+        isinstance(item.get(key), str) and item[key].strip()
         for key in (
             "severity",
             "level",
@@ -174,7 +174,6 @@ def finding_from_dict(item: dict[str, Any]) -> Finding | None:
             "recommendation",
             "suggestion",
             "title",
-            "summary",
             "type",
         )
     )
