@@ -75,7 +75,6 @@ def upload_receipt_image(
         Key=key,
         Body=body,
         ContentType="image/jpeg",
-        ACL="public-read",
     )
 
     now = utc_now()
