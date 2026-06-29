@@ -16,6 +16,7 @@ jobs:
   opencode-review:
     name: OpenCodeReview
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: github.event.pull_request.draft == false
     env:
       OCR_LLM_URL: ${{ secrets.OCR_LLM_URL }}
