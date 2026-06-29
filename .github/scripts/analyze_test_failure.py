@@ -21,7 +21,7 @@ def log(message: str) -> None:
     print(f"[ai-test-failure-analysis] {message}", flush=True)
 
 
-def read_text(path: Path, limit: int) -> str:
+def read_text(path: Path, limit: int, from_end: bool = True) -> str:
     if not path.exists():
         return f"[file not found: {path}]"
     try:
@@ -30,7 +30,7 @@ def read_text(path: Path, limit: int) -> str:
         return f"[unable to read {path}: {exc}]"
     if len(text) <= limit:
         return text
-    return text[-limit:]
+    return text[-limit:] if from_end else text[:limit]
 
 
 def github_request(method: str, url: str, token: str, payload: dict[str, Any]) -> Any:
@@ -145,7 +145,11 @@ def main() -> int:
         return 0
 
     test_log = read_text(Path(os.environ.get("TEST_LOG_FILE", "test-output.log")), MAX_LOG_CHARS)
-    pr_diff = read_text(Path(os.environ.get("PR_DIFF_FILE", "pr-diff.patch")), MAX_DIFF_CHARS)
+    pr_diff = read_text(
+        Path(os.environ.get("PR_DIFF_FILE", "pr-diff.patch")),
+        MAX_DIFF_CHARS,
+        from_end=False,
+    )
 
     try:
         analysis = llm_request(llm_url, llm_token, llm_model, test_log, pr_diff)
@@ -174,7 +178,7 @@ def main() -> int:
         )
     except (urllib.error.URLError, RuntimeError) as exc:
         log(f"Unable to post PR comment: {exc}")
-        return 0
+        return 1
     log("Posted AI test failure analysis comment.")
     return 0
 
