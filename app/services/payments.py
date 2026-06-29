@@ -6,7 +6,14 @@ from app.core.monitoring import observe_money_amount, record_domain_event, track
 
 from app.services.access import assert_event_access, assert_event_open, get_payment_or_404
 from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
-from app.services.common import money_to_storage
+from app.services.common import money_to_storage, stored_money_to_kopecks
+
+
+def _payment_to_api(payment: dict) -> dict:
+    cleaned = strip_mongo_id(payment)
+    cleaned["amount_kopecks"] = stored_money_to_kopecks(cleaned, "amount_kopecks", "amount")
+    cleaned.pop("amount", None)
+    return cleaned
 
 
 @track_service_operation("payments.create")
@@ -35,14 +42,14 @@ def create_payment(
         "event_id": event_id,
         "sender_id": sender_id,
         "receiver_id": receiver_id,
-        "amount": money_to_storage(payload.amount),
+        "amount_kopecks": money_to_storage(payload.amount_kopecks),
         "confirmed": False,
         "created_at": utc_now(),
     }
     db.payments.insert_one(payment)
     record_domain_event("payments", "created")
-    observe_money_amount("payment_amount", payload.amount)
-    return payment
+    observe_money_amount("payment_amount", payload.amount_kopecks / 100)
+    return _payment_to_api(payment)
 
 
 @track_service_operation("payments.list")
@@ -54,7 +61,7 @@ def list_payments_by_event(
     total = db.payments.count_documents(query)
     cursor = db.payments.find(query).sort("created_at", -1).skip(offset).limit(limit)
     return {
-        "items": [strip_mongo_id(item) for item in cursor],
+        "items": [_payment_to_api(item) for item in cursor],
         "limit": limit,
         "offset": offset,
         "total": total,
@@ -82,7 +89,7 @@ def update_payment(
         resource_id=payment_id,
         actor_user_id=actor_user_id,
     )
-    return strip_mongo_id(get_payment_or_404(db, payment_id))
+    return _payment_to_api(get_payment_or_404(db, payment_id))
 
 
 @track_service_operation("payments.delete")

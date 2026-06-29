@@ -6,7 +6,12 @@ from app.core.monitoring import observe_money_amount, record_domain_event, track
 
 from app.services.access import assert_event_access, assert_event_open, get_receipt_or_404
 from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
-from app.services.common import decimal_from_value, decimal_to_storage, money_to_storage
+from app.services.common import (
+    decimal_from_value,
+    decimal_to_storage,
+    money_to_storage,
+    stored_money_to_kopecks,
+)
 
 _ONE = decimal_from_value("1")
 
@@ -66,12 +71,34 @@ def _build_receipt_items(
                 "id": item_id,
                 "receipt_id": receipt_id,
                 "name": item.name,
-                "cost": money_to_storage(item.cost),
+                "cost_kopecks": money_to_storage(item.cost_kopecks),
                 "share_items": share_ids,
             }
         )
 
     return stored_items, stored_share_items
+
+
+def _receipt_to_api(receipt: dict, *, include_internal_shares: bool = False) -> dict:
+    cleaned = strip_mongo_id(receipt)
+    cleaned["total_amount_kopecks"] = stored_money_to_kopecks(
+        cleaned, "total_amount_kopecks", "total_amount"
+    )
+    cleaned.pop("total_amount", None)
+
+    items = []
+    for item in cleaned.get("items", []):
+        normalized_item = dict(item)
+        normalized_item["cost_kopecks"] = stored_money_to_kopecks(
+            normalized_item, "cost_kopecks", "cost"
+        )
+        normalized_item.pop("cost", None)
+        items.append(normalized_item)
+    cleaned["items"] = items
+
+    if not include_internal_shares:
+        cleaned.pop("share_items", None)
+    return cleaned
 
 
 @track_service_operation("receipts.create")
@@ -84,11 +111,11 @@ def create_receipt(
     _validate_receipt_users(event, payer_id, payload.items)
     _validate_share_sum(payload.items)
 
-    calculated_total = sum(item.cost for item in payload.items)
-    if money_to_storage(calculated_total) != money_to_storage(payload.total_amount):
+    calculated_total = sum(item.cost_kopecks for item in payload.items)
+    if calculated_total != payload.total_amount_kopecks:
         raise HTTPException(
             status_code=400,
-            detail="total_amount must be equal to the sum of all item costs.",
+            detail="total_amount_kopecks must be equal to the sum of all item costs.",
         )
 
     now = utc_now()
@@ -100,7 +127,7 @@ def create_receipt(
         "event_id": event_id,
         "payer_id": payer_id,
         "title": payload.title,
-        "total_amount": money_to_storage(payload.total_amount),
+        "total_amount_kopecks": money_to_storage(payload.total_amount_kopecks),
         "created_at": now,
         "updated_at": now,
         "items": stored_items,
@@ -108,8 +135,8 @@ def create_receipt(
     }
     db.receipts.insert_one(receipt)
     record_domain_event("receipts", "created")
-    observe_money_amount("receipt_total", payload.total_amount)
-    return strip_mongo_id(receipt)
+    observe_money_amount("receipt_total", payload.total_amount_kopecks / 100)
+    return _receipt_to_api(receipt)
 
 
 @track_service_operation("receipts.update")
@@ -124,28 +151,26 @@ def update_receipt(
     if payload.title is not None:
         update_fields["title"] = payload.title
 
-    if payload.total_amount is not None and payload.items is None:
+    if payload.total_amount_kopecks is not None and payload.items is None:
         raise HTTPException(
             status_code=400,
-            detail="total_amount can be updated only together with items.",
+            detail="total_amount_kopecks can be updated only together with items.",
         )
 
     if payload.items is not None:
         _validate_receipt_users(event, receipt["payer_id"], payload.items)
         _validate_share_sum(payload.items)
 
-        calculated_total = sum(item.cost for item in payload.items)
-        if payload.total_amount is not None and money_to_storage(
-            calculated_total
-        ) != money_to_storage(payload.total_amount):
+        calculated_total = sum(item.cost_kopecks for item in payload.items)
+        if payload.total_amount_kopecks is not None and calculated_total != payload.total_amount_kopecks:
             raise HTTPException(
                 status_code=400,
-                detail="total_amount must be equal to the sum of all item costs.",
+                detail="total_amount_kopecks must be equal to the sum of all item costs.",
             )
 
-        update_fields["total_amount"] = (
-            money_to_storage(payload.total_amount)
-            if payload.total_amount is not None
+        update_fields["total_amount_kopecks"] = (
+            money_to_storage(payload.total_amount_kopecks)
+            if payload.total_amount_kopecks is not None
             else money_to_storage(calculated_total)
         )
         stored_items, stored_share_items = _build_receipt_items(receipt_id, payload.items)
@@ -158,9 +183,9 @@ def update_receipt(
     update_fields["updated_at"] = utc_now()
     db.receipts.update_one({"id": receipt_id}, {"$set": update_fields})
     record_domain_event("receipts", "updated")
-    if "total_amount" in update_fields:
-        observe_money_amount("receipt_total", update_fields["total_amount"])
-    return strip_mongo_id(get_receipt_or_404(db, receipt_id))
+    if "total_amount_kopecks" in update_fields:
+        observe_money_amount("receipt_total", update_fields["total_amount_kopecks"] / 100)
+    return _receipt_to_api(get_receipt_or_404(db, receipt_id))
 
 
 @track_service_operation("receipts.list")
@@ -173,9 +198,7 @@ def list_receipts_by_event(
     receipts = []
     cursor = db.receipts.find(query).sort("created_at", -1).skip(offset).limit(limit)
     for receipt in cursor:
-        cleaned = strip_mongo_id(receipt)
-        cleaned.pop("share_items", None)
-        receipts.append(cleaned)
+        receipts.append(_receipt_to_api(receipt))
     return {"items": receipts, "limit": limit, "offset": offset, "total": total}
 
 
@@ -183,9 +206,7 @@ def list_receipts_by_event(
 def get_receipt(db: Database, receipt_id: str, actor_user_id: str) -> dict:
     receipt = get_receipt_or_404(db, receipt_id)
     assert_event_access(db, receipt["event_id"], actor_user_id)
-    cleaned = strip_mongo_id(receipt)
-    cleaned.pop("share_items", None)
-    return cleaned
+    return _receipt_to_api(receipt)
 
 
 @track_service_operation("receipts.delete")

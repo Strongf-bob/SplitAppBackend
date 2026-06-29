@@ -96,11 +96,11 @@ def receipt_payload():
     return schemas.CreateReceiptRequest(
         payer_id=USER_A,
         title="Dinner",
-        total_amount=100,
+        total_amount_kopecks=10000,
         items=[
             schemas.CreateReceiptItemRequest(
                 name="Meal",
-                cost=100,
+                cost_kopecks=10000,
                 share_items=[
                     schemas.CreateShareItemRequest(user_id=USER_A, share_value=0.5),
                     schemas.CreateShareItemRequest(user_id=USER_B, share_value=0.5),
@@ -113,4 +113,4 @@ def receipt_payload():
 def payment_payload():
     from app import schemas
 
-    return schemas.PaymentCreate(sender_id=USER_A, receiver_id=USER_B, amount=50)
+    return schemas.PaymentCreate(sender_id=USER_A, receiver_id=USER_B, amount_kopecks=5000)

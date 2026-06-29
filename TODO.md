@@ -35,7 +35,7 @@
 - [x] **Receipt image lifecycle** — upload/delete/presigned URL добавлены.
 - [x] **Soft delete и audit fields** — чувствительные удаления не являются безусловным hard delete.
 - [x] **GET `/api/users` больше не сливает всех пользователей** — список ограничен видимыми пользователями.
-- [x] **Денежная логика переведена на Decimal** — backend больше не считает новые суммы через `float`.
+- [x] **Денежная логика переведена на копейки** — API и MongoDB используют integer kopecks вместо `float`/`double`/decimal-string для новых денежных значений.
 - [x] **S3-чек не публикуется через public-read ACL** — чтение идет через presigned URL.
 
 ### Backend Инфраструктура

@@ -95,6 +95,15 @@ Authorization: Bearer <access_token>
 
 Unexpected failures должны возвращать generic `500`, а полные детали должны попадать только в server logs.
 
+## Money
+
+API v2 передает денежные значения целыми копейками:
+
+- receipts: `total_amount_kopecks`, `cost_kopecks`;
+- payments and balances: `amount_kopecks`.
+
+Backend хранит новые денежные значения в MongoDB как integer kopecks. Старые decimal-string записи читаются совместимо во время rollout, но новые request/response contracts не используют `double`, `Decimal` или рублевые строки.
+
 ## Pagination
 
 List endpoints `GET /api/events`, `GET /api/users`, `GET /api/events/{id}/receipts` и `GET /api/events/{id}/payments` принимают query params:
