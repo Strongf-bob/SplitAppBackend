@@ -58,10 +58,10 @@ These items belong to `/Users/strongf/Developer/SplitApp Yandex/SplitApp` and we
 - Remove the dead `.swift` file with a dot-only name.
 - Either use the CoreData `Payment` mapping or remove unused persistence code.
 - Normalize server error presentation instead of showing raw alerts.
-- Add frontend pagination once backend pagination contracts are designed.
+- Update frontend list decoders and pagination UI for the backend `items`/`limit`/`offset`/`total` envelope.
 
 ## Notes
-- The backend still does not implement pagination for existing list endpoints. That should be designed as a separate API contract change because it affects iOS data flows.
+- Backend pagination is implemented for `GET /api/events`, `GET /api/users`, `GET /api/events/{id}/receipts`, and `GET /api/events/{id}/payments`; frontend list clients still need to consume the paginated response envelope.
 - MongoDB transactional event deletion requires transaction support in the deployed MongoDB topology.
 - `/api/metrics` is part of the backend API and should be protected by deployment/network policy if the service is publicly reachable.
 - `GET /api/users` now returns only the current user and users sharing an active event with the caller, not the whole user table.

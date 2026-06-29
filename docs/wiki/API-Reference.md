@@ -33,7 +33,7 @@ Authorization: Bearer <access_token>
 
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
-| `GET` | `/api/users` | Список пользователей, видимых текущему actor. | Возвращает current user и пользователей из общих active events. |
+| `GET` | `/api/users` | Список пользователей, видимых текущему actor. | Paginated; возвращает current user и пользователей из общих active events. |
 | `PATCH` | `/api/users/me` | Обновить профиль текущего пользователя. | `name`, `email`, `avatar_url`. |
 
 ## Events
@@ -41,7 +41,7 @@ Authorization: Bearer <access_token>
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
 | `POST` | `/api/events` | Создать событие. | Creator становится owner события. |
-| `GET` | `/api/events` | Получить события, видимые caller. | Caller должен быть creator или participant. |
+| `GET` | `/api/events` | Получить события, видимые caller. | Paginated; caller должен быть creator или participant. |
 | `GET` | `/api/events/{id}` | Получить детали события. | Требуется membership. |
 | `PATCH` | `/api/events/{id}` | Обновить name или `is_closed`. | Creator-only management. |
 | `DELETE` | `/api/events/{id}` | Удалить событие. | Creator-only; service удаляет связанные receipts/payments. |
@@ -53,7 +53,7 @@ Authorization: Bearer <access_token>
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
 | `POST` | `/api/events/{id}/receipts` | Создать чек с items и shares. | Требуется membership; closed event запрещает mutation. |
-| `GET` | `/api/events/{id}/receipts` | Список чеков события. | Требуется membership. |
+| `GET` | `/api/events/{id}/receipts` | Список чеков события. | Paginated; требуется membership. |
 | `GET` | `/api/receipts/{id}` | Детали чека. | Требуется membership через событие. |
 | `PATCH` | `/api/receipts/{id}` | Обновить чек. | Требуется membership; closed event запрещает mutation. |
 | `DELETE` | `/api/receipts/{id}` | Удалить чек. | Требуется authorization; delete behavior реализован в service layer. |
@@ -72,7 +72,7 @@ Authorization: Bearer <access_token>
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
 | `POST` | `/api/events/{id}/payments` | Создать payment declaration. | Sender должен быть authenticated user. |
-| `GET` | `/api/events/{id}/payments` | Список платежей события. | Требуется membership. |
+| `GET` | `/api/events/{id}/payments` | Список платежей события. | Paginated; требуется membership. |
 | `PATCH` | `/api/payments/{id}` | Подтвердить или обновить payment state. | Confirmation restricted to receiver. |
 | `DELETE` | `/api/payments/{id}` | Удалить unconfirmed payment. | Для cleanup ошибочных declarations. |
 
@@ -95,3 +95,22 @@ Authorization: Bearer <access_token>
 
 Unexpected failures должны возвращать generic `500`, а полные детали должны попадать только в server logs.
 
+## Pagination
+
+List endpoints `GET /api/events`, `GET /api/users`, `GET /api/events/{id}/receipts` и `GET /api/events/{id}/payments` принимают query params:
+
+- `limit`: `1..100`, default `50`.
+- `offset`: `>= 0`, default `0`.
+
+Ответ:
+
+```json
+{
+  "items": [],
+  "limit": 50,
+  "offset": 0,
+  "total": 0
+}
+```
+
+`total` - количество записей, подходящих под authorization/filter rules до применения `limit` и `offset`.

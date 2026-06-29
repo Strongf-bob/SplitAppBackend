@@ -80,15 +80,16 @@ paths:
       tags: [Users]
       summary: List users visible to the current user
       operationId: listUsers
+      parameters:
+        - $ref: "#/components/parameters/LimitQueryParam"
+        - $ref: "#/components/parameters/OffsetQueryParam"
       responses:
         "200":
-          description: Current user and users sharing at least one event with the caller, sorted by name
+          description: Paginated current user and users sharing at least one event with the caller, sorted by name
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/UserPage"
 
   /api/metrics:
     get:
@@ -152,15 +153,16 @@ paths:
       summary: List events for the authenticated user
       operationId: listEvents
       description: Returns events where the caller is a participant or creator.
+      parameters:
+        - $ref: "#/components/parameters/LimitQueryParam"
+        - $ref: "#/components/parameters/OffsetQueryParam"
       responses:
         "200":
-          description: Event list
+          description: Paginated event list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Event"
+                $ref: "#/components/schemas/EventPage"
         "403":
           $ref: "#/components/responses/Forbidden"
 
@@ -304,15 +306,15 @@ paths:
       operationId: listReceiptsByEvent
       parameters:
         - $ref: "#/components/parameters/IdPathParam"
+        - $ref: "#/components/parameters/LimitQueryParam"
+        - $ref: "#/components/parameters/OffsetQueryParam"
       responses:
         "200":
-          description: Receipt list
+          description: Paginated receipt list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Receipt"
+                $ref: "#/components/schemas/ReceiptPage"
         "403":
           $ref: "#/components/responses/Forbidden"
 
@@ -498,15 +500,15 @@ paths:
       operationId: listPaymentsByEvent
       parameters:
         - $ref: "#/components/parameters/IdPathParam"
+        - $ref: "#/components/parameters/LimitQueryParam"
+        - $ref: "#/components/parameters/OffsetQueryParam"
       responses:
         "200":
-          description: Payment list
+          description: Paginated payment list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Payment"
+                $ref: "#/components/schemas/PaymentPage"
         "403":
           $ref: "#/components/responses/Forbidden"
 
@@ -570,6 +572,25 @@ components:
       schema:
         type: string
         format: uuid
+    LimitQueryParam:
+      in: query
+      name: limit
+      required: false
+      description: Maximum number of items to return.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    OffsetQueryParam:
+      in: query
+      name: offset
+      required: false
+      description: Number of matching items to skip before returning the page.
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
 
   responses:
     Unauthorized:
@@ -624,6 +645,26 @@ components:
           format: uri
           nullable: true
       required: [id, name, phone_number]
+
+    UserPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        offset:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+          description: Total matching records before limit and offset are applied.
+      required: [items, limit, offset, total]
 
     UpdateUserRequest:
       type: object
@@ -714,6 +755,26 @@ components:
           format: date-time
       required:
         [id, creator_id, name, is_closed, users, created_at, updated_at]
+
+    EventPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Event"
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        offset:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+          description: Total matching records before limit and offset are applied.
+      required: [items, limit, offset, total]
 
     CreateEventRequest:
       type: object
@@ -855,6 +916,26 @@ components:
           items
         ]
 
+    ReceiptPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Receipt"
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        offset:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+          description: Total matching records before limit and offset are applied.
+      required: [items, limit, offset, total]
+
     ReceiptImageUploadResponse:
       type: object
       properties:
@@ -931,6 +1012,26 @@ components:
           type: string
           format: date-time
       required: [id, event_id, sender_id, receiver_id, amount, confirmed, created_at]
+
+    PaymentPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payment"
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        offset:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+          description: Total matching records before limit and offset are applied.
+      required: [items, limit, offset, total]
 
     CreatePaymentRequest:
       type: object
