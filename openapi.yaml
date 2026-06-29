@@ -95,6 +95,7 @@ paths:
     get:
       tags: [Health]
       summary: Export Prometheus metrics
+      description: Operations endpoint intended for internal Prometheus scraping inside the deployment network. Do not expose it publicly.
       operationId: getMetrics
       responses:
         "200":

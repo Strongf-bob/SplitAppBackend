@@ -5,6 +5,7 @@ from urllib.parse import unquote, urlparse
 from fastapi import HTTPException
 from pymongo.database import Database
 
+from app.core.monitoring import track_service_operation
 from app.services.access import assert_event_access, assert_event_open, get_receipt_or_404
 from app.services.common import new_uuid, utc_now
 
@@ -29,7 +30,7 @@ def _object_key_from_url(bucket: str, image_url: str | None) -> str | None:
     path = unquote(parsed.path).lstrip("/")
     prefix = f"{bucket}/"
     if path.startswith(prefix):
-        return path[len(prefix):]
+        return path[len(prefix) :]
     return None
 
 
@@ -37,6 +38,7 @@ def _receipt_image_key(receipt: dict, bucket: str) -> str | None:
     return receipt.get("image_key") or _object_key_from_url(bucket, receipt.get("image_url"))
 
 
+@track_service_operation("receipt_images.upload")
 def upload_receipt_image(
     db: Database,
     s3: Any,
@@ -86,6 +88,7 @@ def upload_receipt_image(
     return {"image_url": image_url}
 
 
+@track_service_operation("receipt_images.delete")
 def delete_receipt_image(db: Database, s3: Any, receipt_id: str, actor_user_id: str) -> None:
     receipt = get_receipt_or_404(db, receipt_id)
     event = assert_event_access(db, receipt["event_id"], actor_user_id)
@@ -109,6 +112,7 @@ def delete_receipt_image(db: Database, s3: Any, receipt_id: str, actor_user_id: 
     )
 
 
+@track_service_operation("receipt_images.presign")
 def get_receipt_image_presigned_url(
     db: Database,
     s3: Any,

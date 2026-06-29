@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from pymongo import MongoClient
 from pymongo.database import Database
 
+from app.core.monitoring import monitor_db_operation
+
 
 def load_env_file(path: str = ".env") -> None:
     env_path = Path(path)
@@ -21,11 +23,7 @@ def load_env_file(path: str = ".env") -> None:
         key = key.strip()
         value = value.strip()
 
-        if (
-            len(value) >= 2
-            and value[0] == value[-1]
-            and value[0] in {'"', "'"}
-        ):
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
             value = value[1:-1]
 
         os.environ.setdefault(key, value)
@@ -49,9 +47,7 @@ def build_mongodb_uri() -> str:
         raise ValueError("Set both MONGODB_USER and MONGODB_PASSWORD, or neither.")
 
     if mongodb_hosts:
-        hosts = ",".join(
-            host.strip() for host in mongodb_hosts.split(",") if host.strip()
-        )
+        hosts = ",".join(host.strip() for host in mongodb_hosts.split(",") if host.strip())
     else:
         hosts = f"{mongodb_host}:{mongodb_port}"
 
@@ -90,7 +86,8 @@ def connect_mongodb(app: FastAPI) -> None:
         client_kwargs["tlsCAFile"] = mongodb_tls_ca_file
 
     mongo_client = MongoClient(mongodb_uri, **client_kwargs)
-    mongo_client.admin.command("ping")
+    with monitor_db_operation("mongo.startup_ping"):
+        mongo_client.admin.command("ping")
 
     mongodb_db_name = os.getenv("MONGODB_DB_NAME", "splitapp")
     app.state.mongo_client = mongo_client
@@ -106,5 +103,5 @@ def get_db(app: FastAPI) -> Database:
 
 
 def ping_mongodb(app: FastAPI) -> None:
-    get_db(app).command("ping")
-
+    with monitor_db_operation("mongo.health_ping"):
+        get_db(app).command("ping")

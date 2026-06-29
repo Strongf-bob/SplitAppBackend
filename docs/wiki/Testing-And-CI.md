@@ -48,6 +48,7 @@ Workflow source:
 - Closed-event behavior.
 - Storage deletion/replacement behavior.
 - CORS, logging или monitoring behavior.
+- Docker Compose observability config or deploy port preflight.
 
 ## Backend change checklist
 
@@ -71,4 +72,3 @@ Workflow source:
 - Не раскрывают ли ошибки sensitive internal state?
 - Совпадает ли OpenAPI contract с кодом?
 - Задокументированы ли frontend follow-ups, если iOS behavior должен измениться?
-
