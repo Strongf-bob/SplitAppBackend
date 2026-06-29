@@ -58,12 +58,22 @@ class EventUpdate(BaseModel):
     is_closed: bool | None = None
 
 
+class EventMembership(BaseModel):
+    id: UUID
+    event_id: UUID
+    user_id: UUID
+    role: str
+    status: str
+    joined_at: datetime
+    removed_at: datetime | None = None
+
+
 class Event(BaseModel):
     id: UUID
     creator_id: UUID
     name: str
     is_closed: bool
-    users: list[UUID]
+    participants: list[EventMembership]
     created_at: datetime
     updated_at: datetime
 

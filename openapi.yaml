@@ -1523,13 +1523,12 @@
             "type": "boolean",
             "title": "Is Closed"
           },
-          "users": {
+          "participants": {
             "items": {
-              "type": "string",
-              "format": "uuid"
+              "$ref": "#/components/schemas/EventMembership"
             },
             "type": "array",
-            "title": "Users"
+            "title": "Participants"
           },
           "created_at": {
             "type": "string",
@@ -1548,7 +1547,7 @@
           "creator_id",
           "name",
           "is_closed",
-          "users",
+          "participants",
           "created_at",
           "updated_at"
         ],
@@ -1597,6 +1596,60 @@
           "name"
         ],
         "title": "EventCreate"
+      },
+      "EventMembership": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "joined_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Joined At"
+          },
+          "removed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "user_id",
+          "role",
+          "status",
+          "joined_at"
+        ],
+        "title": "EventMembership"
       },
       "EventPage": {
         "properties": {
