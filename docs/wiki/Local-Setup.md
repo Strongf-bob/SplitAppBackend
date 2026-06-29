@@ -1,38 +1,38 @@
-# Local Setup
+# Локальный запуск
 
-## Requirements
+## Требования
 
 - Python 3.
-- MongoDB reachable from the local machine.
-- A `.env` file with MongoDB settings.
-- Optional S3-compatible object storage variables if testing receipt image uploads against real storage.
+- Доступная MongoDB.
+- `.env` с MongoDB-настройками.
+- Optional S3-compatible object storage variables, если нужно тестировать загрузку изображений чеков на реальном storage.
 
-## Install Dependencies
+## Установка зависимостей
 
 ```bash
 make setup
 ```
 
-This creates `.venv` and installs `requirements.txt`.
+Команда создает `.venv` и ставит зависимости из `requirements.txt`.
 
-## Configure Environment
+## Environment
 
-Create a local env file:
+Создать локальный env-файл:
 
 ```bash
 cp .env.example .env
 ```
 
-Then fill MongoDB settings. The backend supports either a full URI or separate values.
+Дальше заполнить MongoDB-настройки.
 
-### Option A: Full MongoDB URI
+### Вариант A: полный MongoDB URI
 
 ```env
 MONGODB_URI=mongodb://username:password@localhost:27017/?authSource=admin
 MONGODB_DB_NAME=splitapp
 ```
 
-### Option B: Separate MongoDB Values
+### Вариант B: отдельные MongoDB значения
 
 ```env
 MONGODB_HOST=localhost
@@ -43,7 +43,7 @@ MONGODB_AUTH_SOURCE=admin
 MONGODB_DB_NAME=splitapp
 ```
 
-### Option C: Managed MongoDB With TLS
+### Вариант C: managed MongoDB с TLS
 
 ```env
 MONGODB_HOSTS=rc1b-4ukf7rtvtpealt1c.mdb.yandexcloud.net:27018
@@ -56,7 +56,7 @@ MONGODB_TLS=true
 MONGODB_TLS_CA_FILE=/home/<your-home>/.mongodb/root.crt
 ```
 
-## Run Development Server
+## Запуск dev-сервера
 
 ```bash
 make run-dev
@@ -66,13 +66,13 @@ Default URL:
 
 - `http://localhost:8000`
 
-Useful endpoints:
+Полезные endpoints:
 
 - `POST /api/login`
 - `GET /api/health/db`
 - `GET /api/metrics`
 
-## Manual Run
+## Ручной запуск без Makefile
 
 ```bash
 python3 -m venv .venv
@@ -81,7 +81,7 @@ pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-## Background Run For Quick Checks
+## Background-запуск для быстрых проверок
 
 ```bash
 make run
@@ -90,13 +90,13 @@ make logs
 make stop
 ```
 
-Override host or port:
+Переопределить host/port:
 
 ```bash
 PORT=8080 HOST=0.0.0.0 make run
 ```
 
-## Local iOS Connection
+## Подключение iOS к локальному backend
 
-The iOS client currently uses `https://splitapp.tech` in `APIClient`. For local backend testing, the iOS repository should expose a development base URL switch instead of hard-coding production. See [iOS Frontend Integration](iOS-Frontend-Integration).
+iOS-клиент сейчас использует `https://splitapp.tech` в `APIClient`. Для локальной backend-разработки frontend-репозиторию нужен development base URL switch, чтобы не менять production URL руками в коде. Подробнее: [Интеграция с iOS](iOS-Frontend-Integration).
 

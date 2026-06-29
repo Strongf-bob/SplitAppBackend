@@ -1,41 +1,41 @@
-# Domain Flows
+# Доменные сценарии
 
-## Main Expense Flow
+## Основной expense flow
 
-1. User logs in through Yandex in the iOS app.
-2. iOS sends Yandex OAuth token to `POST /api/login`.
-3. Backend returns app access and refresh tokens.
-4. User creates or opens an event.
-5. Event creator adds participants.
-6. User creates receipt with payer, total amount, items, and item shares.
-7. Backend validates event membership, closed-event state, and share payloads.
-8. Backend stores receipt and recalculates balances when requested.
-9. iOS reads `GET /api/events/{id}/balances`.
-10. Debtor creates payment declaration.
-11. Receiver confirms payment.
+1. Пользователь логинится через Yandex в iOS-приложении.
+2. iOS отправляет Yandex OAuth token в `POST /api/login`.
+3. Backend возвращает app access token и refresh token.
+4. Пользователь создает или открывает событие.
+5. Creator события добавляет участников.
+6. Пользователь создает чек с payer, total amount, items и item shares.
+7. Backend валидирует membership, closed-event state и share payload.
+8. Backend сохраняет чек.
+9. iOS читает `GET /api/events/{id}/balances`.
+10. Debtor создает payment declaration.
+11. Receiver подтверждает payment.
 
-## Event Lifecycle
+## Lifecycle события
 
 | State | Backend behavior |
 | --- | --- |
-| Open event | Receipts and payments can be created by authorized members. |
-| Closed event | Financial mutations are blocked. Existing data can still be read by authorized members. |
-| Deleted event | Event delete is creator-only and removes related event data through service logic. |
+| Open event | Authorized members могут создавать receipts/payments. |
+| Closed event | Financial mutations заблокированы, чтение для members остается доступным. |
+| Deleted event | Удаление creator-only и очищает связанные event data через service logic. |
 
-## Receipt Lifecycle
+## Lifecycle чека
 
 | Operation | Backend rule |
 | --- | --- |
-| Create | Caller must be an event member. Payer and share users must be valid for the event. |
-| Update | Caller must be an event member. Closed events reject financial mutation. |
-| Delete | Caller must be authorized for the event. Security-sensitive deletes should stay soft-delete unless documented otherwise. |
-| Image upload | JPEG only, multipart form-data, private object storage. |
-| Image read | Use presigned URL endpoint for temporary access. |
-| Image replace/delete | Storage operation must explicitly handle old object deletion or replacement behavior. |
+| Create | Caller должен быть event member. Payer и share users должны быть валидны для event. |
+| Update | Caller должен быть event member. Closed events отклоняют financial mutation. |
+| Delete | Caller должен быть authorized для event. Security-sensitive deletes должны быть soft deletes, если нет документированного исключения. |
+| Image upload | Только JPEG, multipart form-data, private object storage. |
+| Image read | Использовать presigned URL endpoint для временного доступа. |
+| Image replace/delete | Storage operation должна удалять или заменять старый object state. |
 
-## Balance Model
+## Balance model
 
-`GET /api/events/{id}/balances` returns a list of debts:
+`GET /api/events/{id}/balances` возвращает список долгов:
 
 ```json
 [
@@ -48,29 +48,29 @@
 ]
 ```
 
-Interpretation:
+Интерпретация:
 
-- `debitor_id` owes money.
-- `creditor_id` should receive money.
-- `amount` is decimal money value.
+- `debitor_id` должен деньги.
+- `creditor_id` должен получить деньги.
+- `amount` - decimal money value.
 
-## Payment Confirmation Flow
+## Payment confirmation flow
 
-1. Debtor creates a payment declaration with `POST /api/events/{id}/payments`.
-2. Backend verifies the authenticated actor is the sender.
-3. Receiver sees the payment in event payment list.
-4. Receiver confirms through `PATCH /api/payments/{id}`.
-5. Backend verifies the authenticated actor is the receiver.
+1. Debtor создает payment declaration через `POST /api/events/{id}/payments`.
+2. Backend проверяет, что authenticated actor является sender.
+3. Receiver видит payment в списке платежей события.
+4. Receiver подтверждает через `PATCH /api/payments/{id}`.
+5. Backend проверяет, что authenticated actor является receiver.
 
-This prevents sender impersonation and prevents a sender from confirming their own declaration as received.
+Это защищает от sender impersonation и от ситуации, когда sender сам подтверждает свой платеж как полученный.
 
-## Closed Event Rule
+## Правило closed event
 
-When `is_closed=true`, the backend should reject operations that change event finances:
+Когда `is_closed=true`, backend должен отклонять операции, меняющие финансы события:
 
-- Create/update receipt.
-- Create payment.
-- Other future money-changing operations.
+- Создание или обновление чека.
+- Создание payment.
+- Любые будущие money-changing operations.
 
-Read endpoints should still work for event members.
+Read endpoints должны продолжать работать для event members.
 

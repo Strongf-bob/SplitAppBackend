@@ -1,8 +1,8 @@
-# Operations And Deployment
+# Операции и деплой
 
-## Production Runtime
+## Production runtime
 
-Production deployment should use the systemd unit in:
+Production deployment должен использовать systemd unit:
 
 - [deploy/splitapp-backend.service](https://github.com/Strongf-bob/SplitAppBackend/blob/main/deploy/splitapp-backend.service)
 
@@ -14,7 +14,7 @@ Recommended env file:
 
 - `/etc/splitapp/backend.env`
 
-## Deploy Steps
+## Deploy steps
 
 ```bash
 sudo cp deploy/splitapp-backend.service /etc/systemd/system/splitapp-backend.service
@@ -29,13 +29,13 @@ Logs:
 journalctl -u splitapp-backend -f
 ```
 
-## GitHub Actions Deployment
+## GitHub Actions deployment
 
-The main CI/CD workflow lives at:
+Основной CI/CD workflow:
 
 - [.github/workflows/ci.yml](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.github/workflows/ci.yml)
 
-On push to `main`, it runs lint, tests, and then deploys through SSH when production secrets are configured.
+На push в `main` workflow запускает lint, tests и затем deploy over SSH, если настроены production secrets.
 
 Required deployment secrets:
 
@@ -45,14 +45,14 @@ Required deployment secrets:
 - `DEPLOY_PATH`
 - Optional: `DEPLOY_PORT`
 
-## Runtime Environment Variables
+## Runtime environment variables
 
 MongoDB:
 
 - `MONGODB_URI`
 - `MONGODB_DB_NAME`
-- Or separate host/user/password/auth source values.
-- TLS and replica set variables for managed clusters.
+- или отдельные host/user/password/auth source values.
+- TLS и replica set variables для managed clusters.
 
 Object storage:
 
@@ -62,28 +62,28 @@ Object storage:
 - `YC_OBJECT_STORAGE_ACCESS_KEY_ID`
 - `YC_OBJECT_STORAGE_SECRET_ACCESS_KEY`
 
-Security and app behavior:
+Security и app behavior:
 
-- JWT/access token settings used by token helpers.
+- JWT/access token settings, используемые token helpers.
 - `CORS_ALLOWED_ORIGINS`
 - Optional Sentry/error reporting configuration.
 
 ## Metrics
 
-Prometheus metrics are exposed at:
+Prometheus metrics:
 
 - `GET /api/metrics`
 
-If the backend is publicly reachable, protect metrics with deployment or network policy.
+Если backend публично доступен, metrics нужно закрыть deployment или network policy.
 
 ## Logs
 
-The request middleware writes structured request completion logs with request ID, method, path, status, and duration. Unexpected exceptions are logged internally and returned to clients as generic errors.
+Request middleware пишет structured request completion logs с request ID, method, path, status и duration. Unexpected exceptions логируются внутри сервера и возвращаются клиентам как generic errors.
 
-## Operational Checks
+## Operational checks
 
-- `GET /api/health/db` should confirm MongoDB connectivity.
-- `GET /api/metrics` should return Prometheus text exposition.
-- `systemctl status splitapp-backend` should be healthy after deploy.
-- `journalctl -u splitapp-backend -f` should show request logs and startup failures.
+- `GET /api/health/db` должен подтверждать MongoDB connectivity.
+- `GET /api/metrics` должен возвращать Prometheus text exposition.
+- `systemctl status splitapp-backend` должен быть healthy после deploy.
+- `journalctl -u splitapp-backend -f` должен показывать request logs и startup failures.
 

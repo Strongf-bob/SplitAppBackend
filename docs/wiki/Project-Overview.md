@@ -1,57 +1,59 @@
-# Project Overview
+# Обзор проекта
 
-## Purpose
+## Назначение
 
-SplitAppBackend provides the server-side API for splitting shared expenses. The iOS app should treat the backend as the source of truth for authenticated users, event membership, receipts, balances, payments, and receipt image storage.
+SplitAppBackend - серверная часть приложения SplitApp для разделения общих расходов. Backend отвечает за пользователей, авторизацию, события, чеки, расчет долгов, платежи, изображения чеков и API-контракт для iOS-приложения.
 
-## Runtime Stack
+Frontend не должен самостоятельно принимать решения по доступу к данным. Источник правды для membership, прав на операции, балансов и платежей - backend.
 
-- FastAPI app entrypoint: [app/main.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py)
-- Compatibility entrypoint: [main.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/main.py)
-- MongoDB connection and configuration: [app/core/db.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/db.py)
-- S3-compatible receipt image storage: [app/core/s3.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/s3.py)
-- JWT token helpers: [app/core/tokens.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/tokens.py)
-- Monitoring hooks: [app/core/monitoring.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/monitoring.py)
+## Runtime stack
 
-## Application Layers
+- FastAPI entrypoint: [app/main.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py)
+- Совместимый entrypoint: [main.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/main.py)
+- MongoDB config/connection: [app/core/db.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/db.py)
+- S3-compatible storage для изображений чеков: [app/core/s3.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/s3.py)
+- JWT/token helpers: [app/core/tokens.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/tokens.py)
+- Monitoring: [app/core/monitoring.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/monitoring.py)
 
-| Layer | Files | Responsibility |
+## Слои приложения
+
+| Слой | Файлы | Ответственность |
 | --- | --- | --- |
-| App wiring | `app/main.py` | FastAPI creation, routers, CORS, logging middleware, exception handler, lifecycle setup. |
-| Routers | `app/routers/*.py` | HTTP paths, request dependencies, response models. |
-| Schemas | `app/schemas.py` | Pydantic request and response models. |
-| Services | `app/services/*.py` | Business rules, authorization checks, persistence operations. |
+| App wiring | `app/main.py` | Создание FastAPI app, routers, CORS, logging middleware, exception handler, lifecycle setup. |
+| Routers | `app/routers/*.py` | HTTP paths, dependencies, response models. |
+| Schemas | `app/schemas.py` | Pydantic request/response models. |
+| Services | `app/services/*.py` | Бизнес-правила, authorization checks, работа с persistence. |
 | Core | `app/core/*.py` | Database, tokens, object storage, monitoring. |
-| Tests | `tests/*.py` | Regression coverage for auth, event access, money, receipts, payments, config, and service behavior. |
+| Tests | `tests/*.py` | Regression coverage для auth, events, money, receipts, payments, config и services. |
 
-## Router Map
+## Карта routers
 
 - `app/routers/auth.py` - `/api/login`, `/api/refresh`.
 - `app/routers/users.py` - `/api/users`, `/api/users/me`.
-- `app/routers/events.py` - events, participants, balances.
-- `app/routers/receipts.py` - receipts and receipt images.
-- `app/routers/payments.py` - payments.
-- `app/routers/health.py` - health and metrics.
+- `app/routers/events.py` - события, участники, балансы.
+- `app/routers/receipts.py` - чеки и изображения чеков.
+- `app/routers/payments.py` - платежи.
+- `app/routers/health.py` - health checks и metrics.
 
-## Main Data Concepts
+## Основные сущности
 
-| Concept | Meaning |
+| Сущность | Что означает |
 | --- | --- |
-| User | Authenticated person known to the backend. |
-| Event | Shared expense space. Users can see events only when they are creator or participant. |
-| Receipt | Expense inside an event. Contains items and split shares. |
-| Receipt item | One line in a receipt with cost and share assignments. |
-| Share item | User-specific fraction of a receipt item. |
-| Balance | Calculated debt edge from debtor to creditor for an event. |
-| Payment | Declaration that one user paid another user inside an event. |
+| User | Пользователь, известный backend после авторизации. |
+| Event | Пространство общих расходов. Пользователь видит событие, только если он creator или participant. |
+| Receipt | Расход внутри события. Содержит payer, total amount, items и shares. |
+| Receipt item | Строка чека с названием, стоимостью и распределением долей. |
+| Share item | Доля конкретного пользователя в позиции чека. |
+| Balance | Рассчитанный долг от debitor к creditor внутри события. |
+| Payment | Заявление, что один пользователь оплатил долг другому пользователю. |
 
-## Important Invariants
+## Важные инварианты
 
-- Every protected endpoint depends on the authenticated actor.
-- Client-supplied user IDs do not grant authorization by themselves.
-- Event membership gates reads and financial operations.
-- Event management is restricted to the event creator where required.
-- Closed events block financial mutations.
-- Receipt image storage is private; clients should use presigned URLs for temporary reads.
-- Money calculations use decimal values, not floats.
+- Каждый protected endpoint работает от authenticated actor.
+- Client-supplied user IDs не дают прав сами по себе.
+- Event membership ограничивает чтение и финансовые операции.
+- Event management restricted to creator там, где меняется состав участников или lifecycle события.
+- Closed events блокируют financial mutations.
+- Receipt image storage приватный; frontend должен получать временные presigned URLs.
+- Money calculations используют decimal values, не floats.
 

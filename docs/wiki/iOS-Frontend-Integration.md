@@ -1,18 +1,18 @@
-# iOS Frontend Integration
+# Интеграция с iOS
 
-This page tracks the backend contract used by the iOS app in [Strongf-bob/SplitApp](https://github.com/Strongf-bob/SplitApp). Backend work happens in this repository; iOS code changes belong in the separate frontend repository.
+Эта страница фиксирует backend-контракт для iOS-приложения в [Strongf-bob/SplitApp](https://github.com/Strongf-bob/SplitApp). Backend-изменения делаются в этом репозитории; iOS-изменения относятся к frontend-репозиторию.
 
-## Current iOS Network Shape
+## Текущая сеть в iOS
 
-The iOS app uses:
+iOS app использует:
 
-- `APIClient.shared` for network requests.
-- Endpoint structs under `SplitApp/Data/Network/Endpoints`.
-- Repository layer objects for events, receipts, users, balances, and payments.
-- `TokenStore` and Keychain-backed refresh-token storage.
-- Core Data for local caching in several data repositories.
+- `APIClient.shared` для network requests.
+- Endpoint structs в `SplitApp/Data/Network/Endpoints`.
+- Repository layer для events, receipts, users, balances и payments.
+- `TokenStore` и Keychain-backed refresh-token storage.
+- Core Data для local caching в части repositories.
 
-Relevant frontend files:
+Связанные frontend-файлы:
 
 - [`APIClient.swift`](https://github.com/Strongf-bob/SplitApp/blob/main/SplitApp/Core/Network/APIClient.swift)
 - [`EventEndpoints.swift`](https://github.com/Strongf-bob/SplitApp/blob/main/SplitApp/Data/Network/Endpoints/EventEndpoints.swift)
@@ -21,60 +21,60 @@ Relevant frontend files:
 - [`BalanceEndpoints.swift`](https://github.com/Strongf-bob/SplitApp/blob/main/SplitApp/Data/Network/Endpoints/BalanceEndpoints.swift)
 - [`UserEndpoints.swift`](https://github.com/Strongf-bob/SplitApp/blob/main/SplitApp/Data/Network/Endpoints/UserEndpoints.swift)
 
-## Endpoint Mapping
+## Endpoint mapping
 
 | iOS endpoint | Backend endpoint | Status |
 | --- | --- | --- |
-| `AuthUserEndpoint` | `POST /api/login` | Implemented. |
-| `RefreshTokenEndpoint` | `POST /api/refresh` | Implemented. |
-| `ListUsersEndpoint` | `GET /api/users` | Implemented, visibility-limited. |
-| `CreateEventEndpoint` | `POST /api/events` | Implemented. |
-| `ListEventsEndpoint` | `GET /api/events` | Implemented. |
-| `GetEventEndpoint` | `GET /api/events/{id}` | Implemented. |
-| `UpdateEventEndpoint` | `PATCH /api/events/{id}` | Implemented. |
-| `DeleteEventEndpoint` | `DELETE /api/events/{id}` | Implemented. |
-| `AddParticipantsEndpoint` | `POST /api/events/{id}/participants` | Implemented. |
-| `RemoveParticipantEndpoint` | `DELETE /api/events/{id}/participants/{user_id}` | Implemented. |
-| `CreateReceiptEndpoint` | `POST /api/events/{id}/receipts` | Implemented. |
-| `ListReceiptsEndpoint` | `GET /api/events/{id}/receipts` | Implemented. |
-| `UpdateReceiptEndpoint` | `PATCH /api/receipts/{id}` | Implemented. |
-| `DeleteReceiptEndpoint` | `DELETE /api/receipts/{id}` | Implemented. |
-| `UploadReceiptImageEndpoint` | `POST /api/receipts/{id}/image` | Implemented. |
-| `GetBalancesEndpoint` | `GET /api/events/{id}/balances` | Implemented. |
-| `CreatePaymentEndpoint` | `POST /api/events/{id}/payments` | Implemented. |
-| `ListPaymentsEndpoint` | `GET /api/events/{id}/payments` | Implemented. |
-| `UpdatePaymentEndpoint` | `PATCH /api/payments/{id}` | Implemented. |
+| `AuthUserEndpoint` | `POST /api/login` | Реализовано. |
+| `RefreshTokenEndpoint` | `POST /api/refresh` | Реализовано. |
+| `ListUsersEndpoint` | `GET /api/users` | Реализовано, visibility-limited. |
+| `CreateEventEndpoint` | `POST /api/events` | Реализовано. |
+| `ListEventsEndpoint` | `GET /api/events` | Реализовано. |
+| `GetEventEndpoint` | `GET /api/events/{id}` | Реализовано. |
+| `UpdateEventEndpoint` | `PATCH /api/events/{id}` | Реализовано. |
+| `DeleteEventEndpoint` | `DELETE /api/events/{id}` | Реализовано. |
+| `AddParticipantsEndpoint` | `POST /api/events/{id}/participants` | Реализовано. |
+| `RemoveParticipantEndpoint` | `DELETE /api/events/{id}/participants/{user_id}` | Реализовано. |
+| `CreateReceiptEndpoint` | `POST /api/events/{id}/receipts` | Реализовано. |
+| `ListReceiptsEndpoint` | `GET /api/events/{id}/receipts` | Реализовано. |
+| `UpdateReceiptEndpoint` | `PATCH /api/receipts/{id}` | Реализовано. |
+| `DeleteReceiptEndpoint` | `DELETE /api/receipts/{id}` | Реализовано. |
+| `UploadReceiptImageEndpoint` | `POST /api/receipts/{id}/image` | Реализовано. |
+| `GetBalancesEndpoint` | `GET /api/events/{id}/balances` | Реализовано. |
+| `CreatePaymentEndpoint` | `POST /api/events/{id}/payments` | Реализовано. |
+| `ListPaymentsEndpoint` | `GET /api/events/{id}/payments` | Реализовано. |
+| `UpdatePaymentEndpoint` | `PATCH /api/payments/{id}` | Реализовано. |
 
-## Backend Endpoints Not Yet Fully Reflected In iOS Endpoint Files
+## Backend endpoints, которые еще стоит явно отразить во frontend
 
 | Backend endpoint | Frontend follow-up |
 | --- | --- |
-| `GET /api/receipts/{id}` | Add a dedicated receipt detail endpoint if screens need a direct detail fetch. |
-| `DELETE /api/receipts/{id}/image` | Add image delete flow when users remove or replace receipt photos. |
-| `GET /api/receipts/{id}/image/presigned-url` | Use this for private image reads instead of storing long-lived public URLs. |
-| `PATCH /api/users/me` | Add profile editing flow if the app allows profile updates. |
-| `DELETE /api/payments/{id}` | Add cleanup flow for unconfirmed mistaken payments. |
-| `GET /api/metrics` | Do not call from iOS; operations endpoint only. |
+| `GET /api/receipts/{id}` | Добавить receipt detail endpoint, если экрану нужен прямой detail fetch. |
+| `DELETE /api/receipts/{id}/image` | Добавить image delete flow при удалении или замене фото чека. |
+| `GET /api/receipts/{id}/image/presigned-url` | Использовать для private image reads вместо long-lived public URLs. |
+| `PATCH /api/users/me` | Добавить profile edit flow, если приложение позволяет менять профиль. |
+| `DELETE /api/payments/{id}` | Добавить cleanup flow для mistaken unconfirmed payments. |
+| `GET /api/metrics` | Не вызывать из iOS; это operations endpoint. |
 
-## Client Rules
+## Правила клиента
 
-- Always send `Authorization: Bearer <access_token>` except for login and refresh.
-- Store refresh token only in secure storage.
-- On `401`, refresh once and retry the original request.
-- Treat `403` as an authorization or membership failure, not as a networking retry.
-- Money values should be decoded as decimal-safe values.
-- Receipt image upload must use multipart form-data with JPEG content.
-- For receipt images, prefer presigned URLs from the backend.
-- Do not trust local cached membership for authorization decisions; backend remains authoritative.
+- Всегда отправлять `Authorization: Bearer <access_token>`, кроме login и refresh.
+- Хранить refresh token только в secure storage.
+- На `401` сделать refresh один раз и повторить исходный request.
+- `403` трактовать как authorization/membership failure, а не как повод для сетевого retry.
+- Money values декодировать decimal-safe способом.
+- Receipt image upload делать multipart form-data с JPEG.
+- Для чтения изображений чеков использовать presigned URLs от backend.
+- Не доверять local cached membership для authorization; backend остается authoritative.
 
-## Known Frontend Follow-Ups
+## Известные frontend follow-ups
 
-These belong to `/Users/strongf/Developer/SplitApp Yandex/SplitApp`:
+Это относится к `/Users/strongf/Developer/SplitApp Yandex/SplitApp`:
 
-- Keep local event and receipt models aligned with backend DTOs.
-- Add endpoint support for receipt detail, receipt image deletion, presigned receipt image reads, profile updates, and payment deletion.
-- Ensure local development can switch API base URL away from production `https://splitapp.tech`.
-- Keep `FriendsView` and settlement UI wired to backend balances and payments.
-- Normalize server error presentation for user-facing alerts.
-- Add frontend pagination behavior once backend pagination contracts are designed.
+- Держать local event/receipt models синхронными с backend DTO.
+- Добавить endpoint support для receipt detail, receipt image deletion, presigned receipt image reads, profile updates и payment deletion.
+- Сделать переключение API base URL для local development вместо hard-coded production `https://splitapp.tech`.
+- Держать `FriendsView` и settlement UI привязанными к backend balances/payments.
+- Нормализовать server error presentation для user-facing alerts.
+- Добавить frontend pagination behavior после проектирования backend pagination contracts.
 
