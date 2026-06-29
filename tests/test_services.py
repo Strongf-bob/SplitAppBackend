@@ -596,6 +596,125 @@ def test_payment_create_rejects_idempotency_key_reuse_with_different_payload(db)
         raise AssertionError("Expected idempotency key reuse with different payload to fail")
 
 
+def test_payment_request_mark_paid_confirm_and_balance_impact(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    request = payments.create_payment_request(
+        db,
+        EVENT_ID,
+        schemas.PaymentRequestCreate(
+            debtor_id=USER_B,
+            creditor_id=USER_A,
+            amount_kopecks=3000,
+            note="Dinner share",
+        ),
+        USER_A,
+        idempotency_key="request-1",
+    )
+
+    repeated_request = payments.create_payment_request(
+        db,
+        EVENT_ID,
+        schemas.PaymentRequestCreate(
+            debtor_id=USER_B,
+            creditor_id=USER_A,
+            amount_kopecks=3000,
+            note="Dinner share",
+        ),
+        USER_A,
+        idempotency_key="request-1",
+    )
+    payment = payments.mark_payment_request_paid(
+        db, request["id"], USER_B, idempotency_key="mark-paid-1"
+    )
+    repeated_payment = payments.mark_payment_request_paid(
+        db, request["id"], USER_B, idempotency_key="mark-paid-1"
+    )
+
+    assert repeated_request == request
+    assert repeated_payment == payment
+    assert payment["sender_id"] == USER_B
+    assert payment["receiver_id"] == USER_A
+    assert payment["status"] == "pending"
+    assert balances.get_event_balances(db, EVENT_ID, USER_A)[0]["amount_kopecks"] == 5000
+
+    confirmed = payments.confirm_payment(db, payment["id"], USER_A)
+
+    assert confirmed["status"] == "confirmed"
+    assert confirmed["confirmed"] is True
+    assert db.payment_requests.find_one({"id": request["id"]})["status"] == "confirmed"
+    assert balances.get_event_balances(db, EVENT_ID, USER_A)[0]["amount_kopecks"] == 2000
+
+
+def test_payment_request_reject_flow_does_not_reduce_balance(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    request = payments.create_payment_request(
+        db,
+        EVENT_ID,
+        schemas.PaymentRequestCreate(debtor_id=USER_B, creditor_id=USER_A, amount_kopecks=3000),
+        USER_A,
+        idempotency_key="request-1",
+    )
+    payment = payments.mark_payment_request_paid(
+        db, request["id"], USER_B, idempotency_key="mark-paid-1"
+    )
+
+    rejected = payments.reject_payment(db, payment["id"], USER_A)
+
+    assert rejected["status"] == "rejected"
+    assert rejected["confirmed"] is False
+    assert db.payment_requests.find_one({"id": request["id"]})["status"] == "rejected"
+    assert balances.get_event_balances(db, EVENT_ID, USER_A)[0]["amount_kopecks"] == 5000
+
+
+def test_payment_request_requires_creditor_actor_and_debtor_mark_paid(db):
+    seed_event(db)
+
+    try:
+        payments.create_payment_request(
+            db,
+            EVENT_ID,
+            schemas.PaymentRequestCreate(debtor_id=USER_B, creditor_id=USER_A, amount_kopecks=3000),
+            USER_B,
+        )
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-creditor payment request creation to fail")
+
+    request = payments.create_payment_request(
+        db,
+        EVENT_ID,
+        schemas.PaymentRequestCreate(debtor_id=USER_B, creditor_id=USER_A, amount_kopecks=3000),
+        USER_A,
+    )
+    try:
+        payments.mark_payment_request_paid(db, request["id"], USER_A)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-debtor mark-paid to fail")
+
+
+def test_only_payment_receiver_can_confirm_or_reject_payment(db):
+    seed_event(db)
+    payment = payments.create_payment(db, EVENT_ID, payment_payload(), USER_A)
+
+    for action in (
+        lambda: payments.confirm_payment(db, payment["id"], USER_A),
+        lambda: payments.reject_payment(db, payment["id"], USER_A),
+    ):
+        try:
+            action()
+        except Exception as exc:
+            assert_status(exc, 403)
+        else:
+            raise AssertionError("Expected sender payment resolution to fail")
+
+
 def test_list_payments_returns_paginated_active_page(db):
     seed_event(db)
     base_time = datetime(2026, 1, 1, tzinfo=UTC)

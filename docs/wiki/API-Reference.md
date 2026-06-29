@@ -81,6 +81,11 @@ Events return `participants` as membership records with `role` (`creator`, `memb
 | --- | --- | --- | --- |
 | `POST` | `/api/events/{id}/payments` | Создать payment declaration. | Sender должен быть authenticated user. |
 | `GET` | `/api/events/{id}/payments` | Список платежей события. | Paginated; требуется membership. |
+| `POST` | `/api/events/{id}/payment-requests` | Создать просьбу оплатить. | Creditor должен быть authenticated user; нужен `Idempotency-Key`. |
+| `GET` | `/api/events/{id}/payment-requests` | Список просьб оплатить. | Paginated; требуется membership. |
+| `POST` | `/api/payment-requests/{id}/mark-paid` | Debtor нажимает "я оплатил". | Создает pending payment; нужен `Idempotency-Key`. |
+| `POST` | `/api/payments/{id}/confirm` | Receiver подтверждает оплату. | Только confirmed payments уменьшают balances. |
+| `POST` | `/api/payments/{id}/reject` | Receiver отклоняет оплату. | Rejected payments не влияют на balances. |
 | `PATCH` | `/api/payments/{id}` | Подтвердить или обновить payment state. | Confirmation restricted to receiver. |
 | `DELETE` | `/api/payments/{id}` | Удалить unconfirmed payment. | Для cleanup ошибочных declarations. |
 

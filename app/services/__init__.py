@@ -15,8 +15,13 @@ from app.services.events import (
 )
 from app.services.indexes import ensure_indexes
 from app.services.payments import (
+    confirm_payment,
     create_payment,
+    create_payment_request,
+    list_payment_requests_by_event,
     list_payments_by_event,
+    mark_payment_request_paid,
+    reject_payment,
     update_payment,
 )
 from app.services.receipt_image import upload_receipt_image
@@ -31,23 +36,28 @@ from app.services.users import list_users
 __all__ = [
     "add_participants",
     "accept_event_invite",
+    "confirm_payment",
+    "confirm_receipt",
     "create_event",
     "create_event_invite",
     "delete_event",
     "create_payment",
+    "create_payment_request",
     "create_receipt",
-    "confirm_receipt",
     "delete_receipt",
     "ensure_indexes",
     "get_event",
     "get_event_balance_explanations",
     "get_event_balances",
     "list_events",
+    "list_payment_requests_by_event",
     "list_payments_by_event",
     "list_receipts_by_event",
     "list_users",
     "login_with_yandex_oauth",
+    "mark_payment_request_paid",
     "preview_event_invite",
+    "reject_payment",
     "remove_participant",
     "revoke_event_invite",
     "rotate_refresh_token",

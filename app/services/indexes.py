@@ -18,6 +18,10 @@ def ensure_indexes(db: Database) -> None:
     db.receipts.create_index([("event_id", 1), ("created_at", -1)])
     db.payments.create_index("id", unique=True)
     db.payments.create_index([("event_id", 1), ("created_at", -1)])
+    db.payment_requests.create_index("id", unique=True)
+    db.payment_requests.create_index([("event_id", 1), ("created_at", -1)])
+    db.payment_requests.create_index([("debtor_id", 1), ("status", 1)])
+    db.payment_requests.create_index([("creditor_id", 1), ("status", 1)])
     db.idempotency_keys.create_index(
         [("actor_user_id", 1), ("scope", 1), ("key", 1)], unique=True
     )
