@@ -78,11 +78,11 @@ paths:
   /api/users:
     get:
       tags: [Users]
-      summary: List all users
+      summary: List users visible to the current user
       operationId: listUsers
       responses:
         "200":
-          description: All registered users, sorted by name
+          description: Current user and users sharing at least one event with the caller, sorted by name
           content:
             application/json:
               schema:
