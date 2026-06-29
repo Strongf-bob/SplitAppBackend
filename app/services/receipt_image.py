@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import HTTPException
 from pymongo.database import Database
 
-from app.services.access import assert_event_access, get_receipt_or_404
+from app.services.access import assert_event_access, assert_event_open, get_receipt_or_404
 from app.services.common import new_uuid, utc_now
 
 _JPEG_MAGIC = b"\xff\xd8\xff"
@@ -30,7 +30,8 @@ def upload_receipt_image(
     actor_user_id: str,
 ) -> dict[str, str]:
     receipt = get_receipt_or_404(db, receipt_id)
-    assert_event_access(db, receipt["event_id"], actor_user_id)
+    event = assert_event_access(db, receipt["event_id"], actor_user_id)
+    assert_event_open(event)
 
     if len(body) > _MAX_IMAGE_BYTES:
         raise HTTPException(status_code=413, detail="Image too large (max 10 MB).")

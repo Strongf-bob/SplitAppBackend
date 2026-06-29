@@ -15,6 +15,10 @@ from tests.conftest import (
 )
 
 
+def assert_status(exc: Exception, status_code: int) -> None:
+    assert getattr(exc, "status_code", None) == status_code
+
+
 def test_event_create_and_list_for_actor(db):
     from tests.conftest import seed_users
 
@@ -58,9 +62,47 @@ def test_event_access_blocks_non_members(db):
     try:
         receipts.list_receipts_by_event(db, EVENT_ID, USER_C)
     except Exception as exc:
-        assert getattr(exc, "status_code", None) == 403
+        assert_status(exc, 403)
     else:
         raise AssertionError("Expected non-member access to fail")
+
+
+def test_closed_event_blocks_mutations_but_allows_reads(db):
+    seed_event(db, is_closed=True)
+
+    assert receipts.list_receipts_by_event(db, EVENT_ID, USER_A) == []
+
+    for action in (
+        lambda: receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A),
+        lambda: payments.create_payment(db, EVENT_ID, payment_payload(), USER_A),
+        lambda: events.add_participants(
+            db,
+            EVENT_ID,
+            schemas.AddParticipantsRequest(user_ids=[USER_C]),
+            USER_A,
+        ),
+    ):
+        try:
+            action()
+        except Exception as exc:
+            assert_status(exc, 409)
+        else:
+            raise AssertionError("Expected closed event mutation to fail")
+
+
+def test_only_event_creator_can_close_or_reopen_event(db):
+    seed_event(db)
+
+    try:
+        events.update_event(db, EVENT_ID, schemas.EventUpdate(is_closed=True), USER_B)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-creator close to fail")
+
+    updated = events.update_event(db, EVENT_ID, schemas.EventUpdate(is_closed=True), USER_A)
+
+    assert updated["is_closed"] is True
 
 
 def test_refresh_token_rotation_issues_new_pair(db):

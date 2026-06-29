@@ -30,6 +30,22 @@ def assert_event_access(db: Database, event_id: str, actor_user_id: str) -> dict
     return assert_event_member(db, event_id, actor_user_id)
 
 
+def assert_event_open(event: dict) -> None:
+    if event.get("is_closed"):
+        raise HTTPException(
+            status_code=409,
+            detail="Event is closed and cannot be modified.",
+        )
+
+
+def assert_event_creator(event: dict, actor_user_id: str) -> None:
+    if actor_user_id != event["creator_id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the event creator can perform this action.",
+        )
+
+
 def get_receipt_or_404(db: Database, receipt_id: str) -> dict:
     receipt = db.receipts.find_one({"id": receipt_id})
     if not receipt:

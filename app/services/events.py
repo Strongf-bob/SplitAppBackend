@@ -3,7 +3,13 @@ from pymongo.database import Database
 
 from app import schemas
 
-from app.services.access import assert_event_access, get_event_or_404, get_user_or_404
+from app.services.access import (
+    assert_event_access,
+    assert_event_creator,
+    assert_event_open,
+    get_event_or_404,
+    get_user_or_404,
+)
 from app.services.common import new_uuid, strip_mongo_id, utc_now, user_to_api_dict
 
 
@@ -41,11 +47,7 @@ def get_event(db: Database, event_id: str, actor_user_id: str) -> dict:
 
 def delete_event(db: Database, event_id: str, actor_user_id: str) -> None:
     event = get_event_or_404(db, event_id)
-    if actor_user_id != event["creator_id"]:
-        raise HTTPException(
-            status_code=403,
-            detail="Only the event creator can delete this event.",
-        )
+    assert_event_creator(event, actor_user_id)
     db.receipts.delete_many({"event_id": event_id})
     db.payments.delete_many({"event_id": event_id})
     db.events.delete_one({"id": event_id})
@@ -62,6 +64,7 @@ def update_event(db: Database, event_id: str, payload: schemas.EventUpdate, acto
         update_fields["name"] = name
 
     if payload.is_closed is not None:
+        assert_event_creator(event, actor_user_id)
         update_fields["is_closed"] = payload.is_closed
 
     if not update_fields:
@@ -76,6 +79,7 @@ def add_participants(
     db: Database, event_id: str, payload: schemas.AddParticipantsRequest, actor_user_id: str
 ) -> list[dict]:
     event = assert_event_access(db, event_id, actor_user_id)
+    assert_event_open(event)
     incoming_ids = [str(user_id) for user_id in payload.user_ids]
     unknown_ids = [user_id for user_id in incoming_ids if not db.users.find_one({"id": user_id})]
     if unknown_ids:
@@ -98,6 +102,7 @@ def add_participants(
 
 def remove_participant(db: Database, event_id: str, user_id: str, actor_user_id: str) -> None:
     event = assert_event_access(db, event_id, actor_user_id)
+    assert_event_open(event)
     if user_id not in event["users"]:
         raise HTTPException(status_code=404, detail="Participant not found in event.")
     if user_id == event["creator_id"]:
