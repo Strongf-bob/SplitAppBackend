@@ -35,7 +35,7 @@
 - [x] **Receipt image lifecycle** — upload/delete/presigned URL добавлены.
 - [x] **Soft delete и audit fields** — чувствительные удаления не являются безусловным hard delete.
 - [x] **GET `/api/users` больше не сливает всех пользователей** — список ограничен видимыми пользователями.
-- [x] **Денежная логика переведена на Decimal** — backend больше не считает новые суммы через `float`.
+- [x] **Денежная логика переведена на копейки** — API и MongoDB используют integer kopecks вместо `float`/`double`/decimal-string для новых денежных значений.
 - [x] **S3-чек не публикуется через public-read ACL** — чтение идет через presigned URL.
 
 ### Backend Инфраструктура
@@ -53,19 +53,20 @@
 
 ### Product/API
 
-- [ ] **Финансовая статистика профиля** — определить contract и добавить `closedBillsAmount` / `openBillsAmount`.
-- [ ] **Групповые долги и взаимозачеты** — оптимизировать "кто кому платит" с минимизацией транзакций.
+- [x] **Финансовая статистика профиля** — добавлен `/api/users/me/financial-stats` с open/closed event totals и owed/receivable kopecks.
+- [x] **Групповые долги и объяснения** — backend возвращает simplified debtor-creditor rows и `/balances/explain` с receipt/payment contributions.
 - [ ] **Push-уведомления: backend contract** — события для нового чека, платежа, подтверждения и закрытия события.
-- [ ] **Инвайт-коды в события** — ссылки/коды вместо ручного поиска по UUID.
-- [ ] **Категории чеков** — модель, API и аналитика расходов по категориям.
+- [x] **Инвайт-ссылки в события** — token preview/accept/revoke backend endpoints добавлены для link/QR сценария.
+- [x] **Категории чеков** — receipt metadata `category` и `/api/receipt-categories` добавлены.
 - [ ] **Шаблоны повторяющихся чеков** — backend-модель и API для периодических расходов.
-- [ ] **AI-ассистент: backend boundary** — определить, какие команды обрабатывает сервер.
-- [ ] **Экспорт отчета** — PDF/CSV "кто кому сколько".
+- [ ] **AI/OCR receipt agent** — boundary записан в `docs/wiki/Receipt-Agent-Backlog.md`; реализация заблокирована до выбора OCR/model provider contract.
+- [x] **CSV экспорт отчета** — `/api/events/{id}/export.csv` выгружает debts/receipts/payments; PDF остается будущей задачей.
+- [ ] **PDF экспорт отчета** — генерация PDF "кто кому сколько".
 - [ ] **Мультивалютность** — хранение валюты, правила конвертации и API contract.
 
 ### Security/Infra
 
-- [ ] **Rate limiting** — ограничение частоты запросов на API.
+- [x] **Rate limiting** — lightweight per-actor/IP limiter добавлен для auth, search, invites и nearby codes.
 - [ ] **Docker** — Dockerfile и docker-compose для локальной разработки.
 - [ ] **Production monitoring hardening** — закрыть `/api/metrics` сетевой политикой или авторизацией.
 - [ ] **MongoDB transaction requirement** — задокументировать/проверить production topology для транзакций.
@@ -116,6 +117,6 @@
 
 1. Закрыть GitHub setup: branch protection, templates, labels, environments, secrets.
 2. Довести production deploy: server env, systemd, CD secrets, smoke check после deploy.
-3. Добавить backend rate limiting и Docker, потому что это инфраструктурная база.
-4. Перейти во frontend-репозиторий и закрыть интеграцию уже готовых backend endpoints: payments, receipt delete/images, pagination.
-5. После этого брать новые product features: invite codes, categories, group debt optimization, export, multicurrency.
+3. Добавить Docker для локальной разработки, если текущий compose/runtime недостаточен для команды.
+4. Перейти во frontend-репозиторий и закрыть интеграцию уже готовых backend endpoints: payments, receipt delete/images, pagination, invites, friends, categories, export.
+5. После этого брать новые product features: recurring receipts, PDF export, multicurrency, push notifications.

@@ -33,11 +33,13 @@ def test_cors_allows_configured_origin(monkeypatch):
         headers={
             "Origin": "https://app.example",
             "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "Idempotency-Key",
         },
     )
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "https://app.example"
+    assert "Idempotency-Key" in response.headers["access-control-allow-headers"]
 
 
 def test_cors_rejects_unconfigured_origin(monkeypatch):

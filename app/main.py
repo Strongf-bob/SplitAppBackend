@@ -14,11 +14,15 @@ from app.core.monitoring import init_sentry, record_request_metrics
 from app.core.s3 import connect_s3
 from app.dependencies import require_auth_token
 from app.routers import (
+    audit_router,
     auth_router,
+    disputes_router,
     events_router,
+    friends_router,
     health_router,
     payments_router,
     receipts_router,
+    reports_router,
     users_router,
 )
 from app.services import ensure_indexes
@@ -47,7 +51,7 @@ def configure_cors(api: FastAPI) -> None:
         allow_origins=cors_allowed_origins(),
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
     )
 
 
@@ -142,11 +146,15 @@ def create_app() -> FastAPI:
         dependencies=[Depends(require_auth_token)],
     )
     api.include_router(health_router)
+    api.include_router(audit_router)
     api.include_router(auth_router)
+    api.include_router(disputes_router)
     api.include_router(events_router)
+    api.include_router(friends_router)
     api.include_router(users_router)
     api.include_router(receipts_router)
     api.include_router(payments_router)
+    api.include_router(reports_router)
     configure_exception_handlers(api)
     configure_request_logging(api)
     configure_cors(api)

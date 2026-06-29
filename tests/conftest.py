@@ -18,6 +18,15 @@ def jwt_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("JWT_REFRESH_REUSE_GRACE_SECONDS", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limits():
+    from app.core.rate_limit import reset_rate_limits
+
+    reset_rate_limits()
+    yield
+    reset_rate_limits()
+
+
 @pytest.fixture
 def db():
     client = mongomock.MongoClient()
@@ -77,16 +86,42 @@ def seed_users(db) -> None:
 
 def seed_event(db, *, is_closed: bool = False) -> None:
     seed_users(db)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
     db.events.insert_one(
         {
             "id": EVENT_ID,
             "creator_id": USER_A,
             "name": "Trip",
             "is_closed": is_closed,
-            "users": [USER_A, USER_B],
-            "created_at": datetime(2026, 1, 1, tzinfo=UTC),
-            "updated_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "created_at": now,
+            "updated_at": now,
         }
+    )
+    db.event_memberships.insert_many(
+        [
+            {
+                "id": "aaaaaaaa-0000-0000-0000-000000000001",
+                "event_id": EVENT_ID,
+                "user_id": USER_A,
+                "role": "creator",
+                "status": "active",
+                "joined_at": now,
+                "removed_at": None,
+                "created_at": now,
+                "updated_at": now,
+            },
+            {
+                "id": "aaaaaaaa-0000-0000-0000-000000000002",
+                "event_id": EVENT_ID,
+                "user_id": USER_B,
+                "role": "member",
+                "status": "active",
+                "joined_at": now,
+                "removed_at": None,
+                "created_at": now,
+                "updated_at": now,
+            },
+        ]
     )
 
 
@@ -96,11 +131,11 @@ def receipt_payload():
     return schemas.CreateReceiptRequest(
         payer_id=USER_A,
         title="Dinner",
-        total_amount=100,
+        total_amount_kopecks=10000,
         items=[
             schemas.CreateReceiptItemRequest(
                 name="Meal",
-                cost=100,
+                cost_kopecks=10000,
                 share_items=[
                     schemas.CreateShareItemRequest(user_id=USER_A, share_value=0.5),
                     schemas.CreateShareItemRequest(user_id=USER_B, share_value=0.5),
@@ -113,4 +148,4 @@ def receipt_payload():
 def payment_payload():
     from app import schemas
 
-    return schemas.PaymentCreate(sender_id=USER_A, receiver_id=USER_B, amount=50)
+    return schemas.PaymentCreate(sender_id=USER_A, receiver_id=USER_B, amount_kopecks=5000)
