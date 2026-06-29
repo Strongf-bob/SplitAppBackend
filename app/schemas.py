@@ -80,11 +80,23 @@ class RefreshResponse(BaseModel):
 
 class EventCreate(BaseModel):
     name: str
+    split_strategy: str = "equal_default"
+    receipt_creation_policy: str = "participants_can_add"
+    receipt_finalization_policy: str = "payer_finalizes"
+    participants_invite_policy: str = "creator_only"
+    debt_display_mode: str = "simplified_default"
+    settlement_deadline_policy: str = "disabled"
 
 
 class EventUpdate(BaseModel):
     name: str | None = None
     is_closed: bool | None = None
+    split_strategy: str | None = None
+    receipt_creation_policy: str | None = None
+    receipt_finalization_policy: str | None = None
+    participants_invite_policy: str | None = None
+    debt_display_mode: str | None = None
+    settlement_deadline_policy: str | None = None
 
 
 class EventMembership(BaseModel):
@@ -102,6 +114,12 @@ class Event(BaseModel):
     creator_id: UUID
     name: str
     is_closed: bool
+    split_strategy: str = "equal_default"
+    receipt_creation_policy: str = "participants_can_add"
+    receipt_finalization_policy: str = "payer_finalizes"
+    participants_invite_policy: str = "creator_only"
+    debt_display_mode: str = "simplified_default"
+    settlement_deadline_policy: str = "disabled"
     participants: list[EventMembership]
     created_at: datetime
     updated_at: datetime

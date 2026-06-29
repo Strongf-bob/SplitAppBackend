@@ -80,6 +80,25 @@ def _build_receipt_items(
     return stored_items, stored_share_items
 
 
+def _assert_can_create_receipt(event: dict, actor_user_id: str) -> None:
+    policy = event.get("receipt_creation_policy", "participants_can_add")
+    if policy == "creator_only" and actor_user_id != event["creator_id"]:
+        raise HTTPException(status_code=403, detail="Only the event creator can create receipts.")
+
+
+def _assert_can_confirm_receipt(event: dict, receipt: dict, actor_user_id: str) -> None:
+    policy = event.get("receipt_finalization_policy", "payer_finalizes")
+    if policy == "creator_finalizes" and actor_user_id != event["creator_id"]:
+        raise HTTPException(status_code=403, detail="Only the event creator can confirm receipts.")
+    if policy == "payer_finalizes" and actor_user_id != receipt["payer_id"]:
+        raise HTTPException(status_code=403, detail="Only the receipt payer can confirm this receipt.")
+    if policy == "all_involved_confirm" and actor_user_id != event["creator_id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="All-involved confirmation is not implemented; creator must finalize.",
+        )
+
+
 def _receipt_to_api(receipt: dict, *, include_internal_shares: bool = False) -> dict:
     cleaned = strip_mongo_id(receipt)
     cleaned["status"] = cleaned.get("status", "confirmed")
@@ -127,6 +146,7 @@ def _create_receipt(
 ) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
     assert_event_open(event)
+    _assert_can_create_receipt(event, actor_user_id)
     payer_id = str(payload.payer_id)
     _validate_receipt_users(event, payer_id, payload.items)
     _validate_share_sum(payload.items)
@@ -167,6 +187,7 @@ def update_receipt(
     receipt = get_receipt_or_404(db, receipt_id)
     event = assert_event_access(db, receipt["event_id"], actor_user_id)
     assert_event_open(event)
+    _assert_can_confirm_receipt(event, receipt, actor_user_id)
     update_fields: dict = {}
     is_confirmed = receipt.get("status", "confirmed") == "confirmed"
 

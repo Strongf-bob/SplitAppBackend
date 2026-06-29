@@ -30,6 +30,50 @@ from app.services.common import (
     user_to_api_dict,
 )
 
+_EVENT_POLICY_OPTIONS = {
+    "split_strategy": {"equal_default", "itemized_creator", "itemized_self_select", "agent_assisted"},
+    "receipt_creation_policy": {"creator_only", "participants_can_add"},
+    "receipt_finalization_policy": {
+        "creator_finalizes",
+        "payer_finalizes",
+        "all_involved_confirm",
+    },
+    "participants_invite_policy": {
+        "creator_only",
+        "participants_can_invite_with_approval",
+        "participants_can_invite_directly",
+    },
+    "debt_display_mode": {"simplified_default", "raw_default", "show_both"},
+    "settlement_deadline_policy": {
+        "disabled",
+        "soft_deadline",
+        "strict_deadline_with_reliability_score",
+    },
+}
+
+_EVENT_POLICY_DEFAULTS = {
+    "split_strategy": "equal_default",
+    "receipt_creation_policy": "participants_can_add",
+    "receipt_finalization_policy": "payer_finalizes",
+    "participants_invite_policy": "creator_only",
+    "debt_display_mode": "simplified_default",
+    "settlement_deadline_policy": "disabled",
+}
+
+
+def _validate_event_policy(field: str, value: str) -> str:
+    if value not in _EVENT_POLICY_OPTIONS[field]:
+        raise HTTPException(status_code=400, detail=f"Invalid {field}.")
+    return value
+
+
+def _assert_can_create_invite(event: dict, actor_user_id: str) -> None:
+    policy = event.get("participants_invite_policy", _EVENT_POLICY_DEFAULTS["participants_invite_policy"])
+    if policy == "creator_only" and actor_user_id != event["creator_id"]:
+        raise HTTPException(status_code=403, detail="Only the event creator can invite.")
+    if policy == "participants_can_invite_with_approval" and actor_user_id != event["creator_id"]:
+        raise HTTPException(status_code=403, detail="Participant invites require creator approval.")
+
 
 def _membership_to_api(membership: dict) -> dict:
     cleaned = strip_mongo_id(membership)
@@ -40,6 +84,8 @@ def _membership_to_api(membership: dict) -> dict:
 def _event_to_api(db: Database, event: dict) -> dict:
     cleaned = strip_mongo_id(event)
     cleaned.pop("users", None)
+    for field, default in _EVENT_POLICY_DEFAULTS.items():
+        cleaned[field] = cleaned.get(field, default)
     cleaned["participants"] = [
         _membership_to_api(membership)
         for membership in active_event_memberships(db, cleaned["id"])
@@ -146,6 +192,20 @@ def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str)
         "creator_id": creator_id,
         "name": payload.name.strip(),
         "is_closed": False,
+        "split_strategy": _validate_event_policy("split_strategy", payload.split_strategy),
+        "receipt_creation_policy": _validate_event_policy(
+            "receipt_creation_policy", payload.receipt_creation_policy
+        ),
+        "receipt_finalization_policy": _validate_event_policy(
+            "receipt_finalization_policy", payload.receipt_finalization_policy
+        ),
+        "participants_invite_policy": _validate_event_policy(
+            "participants_invite_policy", payload.participants_invite_policy
+        ),
+        "debt_display_mode": _validate_event_policy("debt_display_mode", payload.debt_display_mode),
+        "settlement_deadline_policy": _validate_event_policy(
+            "settlement_deadline_policy", payload.settlement_deadline_policy
+        ),
         "created_at": now,
         "updated_at": now,
     }
@@ -250,6 +310,11 @@ def update_event(
     if payload.is_closed is not None:
         update_fields["is_closed"] = payload.is_closed
 
+    for field in _EVENT_POLICY_DEFAULTS:
+        value = getattr(payload, field)
+        if value is not None:
+            update_fields[field] = _validate_event_policy(field, value)
+
     if not update_fields:
         raise HTTPException(status_code=400, detail="At least one field must be provided.")
 
@@ -267,7 +332,7 @@ def add_participants(
     db: Database, event_id: str, payload: schemas.AddParticipantsRequest, actor_user_id: str
 ) -> list[dict]:
     event = assert_event_access(db, event_id, actor_user_id)
-    assert_event_creator(event, actor_user_id)
+    _assert_can_create_invite(event, actor_user_id)
     assert_event_open(event)
     incoming_ids = [str(user_id) for user_id in payload.user_ids]
     unknown_ids = [user_id for user_id in incoming_ids if not db.users.find_one({"id": user_id})]
@@ -293,7 +358,7 @@ def add_participants(
 @track_service_operation("events.remove_participant")
 def remove_participant(db: Database, event_id: str, user_id: str, actor_user_id: str) -> None:
     event = assert_event_access(db, event_id, actor_user_id)
-    assert_event_creator(event, actor_user_id)
+    _assert_can_create_invite(event, actor_user_id)
     assert_event_open(event)
     if user_id not in active_event_user_ids(db, event_id):
         raise HTTPException(status_code=404, detail="Participant not found in event.")
@@ -321,7 +386,7 @@ def create_event_invite(
     actor_user_id: str,
 ) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
-    assert_event_creator(event, actor_user_id)
+    _assert_can_create_invite(event, actor_user_id)
     assert_event_open(event)
 
     now = utc_now()
@@ -417,7 +482,7 @@ def create_nearby_invite_code(
     actor_user_id: str,
 ) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
-    assert_event_creator(event, actor_user_id)
+    _assert_can_create_invite(event, actor_user_id)
     assert_event_open(event)
 
     now = utc_now()
