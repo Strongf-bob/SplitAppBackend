@@ -14,14 +14,18 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
-  analyze-test-failure:
-    name: Analyze Test Failure
+  collect-test-context:
+    name: Collect Test Context
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event.pull_request.draft == false
+    permissions:
+      contents: read
+    outputs:
+      test_exit_code: ${{ steps.tests.outputs.exit_code }}
+      analysis_code_changed: ${{ steps.diff.outputs.analysis_code_changed }}
     env:
       TEST_LOG_FILE: test-output.log
       PR_DIFF_FILE: pr-diff.patch
@@ -77,7 +81,7 @@ jobs:
           exit 0
 
       - name: Upload test failure context
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: ai-test-failure-context
@@ -86,11 +90,33 @@ jobs:
             ${{ env.PR_DIFF_FILE }}
           if-no-files-found: warn
 
+  explain-test-failure:
+    name: Analyze Test Failure
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: collect-test-context
+    if: needs.collect-test-context.outputs.test_exit_code != '0'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout trusted analyzer
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Download test failure context
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-test-failure-context
+          path: .
+
       - name: Explain failed tests
-        if: steps.tests.outputs.exit_code != '0' && steps.diff.outputs.analysis_code_changed != 'true'
+        if: needs.collect-test-context.outputs.analysis_code_changed != 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
+          TEST_EXIT_CODE: ${{ needs.collect-test-context.outputs.test_exit_code }}
           OCR_LLM_URL: ${{ secrets.OCR_LLM_URL }}
           OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           OCR_LLM_MODEL: ${{ secrets.OCR_LLM_MODEL }}
