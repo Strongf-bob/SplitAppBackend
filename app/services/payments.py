@@ -15,6 +15,9 @@ def create_payment(
     sender_id = str(payload.sender_id)
     receiver_id = str(payload.receiver_id)
 
+    if sender_id != actor_user_id:
+        raise HTTPException(status_code=403, detail="sender_id must match the authenticated user.")
+
     if sender_id == receiver_id:
         raise HTTPException(status_code=400, detail="sender_id and receiver_id must differ.")
 
