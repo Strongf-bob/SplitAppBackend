@@ -7,3 +7,5 @@ python-multipart
 boto3
 mongomock
 pytest
+prometheus-client
+sentry-sdk
