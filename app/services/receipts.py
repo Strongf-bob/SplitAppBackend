@@ -26,6 +26,15 @@ _RECEIPT_MONEY_METADATA_FIELDS = (
 )
 
 
+def _normalize_category(category: str | None) -> str | None:
+    if category is None:
+        return None
+    normalized = category.strip()
+    if len(normalized) > 64:
+        raise HTTPException(status_code=400, detail="category must be at most 64 characters.")
+    return normalized or None
+
+
 def _validate_receipt_users(
     event: dict, payer_id: str, items: list[schemas.CreateReceiptItemRequest]
 ) -> None:
@@ -184,6 +193,7 @@ def _create_receipt(
         "event_id": event_id,
         "payer_id": payer_id,
         "title": payload.title,
+        "category": _normalize_category(payload.category),
         "status": "draft",
         "version": 1,
         "total_amount_kopecks": money_to_storage(payload.total_amount_kopecks),
@@ -221,6 +231,8 @@ def update_receipt(
 
     if payload.title is not None:
         update_fields["title"] = payload.title
+    if payload.category is not None:
+        update_fields["category"] = _normalize_category(payload.category)
 
     if payload.total_amount_kopecks is not None and payload.items is None:
         raise HTTPException(
@@ -428,6 +440,7 @@ def create_receipt_correction(db: Database, receipt_id: str, actor_user_id: str)
         "event_id": receipt["event_id"],
         "payer_id": receipt["payer_id"],
         "title": receipt.get("title", ""),
+        "category": receipt.get("category"),
         "status": "draft",
         "version": 1,
         "total_amount_kopecks": stored_money_to_kopecks(

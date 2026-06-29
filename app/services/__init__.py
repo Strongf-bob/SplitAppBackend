@@ -57,6 +57,7 @@ from app.services.receipts import (
     update_receipt,
     void_receipt,
 )
+from app.services.reports import build_event_csv_export, list_receipt_categories
 from app.services.users import get_current_user_financial_stats, list_users, search_users
 __all__ = [
     "add_participants",
@@ -65,6 +66,7 @@ __all__ = [
     "accept_friend_request",
     "acknowledge_payment_request",
     "block_friendship",
+    "build_event_csv_export",
     "cancel_payment_request",
     "claim_receipt_item",
     "confirm_payment",
@@ -95,6 +97,7 @@ __all__ = [
     "list_payment_requests_by_event",
     "list_payments_by_event",
     "list_receipts_by_event",
+    "list_receipt_categories",
     "list_users",
     "login_with_yandex_oauth",
     "mark_payment_request_paid",

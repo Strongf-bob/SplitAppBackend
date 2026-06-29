@@ -3,7 +3,19 @@ from uuid import UUID
 
 from app import schemas
 from app.core import tokens
-from app.services import audit, auth, balances, disputes, events, friends, payments, receipt_image, receipts, users
+from app.services import (
+    audit,
+    auth,
+    balances,
+    disputes,
+    events,
+    friends,
+    payments,
+    receipt_image,
+    receipts,
+    reports,
+    users,
+)
 
 from tests.conftest import (
     EVENT_ID,
@@ -431,6 +443,7 @@ def test_receipt_create_validates_total_and_membership(db):
 def test_receipt_stores_split_and_fiscal_metadata(db):
     seed_event(db)
     payload = receipt_payload()
+    payload.category = "restaurant"
     payload.items[0].split_mode = "selected_equal"
     payload.service_fee_amount_kopecks = 500
     payload.tip_amount_kopecks = 1000
@@ -439,11 +452,35 @@ def test_receipt_stores_split_and_fiscal_metadata(db):
 
     receipt = receipts.create_receipt(db, EVENT_ID, payload, USER_A)
 
+    assert receipt["category"] == "restaurant"
     assert receipt["items"][0]["split_mode"] == "selected_equal"
     assert receipt["service_fee_amount_kopecks"] == 500
     assert receipt["tip_amount_kopecks"] == 1000
     assert receipt["fiscal_total_amount_kopecks"] == 11500
     assert receipt["vat_amount_kopecks"] == 0
+
+
+def test_event_csv_export_includes_debts_receipts_and_payments(db):
+    seed_event(db)
+    payload = receipt_payload()
+    payload.category = "restaurant"
+    receipt = receipts.create_receipt(db, EVENT_ID, payload, USER_A)
+    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    payment = payments.create_payment(
+        db,
+        EVENT_ID,
+        schemas.PaymentCreate(sender_id=USER_B, receiver_id=USER_A, amount_kopecks=1000),
+        USER_B,
+    )
+    payments.confirm_payment(db, payment["id"], USER_A)
+
+    csv_body = reports.build_event_csv_export(db, EVENT_ID, USER_A)
+
+    assert "section,id,status,debtor_id,creditor_id,sender_id,receiver_id,amount_kopecks,title,category" in csv_body
+    assert f"receipt,{receipt['id']},confirmed,,,,,10000,Dinner,restaurant" in csv_body
+    assert f"payment,{payment['id']},confirmed,,,{USER_B},{USER_A},1000,," in csv_body
+    assert f"debt,,,{USER_B},{USER_A},,,4000,," in csv_body
+    assert "restaurant" in reports.list_receipt_categories()
 
 
 def test_confirmed_receipt_fiscal_metadata_cannot_be_changed(db):
