@@ -76,6 +76,8 @@ in the `mongo-data` Docker volume and is not exposed outside the Compose network
 Prometheus and Loki are internal-only services. Grafana binds to
 `127.0.0.1:${GRAFANA_HOST_PORT:-3001}` by default; use an SSH tunnel or a
 reverse proxy with authentication instead of exposing all observability ports.
+The observability stack also scrapes MongoDB, container, and host metrics through
+internal-only exporters.
 
 Before changing ports on a shared server, check listeners:
 

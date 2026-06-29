@@ -3,7 +3,11 @@ from pymongo.errors import ConfigurationError, InvalidOperation, OperationFailur
 from pymongo.database import Database
 
 from app import schemas
-from app.core.monitoring import track_service_operation
+from app.core.monitoring import (
+    observe_event_participants,
+    record_domain_event,
+    track_service_operation,
+)
 
 from app.services.access import (
     assert_event_access,
@@ -41,6 +45,8 @@ def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str)
         raise HTTPException(status_code=400, detail="name must be set.")
 
     db.events.insert_one(event)
+    record_domain_event("events", "created")
+    observe_event_participants(len(event["users"]))
     return event
 
 
@@ -108,6 +114,7 @@ def delete_event(db: Database, event_id: str, actor_user_id: str) -> None:
                 detail="Transactional deletes require MongoDB transaction support.",
             ) from exc
         raise
+    record_domain_event("events", "deleted")
 
 
 @track_service_operation("events.update")
@@ -132,6 +139,10 @@ def update_event(
 
     update_fields["updated_at"] = utc_now()
     db.events.update_one({"id": event["id"]}, {"$set": update_fields})
+    record_domain_event("events", "updated")
+    if "is_closed" in update_fields:
+        action = "closed" if update_fields["is_closed"] else "reopened"
+        record_domain_event("events", action)
     return strip_mongo_id(get_event_or_404(db, event_id))
 
 
@@ -155,6 +166,8 @@ def add_participants(
         {"id": event_id},
         {"$set": {"users": new_users, "updated_at": utc_now()}},
     )
+    record_domain_event("events", "participants_added")
+    observe_event_participants(len(new_users))
 
     users = []
     for user in db.users.find({"id": {"$in": incoming_ids}}):
@@ -177,3 +190,5 @@ def remove_participant(db: Database, event_id: str, user_id: str, actor_user_id:
         {"id": event_id},
         {"$set": {"users": new_users, "updated_at": utc_now()}},
     )
+    record_domain_event("events", "participants_removed")
+    observe_event_participants(len(new_users))
