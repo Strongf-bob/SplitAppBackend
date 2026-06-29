@@ -56,6 +56,18 @@ def test_payment_create_and_confirm(db):
     assert updated["confirmed"] is True
 
 
+def test_only_payment_receiver_can_confirm(db):
+    seed_event(db)
+    payment = payments.create_payment(db, EVENT_ID, payment_payload(), USER_A)
+
+    try:
+        payments.update_payment(db, payment["id"], schemas.PaymentUpdate(confirmed=True), USER_A)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected sender confirmation to fail")
+
+
 def test_event_access_blocks_non_members(db):
     seed_event(db)
 

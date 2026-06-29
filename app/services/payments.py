@@ -51,5 +51,10 @@ def update_payment(
     payment = get_payment_or_404(db, payment_id)
     event = assert_event_access(db, payment["event_id"], actor_user_id)
     assert_event_open(event)
+    if actor_user_id != payment["receiver_id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the payment receiver can update confirmation.",
+        )
     db.payments.update_one({"id": payment_id}, {"$set": {"confirmed": payload.confirmed}})
     return strip_mongo_id(get_payment_or_404(db, payment_id))
