@@ -57,7 +57,18 @@ MongoDB connection health is available at `GET /api/health/db`.
 
 ## Run on remote server
 
-Use the production-style target (binds to all interfaces and survives SSH disconnect):
+For production, prefer the systemd unit in `deploy/splitapp-backend.service`.
+Install the app under `/opt/splitapp/backend`, put environment variables in
+`/etc/splitapp/backend.env`, then enable the service:
+
+1. `sudo cp deploy/splitapp-backend.service /etc/systemd/system/splitapp-backend.service`
+2. `sudo systemctl daemon-reload`
+3. `sudo systemctl enable --now splitapp-backend`
+4. `sudo systemctl status splitapp-backend`
+
+Logs are available through `journalctl -u splitapp-backend -f`.
+
+The legacy Make target still starts the app in the background for quick manual checks:
 
 1. `make setup`
 2. `make run`
