@@ -9,3 +9,4 @@ mongomock
 pytest
 prometheus-client
 sentry-sdk
+ruff

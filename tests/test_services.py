@@ -1,5 +1,3 @@
-from datetime import UTC
-
 from app import schemas
 from app.core import tokens
 from app.services import auth, events, payments, receipt_image, receipts, users

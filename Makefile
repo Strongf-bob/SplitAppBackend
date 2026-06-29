@@ -8,7 +8,7 @@ PORT ?= 8000
 PID_FILE ?= uvicorn.pid
 LOG_FILE ?= uvicorn.log
 
-.PHONY: setup test run run-dev stop status logs
+.PHONY: setup test lint format-check run run-dev stop status logs
 
 setup:
 	$(PYTHON) -m venv $(VENV_DIR)
@@ -20,6 +20,20 @@ test:
 		$(VENV_PYTHON) -m pytest; \
 	else \
 		$(PYTHON) -m pytest; \
+	fi
+
+lint:
+	@if [ -x "$(VENV_PYTHON)" ]; then \
+		$(VENV_PYTHON) -m ruff check .; \
+	else \
+		$(PYTHON) -m ruff check .; \
+	fi
+
+format-check:
+	@if [ -x "$(VENV_PYTHON)" ]; then \
+		$(VENV_PYTHON) -m ruff format --check .; \
+	else \
+		$(PYTHON) -m ruff format --check .; \
 	fi
 
 run:
