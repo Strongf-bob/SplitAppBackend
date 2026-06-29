@@ -91,11 +91,18 @@ def normalize_severity(raw: Any, text: str = "") -> str:
 
 
 def derive_title(message: str) -> str:
-    first_line = message.strip().splitlines()[0].strip()
+    stripped = message.strip()
+    if not stripped:
+        return "OpenCodeReview finding"
+    first_line = stripped.splitlines()[0].strip()
     first_sentence = re.split(r"(?<=[.!?。！？])\s+", first_line, maxsplit=1)[0].strip()
     if len(first_sentence) <= 120:
         return first_sentence
-    return f"{first_sentence[:117].rstrip()}..."
+    truncated = first_sentence[:117].rstrip()
+    last_space = truncated.rfind(" ")
+    if last_space > 60:
+        truncated = truncated[:last_space]
+    return f"{truncated}..."
 
 
 def finding_from_dict(item: dict[str, Any]) -> Finding | None:
@@ -166,6 +173,9 @@ def finding_from_dict(item: dict[str, Any]) -> Finding | None:
             "category",
             "recommendation",
             "suggestion",
+            "title",
+            "summary",
+            "type",
         )
     )
     if not has_location and not has_explicit_finding_signal:
@@ -232,6 +242,13 @@ def parse_review_result(data: Any) -> ReviewResult:
     if isinstance(data, dict):
         status = first_string(data, ("status",))
         message = first_string(data, ("message", "summary"))
+        for key in ("findings", "issues", "comments", "reviews", "results", "data", "items"):
+            if key in data:
+                return ReviewResult(
+                    findings=extract_findings(data[key]),
+                    status=status,
+                    message=message,
+                )
     return ReviewResult(findings=extract_findings(data), status=status, message=message)
 
 

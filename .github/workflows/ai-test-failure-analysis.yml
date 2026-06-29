@@ -8,6 +8,10 @@ on:
       - reopened
       - ready_for_review
 
+concurrency:
+  group: ai-test-failure-analysis-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: write
@@ -19,9 +23,6 @@ jobs:
     timeout-minutes: 20
     if: github.event.pull_request.draft == false
     env:
-      OCR_LLM_URL: ${{ secrets.OCR_LLM_URL }}
-      OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
-      OCR_LLM_MODEL: ${{ secrets.OCR_LLM_MODEL }}
       TEST_LOG_FILE: test-output.log
       PR_DIFF_FILE: pr-diff.patch
     steps:
@@ -32,9 +33,11 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Fetch base commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           git fetch --no-tags --prune --depth=1 origin \
-            "${{ github.event.pull_request.base.sha }}"
+            "$BASE_SHA"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -48,10 +51,13 @@ jobs:
           pip install -r requirements.txt
 
       - name: Save PR diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           git diff --no-ext-diff --unified=80 \
-            "${{ github.event.pull_request.base.sha }}" \
-            "${{ github.event.pull_request.head.sha }}" \
+            "$BASE_SHA" \
+            "$HEAD_SHA" \
             > "$PR_DIFF_FILE"
 
       - name: Run tests
@@ -79,4 +85,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
+          OCR_LLM_URL: ${{ secrets.OCR_LLM_URL }}
+          OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          OCR_LLM_MODEL: ${{ secrets.OCR_LLM_MODEL }}
         run: python3 .github/scripts/analyze_test_failure.py
