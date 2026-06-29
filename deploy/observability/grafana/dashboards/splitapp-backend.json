@@ -51,7 +51,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(splitapp_http_requests_total[5m]))",
+          "expr": "sum(rate(splitapp_http_requests_total[5m])) or vector(0)",
           "legendFormat": "requests/sec",
           "refId": "A"
         }
@@ -89,7 +89,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(splitapp_http_requests_total{status_code=~\"5..\"}[5m])) / clamp_min(sum(rate(splitapp_http_requests_total[5m])), 0.001)",
+          "expr": "(sum(rate(splitapp_http_requests_total{status_code=~\"5..\"}[5m])) / clamp_min(sum(rate(splitapp_http_requests_total[5m])), 0.001)) or vector(0)",
           "legendFormat": "5xx error ratio",
           "refId": "A"
         }
@@ -207,12 +207,12 @@
       },
       "targets": [
         {
-          "expr": "sum by (operation, status) (rate(splitapp_service_operations_total[5m]))",
+          "expr": "sum by (operation, status) (rate(splitapp_service_operations_total[5m])) or vector(0)",
           "legendFormat": "{{operation}} {{status}}",
           "refId": "A"
         },
         {
-          "expr": "sum by (operation, status) (rate(splitapp_db_operations_total[5m]))",
+          "expr": "sum by (operation, status) (rate(splitapp_db_operations_total[5m])) or vector(0)",
           "legendFormat": "db {{operation}} {{status}}",
           "refId": "B"
         }
