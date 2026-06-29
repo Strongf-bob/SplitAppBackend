@@ -409,6 +409,29 @@ def test_balances_use_kopeck_money_math(db):
     ]
 
 
+def test_balance_explanations_include_receipts_and_confirmed_payments(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    payment = payments.create_payment(
+        db,
+        EVENT_ID,
+        schemas.PaymentCreate(sender_id=USER_B, receiver_id=USER_A, amount_kopecks=2000),
+        USER_B,
+    )
+    payments.update_payment(db, payment["id"], schemas.PaymentUpdate(confirmed=True), USER_A)
+
+    rows = balances.get_event_balance_explanations(db, EVENT_ID, USER_A)
+
+    assert rows[0]["debitor_id"] == USER_B
+    assert rows[0]["creditor_id"] == USER_A
+    assert rows[0]["amount_kopecks"] == 3000
+    assert [(item["source_type"], item["amount_kopecks"]) for item in rows[0]["contributions"]] == [
+        ("receipt", 5000),
+        ("payment", 2000),
+    ]
+
+
 def test_confirmed_receipt_financial_fields_cannot_be_changed(db):
     seed_event(db)
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)

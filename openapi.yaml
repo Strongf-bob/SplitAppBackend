@@ -797,6 +797,58 @@
         }
       }
     },
+    "/api/events/{id}/balances/explain": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Get Event Balance Explanations",
+        "operationId": "get_event_balance_explanations_api_events__id__balances_explain_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventBalanceExplanation"
+                  },
+                  "title": "Response Get Event Balance Explanations Api Events  Id  Balances Explain Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/users": {
       "get": {
         "tags": [
@@ -1631,6 +1683,47 @@
         ],
         "title": "AddParticipantsRequest"
       },
+      "BalanceContribution": {
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "source_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Source Id"
+          },
+          "debitor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Debitor Id"
+          },
+          "creditor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creditor Id"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "title": "Amount Kopecks"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_type",
+          "source_id",
+          "debitor_id",
+          "creditor_id",
+          "amount_kopecks",
+          "description"
+        ],
+        "title": "BalanceContribution"
+      },
       "Body_upload_receipt_image_api_receipts__id__image_post": {
         "properties": {
           "file": {
@@ -1847,6 +1940,45 @@
           "amount_kopecks"
         ],
         "title": "EventBalance"
+      },
+      "EventBalanceExplanation": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "debitor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Debitor Id"
+          },
+          "creditor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creditor Id"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "title": "Amount Kopecks"
+          },
+          "contributions": {
+            "items": {
+              "$ref": "#/components/schemas/BalanceContribution"
+            },
+            "type": "array",
+            "title": "Contributions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "debitor_id",
+          "creditor_id",
+          "amount_kopecks",
+          "contributions"
+        ],
+        "title": "EventBalanceExplanation"
       },
       "EventCreate": {
         "properties": {

@@ -1,5 +1,5 @@
 from app.services.auth import login_with_yandex_oauth, rotate_refresh_token
-from app.services.balances import get_event_balances
+from app.services.balances import get_event_balance_explanations, get_event_balances
 from app.services.events import (
     accept_event_invite,
     add_participants,
@@ -40,6 +40,7 @@ __all__ = [
     "delete_receipt",
     "ensure_indexes",
     "get_event",
+    "get_event_balance_explanations",
     "get_event_balances",
     "list_events",
     "list_payments_by_event",

@@ -73,6 +73,7 @@ Events return `participants` as membership records with `role` (`creator`, `memb
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
 | `GET` | `/api/events/{id}/balances` | Рассчитать долги внутри события. | Возвращает debtor-creditor edges. |
+| `GET` | `/api/events/{id}/balances/explain` | Объяснить рассчитанные долги. | Возвращает те же simplified debts и receipt/payment contributions. |
 
 ## Payments
 
