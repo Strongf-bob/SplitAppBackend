@@ -38,10 +38,12 @@ from app.services.payments import (
 from app.services.receipt_image import upload_receipt_image
 from app.services.receipts import (
     confirm_receipt,
+    create_receipt_correction,
     create_receipt,
     delete_receipt,
     list_receipts_by_event,
     update_receipt,
+    void_receipt,
 )
 from app.services.users import list_users, search_users
 __all__ = [
@@ -60,6 +62,7 @@ __all__ = [
     "create_payment",
     "create_payment_request",
     "create_receipt",
+    "create_receipt_correction",
     "delete_receipt",
     "ensure_indexes",
     "get_event",
@@ -86,4 +89,5 @@ __all__ = [
     "update_payment",
     "update_receipt",
     "upload_receipt_image",
+    "void_receipt",
 ]

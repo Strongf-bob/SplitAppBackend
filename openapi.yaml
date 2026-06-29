@@ -1813,6 +1813,102 @@
         }
       }
     },
+    "/api/receipts/{id}/void": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Void Receipt",
+        "operationId": "void_receipt_api_receipts__id__void_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/receipts/{id}/corrections": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Create Receipt Correction",
+        "operationId": "create_receipt_correction_api_receipts__id__corrections_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/receipts/{id}/image": {
       "post": {
         "tags": [
@@ -3698,6 +3794,10 @@
             "type": "string",
             "title": "Status"
           },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
           "total_amount_kopecks": {
             "type": "integer",
             "title": "Total Amount Kopecks"
@@ -3729,6 +3829,18 @@
               }
             ],
             "title": "Image Url"
+          },
+          "corrected_from_receipt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrected From Receipt Id"
           }
         },
         "type": "object",
@@ -3737,6 +3849,7 @@
           "event_id",
           "payer_id",
           "status",
+          "version",
           "total_amount_kopecks",
           "created_at",
           "updated_at",
@@ -3921,6 +4034,18 @@
               }
             ],
             "title": "Items"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
           }
         },
         "type": "object",

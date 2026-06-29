@@ -102,6 +102,7 @@ def _assert_can_confirm_receipt(event: dict, receipt: dict, actor_user_id: str) 
 def _receipt_to_api(receipt: dict, *, include_internal_shares: bool = False) -> dict:
     cleaned = strip_mongo_id(receipt)
     cleaned["status"] = cleaned.get("status", "confirmed")
+    cleaned["version"] = int(cleaned.get("version", 1))
     cleaned["total_amount_kopecks"] = stored_money_to_kopecks(
         cleaned, "total_amount_kopecks", "total_amount"
     )
@@ -168,6 +169,7 @@ def _create_receipt(
         "payer_id": payer_id,
         "title": payload.title,
         "status": "draft",
+        "version": 1,
         "total_amount_kopecks": money_to_storage(payload.total_amount_kopecks),
         "created_at": now,
         "updated_at": now,
@@ -190,6 +192,9 @@ def update_receipt(
     _assert_can_confirm_receipt(event, receipt, actor_user_id)
     update_fields: dict = {}
     is_confirmed = receipt.get("status", "confirmed") == "confirmed"
+    current_version = int(receipt.get("version", 1))
+    if payload.expected_version is not None and payload.expected_version != current_version:
+        raise HTTPException(status_code=409, detail="Receipt version conflict.")
 
     if payload.title is not None:
         update_fields["title"] = payload.title
@@ -229,6 +234,7 @@ def update_receipt(
         raise HTTPException(status_code=400, detail="At least one field must be provided.")
 
     update_fields["updated_at"] = utc_now()
+    update_fields["version"] = current_version + 1
     db.receipts.update_one({"id": receipt_id}, {"$set": update_fields})
     record_domain_event("receipts", "updated")
     if "total_amount_kopecks" in update_fields:
@@ -289,9 +295,17 @@ def confirm_receipt(db: Database, receipt_id: str, actor_user_id: str) -> dict:
         raise HTTPException(status_code=409, detail="Only draft receipts can be confirmed.")
 
     now = utc_now()
+    current_version = int(receipt.get("version", 1))
     db.receipts.update_one(
         active_filter({"id": receipt_id}),
-        {"$set": {"status": "confirmed", "confirmed_at": now, "updated_at": now}},
+        {
+            "$set": {
+                "status": "confirmed",
+                "confirmed_at": now,
+                "updated_at": now,
+                "version": current_version + 1,
+            }
+        },
     )
     record_domain_event("receipts", "confirmed")
     record_audit_event(
@@ -302,3 +316,113 @@ def confirm_receipt(db: Database, receipt_id: str, actor_user_id: str) -> dict:
         actor_user_id=actor_user_id,
     )
     return _receipt_to_api(get_receipt_or_404(db, receipt_id))
+
+
+@track_service_operation("receipts.void")
+def void_receipt(db: Database, receipt_id: str, actor_user_id: str) -> dict:
+    receipt = get_receipt_or_404(db, receipt_id)
+    event = assert_event_access(db, receipt["event_id"], actor_user_id)
+    assert_event_open(event)
+    if actor_user_id != event["creator_id"] and actor_user_id != receipt["payer_id"]:
+        raise HTTPException(status_code=403, detail="Only creator or payer can void receipt.")
+    if receipt.get("status", "confirmed") != "confirmed":
+        raise HTTPException(status_code=409, detail="Only confirmed receipts can be voided.")
+
+    now = utc_now()
+    current_version = int(receipt.get("version", 1))
+    db.receipts.update_one(
+        active_filter({"id": receipt_id}),
+        {
+            "$set": {
+                "status": "voided",
+                "voided_at": now,
+                "voided_by": actor_user_id,
+                "updated_at": now,
+                "version": current_version + 1,
+            }
+        },
+    )
+    record_domain_event("receipts", "voided")
+    record_audit_event(
+        db,
+        action="receipt.voided",
+        resource_type="receipt",
+        resource_id=receipt_id,
+        actor_user_id=actor_user_id,
+    )
+    return _receipt_to_api(get_receipt_or_404(db, receipt_id))
+
+
+@track_service_operation("receipts.correct")
+def create_receipt_correction(db: Database, receipt_id: str, actor_user_id: str) -> dict:
+    receipt = get_receipt_or_404(db, receipt_id)
+    event = assert_event_access(db, receipt["event_id"], actor_user_id)
+    assert_event_open(event)
+    if actor_user_id != event["creator_id"] and actor_user_id != receipt["payer_id"]:
+        raise HTTPException(status_code=403, detail="Only creator or payer can correct receipt.")
+    if receipt.get("status", "confirmed") != "confirmed":
+        raise HTTPException(status_code=409, detail="Only confirmed receipts can be corrected.")
+
+    now = utc_now()
+    correction_id = new_uuid()
+    items = []
+    share_items = []
+    item_id_map: dict[str, str] = {}
+    for item in receipt.get("items", []):
+        new_item = dict(item)
+        old_item_id = new_item["id"]
+        new_item["id"] = new_uuid()
+        new_item["receipt_id"] = correction_id
+        item_id_map[old_item_id] = new_item["id"]
+        items.append(new_item)
+    share_id_map: dict[str, str] = {}
+    for share in receipt.get("share_items", []):
+        new_share = dict(share)
+        old_share_id = new_share["id"]
+        new_share["id"] = new_uuid()
+        new_share["receipt_item_id"] = item_id_map.get(
+            new_share["receipt_item_id"], new_share["receipt_item_id"]
+        )
+        share_id_map[old_share_id] = new_share["id"]
+        share_items.append(new_share)
+    for item in items:
+        item["share_items"] = [share_id_map.get(share_id, share_id) for share_id in item["share_items"]]
+
+    correction = {
+        "id": correction_id,
+        "event_id": receipt["event_id"],
+        "payer_id": receipt["payer_id"],
+        "title": receipt.get("title", ""),
+        "status": "draft",
+        "version": 1,
+        "total_amount_kopecks": stored_money_to_kopecks(
+            receipt, "total_amount_kopecks", "total_amount"
+        ),
+        "created_at": now,
+        "updated_at": now,
+        "items": items,
+        "share_items": share_items,
+        "corrected_from_receipt_id": receipt_id,
+    }
+    db.receipts.insert_one(correction)
+    db.receipts.update_one(
+        {"id": receipt_id},
+        {
+            "$set": {
+                "status": "corrected",
+                "corrected_at": now,
+                "corrected_by": actor_user_id,
+                "updated_at": now,
+                "version": int(receipt.get("version", 1)) + 1,
+            }
+        },
+    )
+    record_domain_event("receipts", "corrected")
+    record_audit_event(
+        db,
+        action="receipt.corrected",
+        resource_type="receipt",
+        resource_id=receipt_id,
+        actor_user_id=actor_user_id,
+    )
+    return _receipt_to_api(correction)
