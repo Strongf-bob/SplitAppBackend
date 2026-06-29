@@ -213,6 +213,7 @@ class UpdateReceiptRequest(BaseModel):
     title: str | None = None
     total_amount_kopecks: int | None = Field(default=None, gt=0)
     items: list[CreateReceiptItemRequest] | None = None
+    expected_version: int | None = Field(default=None, ge=1)
 
 
 class Receipt(BaseModel):
@@ -221,11 +222,13 @@ class Receipt(BaseModel):
     payer_id: UUID
     title: str = ""
     status: str
+    version: int
     total_amount_kopecks: int
     created_at: datetime
     updated_at: datetime
     items: list[ReceiptItem]
     image_url: str | None = None
+    corrected_from_receipt_id: UUID | None = None
 
 
 class ReceiptPage(BaseModel):

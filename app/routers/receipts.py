@@ -67,6 +67,24 @@ def confirm_receipt(
     return services.confirm_receipt(db, str(id), current_user_id)
 
 
+@router.post("/api/receipts/{id}/void", response_model=schemas.Receipt)
+def void_receipt(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.void_receipt(db, str(id), current_user_id)
+
+
+@router.post("/api/receipts/{id}/corrections", response_model=schemas.Receipt)
+def create_receipt_correction(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.create_receipt_correction(db, str(id), current_user_id)
+
+
 @router.delete("/api/receipts/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_receipt(
     id: UUID,

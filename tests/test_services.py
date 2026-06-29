@@ -393,6 +393,7 @@ def test_receipt_create_validates_total_and_membership(db):
     assert receipt["event_id"] == EVENT_ID
     assert receipt["payer_id"] == USER_A
     assert receipt["status"] == "draft"
+    assert receipt["version"] == 1
     assert receipt["total_amount_kopecks"] == 10000
     assert len(receipt["items"]) == 1
     stored = db.receipts.find_one({"id": receipt["id"]})
@@ -635,6 +636,58 @@ def test_confirmed_receipt_financial_fields_cannot_be_changed(db):
 
     assert updated["title"] == "Updated title"
     assert updated["status"] == "confirmed"
+
+
+def test_receipt_update_rejects_stale_version(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    updated = receipts.update_receipt(
+        db,
+        receipt["id"],
+        schemas.UpdateReceiptRequest(title="First", expected_version=1),
+        USER_A,
+    )
+
+    try:
+        receipts.update_receipt(
+            db,
+            receipt["id"],
+            schemas.UpdateReceiptRequest(title="Stale", expected_version=1),
+            USER_A,
+        )
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected stale receipt version update to fail")
+
+    assert updated["version"] == 2
+
+
+def test_voided_receipt_no_longer_affects_balances(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    receipts.confirm_receipt(db, receipt["id"], USER_A)
+
+    assert balances.get_event_balances(db, EVENT_ID, USER_A)
+
+    voided = receipts.void_receipt(db, receipt["id"], USER_A)
+
+    assert voided["status"] == "voided"
+    assert balances.get_event_balances(db, EVENT_ID, USER_A) == []
+
+
+def test_receipt_correction_marks_original_and_creates_draft(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    receipts.confirm_receipt(db, receipt["id"], USER_A)
+
+    correction = receipts.create_receipt_correction(db, receipt["id"], USER_A)
+
+    original = receipts.get_receipt(db, receipt["id"], USER_A)
+    assert original["status"] == "corrected"
+    assert correction["status"] == "draft"
+    assert correction["corrected_from_receipt_id"] == receipt["id"]
+    assert balances.get_event_balances(db, EVENT_ID, USER_A) == []
 
 
 def test_legacy_decimal_money_storage_reads_as_kopecks(db):
