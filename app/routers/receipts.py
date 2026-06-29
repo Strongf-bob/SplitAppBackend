@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Response, UploadFile, status
 from pymongo.database import Database
 
 from app import schemas, services
@@ -17,10 +17,13 @@ router = APIRouter(tags=["Receipts"])
 def create_receipt(
     id: UUID,
     payload: schemas.CreateReceiptRequest,
+    idempotency_key: str = Header(min_length=1, alias="Idempotency-Key"),
     db: Database = Depends(get_db),
     current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
-    return services.create_receipt(db, str(id), payload, current_user_id)
+    return services.create_receipt(
+        db, str(id), payload, current_user_id, idempotency_key=idempotency_key
+    )
 
 
 @router.get("/api/events/{id}/receipts", response_model=schemas.ReceiptPage)
@@ -53,6 +56,96 @@ def update_receipt(
     current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
     return services.update_receipt(db, str(id), payload, current_user_id)
+
+
+@router.post("/api/receipts/{id}/confirm", response_model=schemas.Receipt)
+def confirm_receipt(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.confirm_receipt(db, str(id), current_user_id)
+
+
+@router.post("/api/receipts/{id}/void", response_model=schemas.Receipt)
+def void_receipt(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.void_receipt(db, str(id), current_user_id)
+
+
+@router.post("/api/receipts/{id}/corrections", response_model=schemas.Receipt)
+def create_receipt_correction(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.create_receipt_correction(db, str(id), current_user_id)
+
+
+@router.post("/api/receipts/{id}/allocation-session", response_model=schemas.AllocationSessionState)
+def start_allocation_session(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.start_allocation_session(db, str(id), current_user_id)
+
+
+@router.get(
+    "/api/allocation-sessions/{id}",
+    response_model=schemas.AllocationSessionState,
+)
+def get_allocation_session(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.get_allocation_session(db, str(id), current_user_id)
+
+
+@router.post("/api/allocation-sessions/{id}/claims", response_model=schemas.ReceiptItemClaim)
+def claim_receipt_item(
+    id: UUID,
+    payload: schemas.ReceiptItemClaimRequest,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.claim_receipt_item(db, str(id), payload, current_user_id)
+
+
+@router.delete("/api/allocation-sessions/{id}/claims", status_code=status.HTTP_204_NO_CONTENT)
+def unclaim_receipt_item(
+    id: UUID,
+    payload: schemas.ReceiptItemClaimRequest,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> Response:
+    services.unclaim_receipt_item(db, str(id), payload, current_user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/api/allocation-sessions/{id}/ready",
+    response_model=schemas.AllocationSessionState,
+)
+def mark_allocation_session_ready(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.mark_allocation_session_ready(db, str(id), current_user_id)
+
+
+@router.post("/api/allocation-sessions/{id}/finalize", response_model=schemas.Receipt)
+def finalize_allocation_session(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.finalize_allocation_session(db, str(id), current_user_id)
 
 
 @router.delete("/api/receipts/{id}", status_code=status.HTTP_204_NO_CONTENT)

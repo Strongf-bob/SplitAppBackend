@@ -29,33 +29,79 @@ Authorization: Bearer <access_token>
 | `POST` | `/api/login` | Обмен Yandex OAuth token на app access/refresh tokens. | `AuthUserEndpoint` |
 | `POST` | `/api/refresh` | Ротация refresh token и выдача нового access token. | `RefreshTokenEndpoint` |
 
+## Security
+
+Sensitive endpoints have lightweight per-actor/IP rate limiting and return `429` on excess traffic. Covered scopes include auth login/refresh, user search, invite preview/accept/create, and nearby invite code preview/accept/create.
+
+Config:
+
+- `RATE_LIMIT_ENABLED`: default `true`.
+- `RATE_LIMIT_MAX_REQUESTS`: default `60`.
+- `RATE_LIMIT_WINDOW_SECONDS`: default `60`.
+
 ## Users
 
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
 | `GET` | `/api/users` | Список пользователей, видимых текущему actor. | Paginated; возвращает current user и пользователей из общих active events. |
-| `PATCH` | `/api/users/me` | Обновить профиль текущего пользователя. | `name`, `email`, `avatar_url`. |
+| `GET` | `/api/users/search` | Opt-in поиск пользователей по handle/name. | Не ищет по телефону; возвращает только `discovery_enabled=true`. |
+| `GET` | `/api/users/me/financial-stats` | Финансовая сводка текущего пользователя. | Open/closed event totals, outstanding owed/receivable kopecks. |
+| `PATCH` | `/api/users/me` | Обновить профиль текущего пользователя. | `name`, `email`, `avatar_url`, discovery fields, payment hints. |
+
+Payment phone visibility is conservative: `nobody`, `event_members`, or `friends`. Phone search is disabled.
+
+## Friends
+
+| Method | Path | Назначение | Notes |
+| --- | --- | --- | --- |
+| `POST` | `/api/friends` | Создать private friend request. | Friendship не равен event membership. |
+| `GET` | `/api/friends` | Список friendship records текущего user. | Paginated; optional `status` filter. |
+| `POST` | `/api/friends/{id}/accept` | Принять friend request. | Только addressee. |
+| `POST` | `/api/friends/{id}/reject` | Отклонить friend request. | Только addressee. |
+| `DELETE` | `/api/friends/{id}` | Удалить friendship. | Любая сторона. |
+| `POST` | `/api/friends/{id}/block` | Заблокировать friendship. | Любая сторона. |
 
 ## Events
 
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
 | `POST` | `/api/events` | Создать событие. | Creator становится owner события. |
-| `GET` | `/api/events` | Получить события, видимые caller. | Paginated; caller должен быть creator или participant. |
+| `GET` | `/api/events` | Получить события, видимые caller. | Paginated; caller должен иметь active event membership. |
 | `GET` | `/api/events/{id}` | Получить детали события. | Требуется membership. |
 | `PATCH` | `/api/events/{id}` | Обновить name или `is_closed`. | Creator-only management. |
 | `DELETE` | `/api/events/{id}` | Удалить событие. | Creator-only; service удаляет связанные receipts/payments. |
 | `POST` | `/api/events/{id}/participants` | Добавить участников. | Creator-only management. |
 | `DELETE` | `/api/events/{id}/participants/{user_id}` | Удалить участника. | Creator-only management. |
+| `POST` | `/api/events/{id}/invites` | Создать invite token/link для QR или ссылки. | Creator-only; token имеет TTL. |
+| `GET` | `/api/invites/{token}/preview` | Посмотреть event preview перед вступлением. | Требует auth, membership не требуется. |
+| `POST` | `/api/invites/{token}/accept` | Принять приглашение и стать участником. | Создает или reactivates `member` membership. |
+| `DELETE` | `/api/events/{id}/invites/{invite_id}` | Отозвать invite. | Creator-only; revoked token больше не принимается. |
+| `POST` | `/api/events/{id}/nearby-code` | Создать 6-значный nearby invite code. | Creator-only; TTL 1-5 минут. |
+| `GET` | `/api/nearby-invites/{code}/preview` | Посмотреть event preview по nearby code. | Требует auth. |
+| `POST` | `/api/nearby-invites/{code}/accept` | Принять nearby code и вступить в событие. | Создает или reactivates `member` membership. |
+
+Events return `participants` as membership records with `role` (`creator`, `member`) and `status`. Authorization uses `event_memberships`, not legacy `events.users`.
+
+Event settings include settlement policies: `split_strategy`, `receipt_creation_policy`, `receipt_finalization_policy`, `participants_invite_policy`, `debt_display_mode`, and `settlement_deadline_policy`. Backend enforces receipt creation, receipt confirmation, and participant invite policies.
 
 ## Receipts
 
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
-| `POST` | `/api/events/{id}/receipts` | Создать чек с items и shares. | Требуется membership; closed event запрещает mutation. |
+| `POST` | `/api/events/{id}/receipts` | Создать draft чек с items и shares. | Требуется membership; closed event запрещает mutation; нужен `Idempotency-Key`. |
 | `GET` | `/api/events/{id}/receipts` | Список чеков события. | Paginated; требуется membership. |
+| `GET` | `/api/receipt-categories` | Список стандартных категорий чеков. | Для UI metadata; custom category можно хранить на receipt. |
 | `GET` | `/api/receipts/{id}` | Детали чека. | Требуется membership через событие. |
-| `PATCH` | `/api/receipts/{id}` | Обновить чек. | Требуется membership; closed event запрещает mutation. |
+| `PATCH` | `/api/receipts/{id}` | Обновить чек. | Financial fields нельзя менять после confirmation; title можно обновить. |
+| `POST` | `/api/receipts/{id}/confirm` | Подтвердить draft чек. | Только confirmed receipts влияют на balances. |
+| `POST` | `/api/receipts/{id}/void` | Аннулировать confirmed чек. | Voided receipts не влияют на balances. |
+| `POST` | `/api/receipts/{id}/corrections` | Создать correction draft для confirmed чека. | Original получает `corrected`, новая draft требует confirmation. |
+| `POST` | `/api/receipts/{id}/allocation-session` | Запустить collaborative allocation session. | Только draft receipt; creator/payer. |
+| `GET` | `/api/allocation-sessions/{id}` | Получить session state и item claims. | Требуется event membership. |
+| `POST` | `/api/allocation-sessions/{id}/claims` | Claim receipt item для текущего user. | Session должна быть collecting. |
+| `DELETE` | `/api/allocation-sessions/{id}/claims` | Unclaim receipt item. | Удаляет claim текущего user. |
+| `POST` | `/api/allocation-sessions/{id}/ready` | Отметить session ready for review. | Creator/payer. |
+| `POST` | `/api/allocation-sessions/{id}/finalize` | Пересобрать shares по claims. | Receipt становится `ready_for_review`, но balances меняются только после confirm. |
 | `DELETE` | `/api/receipts/{id}` | Удалить чек. | Требуется authorization; delete behavior реализован в service layer. |
 | `POST` | `/api/receipts/{id}/image` | Загрузить JPEG изображения чека. | Multipart field: `file` или `image`. |
 | `DELETE` | `/api/receipts/{id}/image` | Удалить изображение чека. | Storage state должен быть очищен. |
@@ -66,6 +112,7 @@ Authorization: Bearer <access_token>
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
 | `GET` | `/api/events/{id}/balances` | Рассчитать долги внутри события. | Возвращает debtor-creditor edges. |
+| `GET` | `/api/events/{id}/balances/explain` | Объяснить рассчитанные долги. | Возвращает те же simplified debts и receipt/payment contributions. |
 
 ## Payments
 
@@ -73,8 +120,39 @@ Authorization: Bearer <access_token>
 | --- | --- | --- | --- |
 | `POST` | `/api/events/{id}/payments` | Создать payment declaration. | Sender должен быть authenticated user. |
 | `GET` | `/api/events/{id}/payments` | Список платежей события. | Paginated; требуется membership. |
+| `POST` | `/api/events/{id}/payment-requests` | Создать просьбу оплатить. | Creditor должен быть authenticated user; нужен `Idempotency-Key`. |
+| `GET` | `/api/events/{id}/payment-requests` | Список просьб оплатить. | Paginated; требуется membership. |
+| `POST` | `/api/payment-requests/{id}/acknowledge` | Debtor отмечает, что увидел просьбу. | Не меняет баланс. |
+| `POST` | `/api/payment-requests/{id}/cancel` | Creditor отменяет просьбу. | Можно отменить active/disputed request. |
+| `POST` | `/api/payment-requests/{id}/request-extension` | Debtor просит продление. | Не меняет deadline автоматически. |
+| `POST` | `/api/payment-requests/{id}/dispute` | Открыть спор по просьбе оплаты. | Ставит status `disputed`. |
+| `POST` | `/api/payment-requests/{id}/mark-paid` | Debtor нажимает "я оплатил". | Создает pending payment; нужен `Idempotency-Key`. |
+| `POST` | `/api/payments/{id}/confirm` | Receiver подтверждает оплату. | Только confirmed payments уменьшают balances. |
+| `POST` | `/api/payments/{id}/reject` | Receiver отклоняет оплату. | Rejected payments не влияют на balances. |
 | `PATCH` | `/api/payments/{id}` | Подтвердить или обновить payment state. | Confirmation restricted to receiver. |
 | `DELETE` | `/api/payments/{id}` | Удалить unconfirmed payment. | Для cleanup ошибочных declarations. |
+
+Payment requests may include `deadline_at`; backend rejects deadlines less than 30 minutes out.
+
+## Reports
+
+| Method | Path | Назначение | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/api/events/{id}/export.csv` | CSV export долгов, чеков и платежей события. | Требуется event membership; PDF export пока TODO. |
+
+## Disputes
+
+| Method | Path | Назначение | Notes |
+| --- | --- | --- | --- |
+| `POST` | `/api/disputes` | Создать спор по receipt/payment/payment_request. | Требуется event membership через resource. |
+| `GET` | `/api/events/{id}/disputes` | Список споров события. | Paginated; требуется event membership. |
+| `POST` | `/api/disputes/{id}/resolve` | Закрыть спор. | Creator-only MVP resolution. |
+
+## Activity
+
+| Method | Path | Назначение | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/api/events/{id}/activity` | Event activity/audit feed. | Paginated; виден active event members. |
 
 ## Health и operations
 
@@ -95,9 +173,32 @@ Authorization: Bearer <access_token>
 
 Unexpected failures должны возвращать generic `500`, а полные детали должны попадать только в server logs.
 
+## Money
+
+API v2 передает денежные значения целыми копейками:
+
+- receipts: `total_amount_kopecks`, `cost_kopecks`;
+- payments and balances: `amount_kopecks`.
+
+Backend хранит новые денежные значения в MongoDB как integer kopecks. Старые decimal-string записи читаются совместимо во время rollout, но новые request/response contracts не используют `double`, `Decimal` или рублевые строки.
+
+Receipt updates support optimistic locking through `expected_version`; stale versions return `409`.
+Receipt items can carry `split_mode` metadata while `share_items` remain authoritative. Receipts also store fiscal metadata such as discount, service fee, delivery fee, tip, rounding adjustment, fiscal total, and VAT in kopecks.
+
+## Idempotency
+
+Financial create endpoints require `Idempotency-Key`:
+
+- `POST /api/events/{id}/receipts`;
+- `POST /api/events/{id}/payments`;
+- `POST /api/events/{id}/payment-requests`;
+- `POST /api/payment-requests/{id}/mark-paid`.
+
+Повтор того же actor + endpoint scope + key + payload возвращает сохраненный response. Повтор того же key с другим payload возвращает `409`.
+
 ## Pagination
 
-List endpoints `GET /api/events`, `GET /api/users`, `GET /api/events/{id}/receipts` и `GET /api/events/{id}/payments` принимают query params:
+Paginated list endpoints, including events, users, friends, receipts, payments, payment requests, disputes, and activity feeds, accept query params:
 
 - `limit`: `1..100`, default `50`.
 - `offset`: `>= 0`, default `0`.

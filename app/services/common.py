@@ -30,8 +30,15 @@ def decimal_from_value(value) -> Decimal:
     return Decimal(str(value))
 
 
-def money_to_storage(value: Decimal) -> str:
-    return str(decimal_from_value(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+def money_kopecks_from_value(value) -> int:
+    if isinstance(value, int):
+        return value
+    amount = decimal_from_value(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def money_to_storage(value: int) -> int:
+    return int(value)
 
 
 def decimal_to_storage(value: Decimal) -> str:
@@ -40,6 +47,12 @@ def decimal_to_storage(value: Decimal) -> str:
 
 def money_round(value: Decimal) -> Decimal:
     return decimal_from_value(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def stored_money_to_kopecks(document: dict, kopecks_key: str, legacy_key: str) -> int:
+    if kopecks_key in document:
+        return int(document[kopecks_key])
+    return money_kopecks_from_value(document[legacy_key])
 
 
 def record_audit_event(
@@ -78,4 +91,9 @@ def user_to_api_dict(user: dict) -> dict:
         "phone_number": user["phone_number"],
         "email": user.get("email"),
         "avatar_url": user.get("avatar_url") or yandex_avatar_url(user.get("default_avatar_id")),
+        "public_handle": user.get("public_handle"),
+        "discovery_enabled": bool(user.get("discovery_enabled", False)),
+        "payment_phone": user.get("payment_phone"),
+        "phone_verified": bool(user.get("phone_verified", False)),
+        "payment_phone_visibility": user.get("payment_phone_visibility", "nobody"),
     }

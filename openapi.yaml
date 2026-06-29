@@ -1,1074 +1,5811 @@
-openapi: 3.1.0
-info:
-  title: SplitApp Backend API
-  version: 1.0.0
-  description: |
-    **Object storage (server environment):** S3-compatible storage (e.g. Yandex Object Storage) uses
-    `S3_ENDPOINT_URL`, `S3_REGION`, optional `S3_BUCKET`, and static keys
-    `YC_OBJECT_STORAGE_ACCESS_KEY_ID` and `YC_OBJECT_STORAGE_SECRET_ACCESS_KEY`.
-servers:
-  - url: http://localhost:8000
-    description: Local development
-  - url: https://splitapp.tech
-    description: Production
-security:
-  - BearerAuth: []
-tags:
-  - name: Auth
-  - name: Users
-  - name: Events
-  - name: Receipts
-  - name: Debts & Balances
-  - name: Payments
-paths:
-  /api/login:
-    post:
-      tags: [Auth]
-      summary: Exchange Yandex OAuth token for app tokens
-      operationId: loginWithYandex
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LoginYandexRequest"
-      responses:
-        "200":
-          description: Access and refresh tokens issued
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LoginResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "409":
-          description: phone_number conflict
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "502":
-          description: Yandex API error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /api/refresh:
-    post:
-      tags: [Auth]
-      summary: Rotate refresh token and issue new access token
-      operationId: refreshTokens
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RefreshRequest"
-      responses:
-        "200":
-          description: New token pair
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RefreshResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-  /api/users:
-    get:
-      tags: [Users]
-      summary: List users visible to the current user
-      operationId: listUsers
-      parameters:
-        - $ref: "#/components/parameters/LimitQueryParam"
-        - $ref: "#/components/parameters/OffsetQueryParam"
-      responses:
-        "200":
-          description: Paginated current user and users sharing at least one event with the caller, sorted by name
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UserPage"
-
-  /api/metrics:
-    get:
-      tags: [Health]
-      summary: Export Prometheus metrics
-      description: Operations endpoint intended for internal Prometheus scraping inside the deployment network. Do not expose it publicly.
-      operationId: getMetrics
-      responses:
-        "200":
-          description: Prometheus text exposition payload
-          content:
-            text/plain:
-              schema:
-                type: string
-
-  /api/users/me:
-    patch:
-      tags: [Users]
-      summary: Update current user profile
-      operationId: updateCurrentUser
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateUserRequest"
-      responses:
-        "200":
-          description: Updated current user profile
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/User"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-  /api/events:
-    post:
-      tags: [Events]
-      summary: Create event
-      operationId: createEvent
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateEventRequest"
-      responses:
-        "201":
-          description: Event created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Event"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-    get:
-      tags: [Events]
-      summary: List events for the authenticated user
-      operationId: listEvents
-      description: Returns events where the caller is a participant or creator.
-      parameters:
-        - $ref: "#/components/parameters/LimitQueryParam"
-        - $ref: "#/components/parameters/OffsetQueryParam"
-      responses:
-        "200":
-          description: Paginated event list
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EventPage"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-
-  /api/events/{id}:
-    get:
-      tags: [Events]
-      summary: Get event details
-      operationId: getEventById
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      responses:
-        "200":
-          description: Event details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Event"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    patch:
-      tags: [Events]
-      summary: Update event name or closed flag
-      operationId: updateEvent
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateEventRequest"
-      responses:
-        "200":
-          description: Event updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Event"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    delete:
-      tags: [Events]
-      summary: Delete event
-      description: Deletes the event and its receipts and payments. Only the event creator may call this.
-      operationId: deleteEvent
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      responses:
-        "204":
-          description: Event deleted
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /api/events/{id}/participants:
-    post:
-      tags: [Events]
-      summary: Add participants to event
-      operationId: addEventParticipants
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AddParticipantsRequest"
-      responses:
-        "201":
-          description: Participants added
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/User"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /api/events/{id}/participants/{user_id}:
-    delete:
-      tags: [Events]
-      summary: Remove participant from event
-      operationId: removeEventParticipant
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-        - in: path
-          name: user_id
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "204":
-          description: Participant removed
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /api/events/{id}/receipts:
-    post:
-      tags: [Receipts]
-      summary: Create receipt with items and shares
-      operationId: createReceipt
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateReceiptRequest"
-      responses:
-        "201":
-          description: Receipt created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Receipt"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    get:
-      tags: [Receipts]
-      summary: List event receipts
-      operationId: listReceiptsByEvent
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-        - $ref: "#/components/parameters/LimitQueryParam"
-        - $ref: "#/components/parameters/OffsetQueryParam"
-      responses:
-        "200":
-          description: Paginated receipt list
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ReceiptPage"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-
-  /api/receipts/{id}:
-    get:
-      tags: [Receipts]
-      summary: Get receipt details
-      operationId: getReceipt
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      responses:
-        "200":
-          description: Receipt details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Receipt"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    patch:
-      tags: [Receipts]
-      summary: Update receipt
-      operationId: updateReceipt
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateReceiptRequest"
-      responses:
-        "200":
-          description: Receipt updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Receipt"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    delete:
-      tags: [Receipts]
-      summary: Delete receipt
-      operationId: deleteReceipt
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      responses:
-        "204":
-          description: Receipt deleted
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /api/receipts/{id}/image:
-    post:
-      tags: [Receipts]
-      summary: Upload receipt image (JPEG)
-      description: |
-        Accepts a JPEG file for the given receipt. The image is stored in S3-compatible object storage
-        (e.g. Yandex Object Storage; see `S3_ENDPOINT_URL`, `S3_REGION`, `S3_BUCKET`,
-        `YC_OBJECT_STORAGE_ACCESS_KEY_ID`, `YC_OBJECT_STORAGE_SECRET_ACCESS_KEY` in server configuration).
-        The receipt record is updated with `image_url` pointing at the object URL.
-      operationId: uploadReceiptImage
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              description: Send exactly one file using form field `file` or `image` (multipart/form-data, not JSON).
-              properties:
-                file:
-                  type: string
-                  format: binary
-                  description: JPEG image (.jpg or .jpeg)
-                image:
-                  type: string
-                  format: binary
-                  description: Same as `file` if your client uses this field name instead.
-      responses:
-        "201":
-          description: Image stored; public URL of the file
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ReceiptImageUploadResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    delete:
-      tags: [Receipts]
-      summary: Delete receipt image
-      operationId: deleteReceiptImage
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      responses:
-        "204":
-          description: Receipt image deleted
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /api/receipts/{id}/image/presigned-url:
-    get:
-      tags: [Receipts]
-      summary: Get presigned receipt image URL
-      operationId: getReceiptImagePresignedUrl
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      responses:
-        "200":
-          description: Temporary URL for reading the receipt image
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ReceiptImagePresignedUrlResponse"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /api/events/{id}/balances:
-    get:
-      tags: [Debts & Balances]
-      summary: Calculate debts and balances for event
-      operationId: getEventBalances
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      responses:
-        "200":
-          description: Balance rows
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/EventBalance"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-
-  /api/events/{id}/payments:
-    post:
-      tags: [Payments]
-      summary: Create payment declaration
-      operationId: createPayment
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreatePaymentRequest"
-      responses:
-        "201":
-          description: Payment created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Payment"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    get:
-      tags: [Payments]
-      summary: List event payments
-      operationId: listPaymentsByEvent
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-        - $ref: "#/components/parameters/LimitQueryParam"
-        - $ref: "#/components/parameters/OffsetQueryParam"
-      responses:
-        "200":
-          description: Paginated payment list
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PaymentPage"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-
-  /api/payments/{id}:
-    patch:
-      tags: [Payments]
-      summary: Update payment
-      operationId: updatePayment
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdatePaymentRequest"
-      responses:
-        "200":
-          description: Payment updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Payment"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    delete:
-      tags: [Payments]
-      summary: Delete unconfirmed payment
-      operationId: deletePayment
-      description: Only the payment sender or receiver may delete an unconfirmed payment.
-      parameters:
-        - $ref: "#/components/parameters/IdPathParam"
-      responses:
-        "204":
-          description: Payment deleted
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "409":
-          description: Confirmed payments cannot be deleted
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-components:
-  securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: HS256 access token from /api/login or /api/refresh
-  parameters:
-    IdPathParam:
-      in: path
-      name: id
-      required: true
-      schema:
-        type: string
-        format: uuid
-    LimitQueryParam:
-      in: query
-      name: limit
-      required: false
-      description: Maximum number of items to return.
-      schema:
-        type: integer
-        minimum: 1
-        maximum: 100
-        default: 50
-    OffsetQueryParam:
-      in: query
-      name: offset
-      required: false
-      description: Number of matching items to skip before returning the page.
-      schema:
-        type: integer
-        minimum: 0
-        default: 0
-
-  responses:
-    Unauthorized:
-      description: Missing or invalid credentials
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
-    BadRequest:
-      description: Invalid request payload
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
-    NotFound:
-      description: Resource not found
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
-    Forbidden:
-      description: Authenticated user may not access this resource
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
-
-  schemas:
-    ErrorResponse:
-      type: object
-      properties:
-        detail:
-          type: string
-      required: [detail]
-
-    User:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        phone_number:
-          type: string
-        email:
-          type: string
-          format: email
-          nullable: true
-        avatar_url:
-          type: string
-          format: uri
-          nullable: true
-      required: [id, name, phone_number]
-
-    UserPage:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/User"
-        limit:
-          type: integer
-          minimum: 1
-          maximum: 100
-        offset:
-          type: integer
-          minimum: 0
-        total:
-          type: integer
-          minimum: 0
-          description: Total matching records before limit and offset are applied.
-      required: [items, limit, offset, total]
-
-    UpdateUserRequest:
-      type: object
-      properties:
-        name:
-          type: string
-        email:
-          type: string
-          format: email
-          nullable: true
-        avatar_url:
-          type: string
-          format: uri
-          nullable: true
-      minProperties: 1
-
-    LoginYandexRequest:
-      type: object
-      properties:
-        yandex_token:
-          type: string
-          description: OAuth token from Yandex Login SDK
-      required: [yandex_token]
-
-    LoginResponse:
-      type: object
-      properties:
-        user:
-          $ref: "#/components/schemas/User"
-        access_token:
-          type: string
-        refresh_token:
-          type: string
-        token_type:
-          type: string
-          default: bearer
-        expires_in:
-          type: integer
-          description: Access token lifetime in seconds
-      required: [user, access_token, refresh_token, expires_in]
-
-    RefreshRequest:
-      type: object
-      properties:
-        refresh_token:
-          type: string
-      required: [refresh_token]
-
-    RefreshResponse:
-      type: object
-      properties:
-        access_token:
-          type: string
-        refresh_token:
-          type: string
-        token_type:
-          type: string
-          default: bearer
-        expires_in:
-          type: integer
-          description: Access token lifetime in seconds
-      required: [access_token, refresh_token, expires_in]
-
-    Event:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        creator_id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        is_closed:
-          type: boolean
-        users:
-          type: array
-          description: Participant user IDs for this event.
-          items:
-            type: string
-            format: uuid
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-      required:
-        [id, creator_id, name, is_closed, users, created_at, updated_at]
-
-    EventPage:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Event"
-        limit:
-          type: integer
-          minimum: 1
-          maximum: 100
-        offset:
-          type: integer
-          minimum: 0
-        total:
-          type: integer
-          minimum: 0
-          description: Total matching records before limit and offset are applied.
-      required: [items, limit, offset, total]
-
-    CreateEventRequest:
-      type: object
-      properties:
-        name:
-          type: string
-      required: [name]
-
-    UpdateEventRequest:
-      type: object
-      properties:
-        is_closed:
-          type: boolean
-        name:
-          type: string
-      minProperties: 1
-
-    AddParticipantsRequest:
-      type: object
-      properties:
-        user_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-          minItems: 1
-      required: [user_ids]
-
-    ShareItem:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        receipt_item_id:
-          type: string
-          format: uuid
-        user_id:
-          type: string
-          format: uuid
-        share_value:
-          type: number
-          format: double
-          exclusiveMinimum: 0
-          maximum: 1
-          description: Relative share in interval (0, 1].
-      required: [id, receipt_item_id, user_id, share_value]
-
-    CreateShareItemRequest:
-      type: object
-      properties:
-        user_id:
-          type: string
-          format: uuid
-        share_value:
-          type: number
-          format: double
-          exclusiveMinimum: 0
-          maximum: 1
-          description: Relative share in interval (0, 1].
-      required: [user_id, share_value]
-
-    ReceiptItem:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        receipt_id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        cost:
-          type: number
-          format: double
-        share_items:
-          type: array
-          description: IDs of ShareItem records linked to this receipt item.
-          items:
-            type: string
-            format: uuid
-      required: [id, receipt_id, cost, share_items]
-
-    CreateReceiptItemRequest:
-      type: object
-      properties:
-        name:
-          type: string
-        cost:
-          type: number
-          format: double
-        share_items:
-          type: array
-          items:
-            $ref: "#/components/schemas/CreateShareItemRequest"
-      required: [cost, share_items]
-
-    Receipt:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        event_id:
-          type: string
-          format: uuid
-        payer_id:
-          type: string
-          format: uuid
-        title:
-          type: string
-        total_amount:
-          type: number
-          format: double
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/ReceiptItem"
-        image_url:
-          type: string
-          format: uri
-          nullable: true
-          description: Absolute URL of the receipt image when one has been uploaded.
-      required:
-        [
-          id,
-          event_id,
-          payer_id,
-          total_amount,
-          created_at,
-          updated_at,
-          items
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SplitApp Backend",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/ping": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Ping",
+        "operationId": "ping_api_ping_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Ping Api Ping Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
         ]
-
-    ReceiptPage:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Receipt"
-        limit:
-          type: integer
-          minimum: 1
-          maximum: 100
-        offset:
-          type: integer
-          minimum: 0
-        total:
-          type: integer
-          minimum: 0
-          description: Total matching records before limit and offset are applied.
-      required: [items, limit, offset, total]
-
-    ReceiptImageUploadResponse:
-      type: object
-      properties:
-        image_url:
-          type: string
-          format: uri
-          description: Absolute URL to fetch the uploaded image (same as Receipt.image_url after upload).
-      required: [image_url]
-
-    ReceiptImagePresignedUrlResponse:
-      type: object
-      properties:
-        image_url:
-          type: string
-          format: uri
-          description: Temporary URL for reading the uploaded receipt image.
-      required: [image_url]
-
-    CreateReceiptRequest:
-      type: object
-      properties:
-        payer_id:
-          type: string
-          format: uuid
-        title:
-          type: string
-        total_amount:
-          type: number
-          format: double
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/CreateReceiptItemRequest"
-          minItems: 1
-      required: [payer_id, total_amount, items]
-
-    UpdateReceiptRequest:
-      type: object
-      properties:
-        title:
-          type: string
-        total_amount:
-          type: number
-          format: double
-          exclusiveMinimum: 0
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/CreateReceiptItemRequest"
-          minItems: 1
-      minProperties: 1
-
-    Payment:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        event_id:
-          type: string
-          format: uuid
-        sender_id:
-          type: string
-          format: uuid
-        receiver_id:
-          type: string
-          format: uuid
-        amount:
-          type: number
-          format: double
-        confirmed:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-      required: [id, event_id, sender_id, receiver_id, amount, confirmed, created_at]
-
-    PaymentPage:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Payment"
-        limit:
-          type: integer
-          minimum: 1
-          maximum: 100
-        offset:
-          type: integer
-          minimum: 0
-        total:
-          type: integer
-          minimum: 0
-          description: Total matching records before limit and offset are applied.
-      required: [items, limit, offset, total]
-
-    CreatePaymentRequest:
-      type: object
-      properties:
-        sender_id:
-          type: string
-          format: uuid
-        receiver_id:
-          type: string
-          format: uuid
-        amount:
-          type: number
-          format: double
-      required: [sender_id, receiver_id, amount]
-
-    UpdatePaymentRequest:
-      type: object
-      properties:
-        confirmed:
-          type: boolean
-      required: [confirmed]
-
-    EventBalance:
-      type: object
-      description: One debt row for an event balance snapshot.
-      properties:
-        event_id:
-          type: string
-          format: uuid
-        debitor_id:
-          type: string
-          format: uuid
-        creditor_id:
-          type: string
-          format: uuid
-        amount:
-          type: number
-          format: double
-      required: [event_id, debitor_id, creditor_id, amount]
+      }
+    },
+    "/api/health/db": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Db Health",
+        "operationId": "db_health_api_health_db_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Db Health Api Health Db Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/metrics": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Metrics",
+        "operationId": "metrics_api_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/events/{id}/activity": {
+      "get": {
+        "tags": [
+          "Audit"
+        ],
+        "summary": "List Event Activity",
+        "operationId": "list_event_activity_api_events__id__activity_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Login",
+        "operationId": "login_api_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginYandexRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Refresh Tokens",
+        "operationId": "refresh_tokens_api_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/disputes": {
+      "post": {
+        "tags": [
+          "Disputes"
+        ],
+        "summary": "Create Dispute",
+        "operationId": "create_dispute_api_disputes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisputeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dispute"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/events/{id}/disputes": {
+      "get": {
+        "tags": [
+          "Disputes"
+        ],
+        "summary": "List Event Disputes",
+        "operationId": "list_event_disputes_api_events__id__disputes_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisputePage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/disputes/{id}/resolve": {
+      "post": {
+        "tags": [
+          "Disputes"
+        ],
+        "summary": "Resolve Dispute",
+        "operationId": "resolve_dispute_api_disputes__id__resolve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisputeResolve"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dispute"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Create Event",
+        "operationId": "create_event_api_events_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "List Events",
+        "operationId": "list_events_api_events_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{id}": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Get Event",
+        "operationId": "get_event_api_events__id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Update Event",
+        "operationId": "update_event_api_events__id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Delete Event",
+        "operationId": "delete_event_api_events__id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{id}/participants": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Add Event Participants",
+        "operationId": "add_event_participants_api_events__id__participants_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddParticipantsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  },
+                  "title": "Response Add Event Participants Api Events  Id  Participants Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{id}/participants/{user_id}": {
+      "delete": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Remove Event Participant",
+        "operationId": "remove_event_participant_api_events__id__participants__user_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{id}/invites": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Create Event Invite",
+        "operationId": "create_event_invite_api_events__id__invites_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEventInviteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventInvite"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/invites/{token}/preview": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Preview Event Invite",
+        "operationId": "preview_event_invite_api_invites__token__preview_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventInvitePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/invites/{token}/accept": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Accept Event Invite",
+        "operationId": "accept_event_invite_api_invites__token__accept_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{id}/invites/{invite_id}": {
+      "delete": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Revoke Event Invite",
+        "operationId": "revoke_event_invite_api_events__id__invites__invite_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "invite_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Invite Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{id}/nearby-code": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Create Nearby Invite Code",
+        "operationId": "create_nearby_invite_code_api_events__id__nearby_code_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNearbyInviteCodeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NearbyInviteCode"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/nearby-invites/{code}/preview": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Preview Nearby Invite Code",
+        "operationId": "preview_nearby_invite_code_api_nearby_invites__code__preview_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventInvitePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/nearby-invites/{code}/accept": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Accept Nearby Invite Code",
+        "operationId": "accept_nearby_invite_code_api_nearby_invites__code__accept_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{id}/balances": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Get Event Balances",
+        "operationId": "get_event_balances_api_events__id__balances_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventBalance"
+                  },
+                  "title": "Response Get Event Balances Api Events  Id  Balances Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{id}/balances/explain": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Get Event Balance Explanations",
+        "operationId": "get_event_balance_explanations_api_events__id__balances_explain_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventBalanceExplanation"
+                  },
+                  "title": "Response Get Event Balance Explanations Api Events  Id  Balances Explain Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/friends": {
+      "post": {
+        "tags": [
+          "Friends"
+        ],
+        "summary": "Create Friend Request",
+        "operationId": "create_friend_request_api_friends_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FriendRequestCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Friendship"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Friends"
+        ],
+        "summary": "List Friendships",
+        "operationId": "list_friendships_api_friends_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FriendshipPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/friends/{id}/accept": {
+      "post": {
+        "tags": [
+          "Friends"
+        ],
+        "summary": "Accept Friend Request",
+        "operationId": "accept_friend_request_api_friends__id__accept_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Friendship"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/friends/{id}/reject": {
+      "post": {
+        "tags": [
+          "Friends"
+        ],
+        "summary": "Reject Friend Request",
+        "operationId": "reject_friend_request_api_friends__id__reject_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Friendship"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/friends/{id}": {
+      "delete": {
+        "tags": [
+          "Friends"
+        ],
+        "summary": "Remove Friendship",
+        "operationId": "remove_friendship_api_friends__id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/friends/{id}/block": {
+      "post": {
+        "tags": [
+          "Friends"
+        ],
+        "summary": "Block Friendship",
+        "operationId": "block_friendship_api_friends__id__block_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Friendship"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "List Users",
+        "operationId": "list_users_api_users_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/search": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Search Users",
+        "operationId": "search_users_api_users_search_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/me/financial-stats": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get Current User Financial Stats",
+        "operationId": "get_current_user_financial_stats_api_users_me_financial_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserFinancialStats"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/users/me": {
+      "patch": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Update Current User",
+        "operationId": "update_current_user_api_users_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/events/{id}/receipts": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Create Receipt",
+        "operationId": "create_receipt_api_events__id__receipts_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReceiptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "List Receipts By Event",
+        "operationId": "list_receipts_by_event_api_events__id__receipts_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/receipts/{id}": {
+      "get": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Get Receipt",
+        "operationId": "get_receipt_api_receipts__id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Update Receipt",
+        "operationId": "update_receipt_api_receipts__id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateReceiptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Delete Receipt",
+        "operationId": "delete_receipt_api_receipts__id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/receipts/{id}/confirm": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Confirm Receipt",
+        "operationId": "confirm_receipt_api_receipts__id__confirm_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/receipts/{id}/void": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Void Receipt",
+        "operationId": "void_receipt_api_receipts__id__void_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/receipts/{id}/corrections": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Create Receipt Correction",
+        "operationId": "create_receipt_correction_api_receipts__id__corrections_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/receipts/{id}/allocation-session": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Start Allocation Session",
+        "operationId": "start_allocation_session_api_receipts__id__allocation_session_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationSessionState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/allocation-sessions/{id}": {
+      "get": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Get Allocation Session",
+        "operationId": "get_allocation_session_api_allocation_sessions__id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationSessionState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/allocation-sessions/{id}/claims": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Claim Receipt Item",
+        "operationId": "claim_receipt_item_api_allocation_sessions__id__claims_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptItemClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptItemClaim"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Unclaim Receipt Item",
+        "operationId": "unclaim_receipt_item_api_allocation_sessions__id__claims_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptItemClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/allocation-sessions/{id}/ready": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Mark Allocation Session Ready",
+        "operationId": "mark_allocation_session_ready_api_allocation_sessions__id__ready_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationSessionState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/allocation-sessions/{id}/finalize": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Finalize Allocation Session",
+        "operationId": "finalize_allocation_session_api_allocation_sessions__id__finalize_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/receipts/{id}/image": {
+      "post": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Upload Receipt Image",
+        "operationId": "upload_receipt_image_api_receipts__id__image_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_receipt_image_api_receipts__id__image_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptImageUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Delete Receipt Image",
+        "operationId": "delete_receipt_image_api_receipts__id__image_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/receipts/{id}/image/presigned-url": {
+      "get": {
+        "tags": [
+          "Receipts"
+        ],
+        "summary": "Get Receipt Image Presigned Url",
+        "operationId": "get_receipt_image_presigned_url_api_receipts__id__image_presigned_url_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptImagePresignedUrlResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{id}/payments": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Create Payment",
+        "operationId": "create_payment_api_events__id__payments_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "List Payments By Event",
+        "operationId": "list_payments_by_event_api_events__id__payments_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{id}/payment-requests": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Create Payment Request",
+        "operationId": "create_payment_request_api_events__id__payment_requests_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentRequestCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRequest"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "List Payment Requests By Event",
+        "operationId": "list_payment_requests_by_event_api_events__id__payment_requests_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRequestPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payment-requests/{id}/mark-paid": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Mark Payment Request Paid",
+        "operationId": "mark_payment_request_paid_api_payment_requests__id__mark_paid_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payment-requests/{id}/acknowledge": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Acknowledge Payment Request",
+        "operationId": "acknowledge_payment_request_api_payment_requests__id__acknowledge_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRequest"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payment-requests/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Cancel Payment Request",
+        "operationId": "cancel_payment_request_api_payment_requests__id__cancel_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRequest"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payment-requests/{id}/request-extension": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Request Payment Extension",
+        "operationId": "request_payment_extension_api_payment_requests__id__request_extension_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRequest"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payment-requests/{id}/dispute": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Dispute Payment Request",
+        "operationId": "dispute_payment_request_api_payment_requests__id__dispute_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRequest"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/confirm": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Confirm Payment",
+        "operationId": "confirm_payment_api_payments__id__confirm_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/reject": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Reject Payment",
+        "operationId": "reject_payment_api_payments__id__reject_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/{id}": {
+      "patch": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Update Payment",
+        "operationId": "update_payment_api_payments__id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Delete Payment",
+        "operationId": "delete_payment_api_payments__id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/receipt-categories": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "List Receipt Categories",
+        "operationId": "list_receipt_categories_api_receipt_categories_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "title": "Response List Receipt Categories Api Receipt Categories Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/events/{id}/export.csv": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Export Event Csv",
+        "operationId": "export_event_csv_api_events__id__export_csv_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AddParticipantsRequest": {
+        "properties": {
+          "user_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "User Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_ids"
+        ],
+        "title": "AddParticipantsRequest"
+      },
+      "AllocationSession": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "receipt_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Receipt Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "receipt_id",
+          "status",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AllocationSession"
+      },
+      "AllocationSessionState": {
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/AllocationSession"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ReceiptItemClaim"
+            },
+            "type": "array",
+            "title": "Claims"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session",
+          "claims"
+        ],
+        "title": "AllocationSessionState"
+      },
+      "AuditEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "resource_type": {
+            "type": "string",
+            "title": "Resource Type"
+          },
+          "resource_id": {
+            "type": "string",
+            "title": "Resource Id"
+          },
+          "actor_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Actor User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "action",
+          "resource_type",
+          "resource_id",
+          "actor_user_id",
+          "created_at"
+        ],
+        "title": "AuditEvent"
+      },
+      "AuditEventPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "total"
+        ],
+        "title": "AuditEventPage"
+      },
+      "BalanceContribution": {
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "source_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Source Id"
+          },
+          "debitor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Debitor Id"
+          },
+          "creditor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creditor Id"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "title": "Amount Kopecks"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_type",
+          "source_id",
+          "debitor_id",
+          "creditor_id",
+          "amount_kopecks",
+          "description"
+        ],
+        "title": "BalanceContribution"
+      },
+      "Body_upload_receipt_image_api_receipts__id__image_post": {
+        "properties": {
+          "file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "contentMediaType": "application/octet-stream"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File",
+            "description": "JPEG image (.jpg or .jpeg); use this field or `image`."
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string",
+                "contentMediaType": "application/octet-stream"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image",
+            "description": "Same as `file` (alternate form field name some clients use)."
+          }
+        },
+        "type": "object",
+        "title": "Body_upload_receipt_image_api_receipts__id__image_post"
+      },
+      "CreateEventInviteRequest": {
+        "properties": {
+          "expires_in_seconds": {
+            "type": "integer",
+            "maximum": 2592000.0,
+            "minimum": 60.0,
+            "title": "Expires In Seconds",
+            "default": 604800
+          }
+        },
+        "type": "object",
+        "title": "CreateEventInviteRequest"
+      },
+      "CreateNearbyInviteCodeRequest": {
+        "properties": {
+          "expires_in_seconds": {
+            "type": "integer",
+            "maximum": 300.0,
+            "minimum": 60.0,
+            "title": "Expires In Seconds",
+            "default": 180
+          }
+        },
+        "type": "object",
+        "title": "CreateNearbyInviteCodeRequest"
+      },
+      "CreateReceiptItemRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": ""
+          },
+          "cost_kopecks": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Cost Kopecks"
+          },
+          "split_mode": {
+            "type": "string",
+            "title": "Split Mode",
+            "default": "custom"
+          },
+          "share_items": {
+            "items": {
+              "$ref": "#/components/schemas/CreateShareItemRequest"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Share Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cost_kopecks",
+          "share_items"
+        ],
+        "title": "CreateReceiptItemRequest"
+      },
+      "CreateReceiptRequest": {
+        "properties": {
+          "payer_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Payer Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "total_amount_kopecks": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Total Amount Kopecks"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CreateReceiptItemRequest"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Items"
+          },
+          "discount_amount_kopecks": {
+            "type": "integer",
+            "title": "Discount Amount Kopecks",
+            "default": 0
+          },
+          "service_fee_amount_kopecks": {
+            "type": "integer",
+            "title": "Service Fee Amount Kopecks",
+            "default": 0
+          },
+          "delivery_fee_amount_kopecks": {
+            "type": "integer",
+            "title": "Delivery Fee Amount Kopecks",
+            "default": 0
+          },
+          "tip_amount_kopecks": {
+            "type": "integer",
+            "title": "Tip Amount Kopecks",
+            "default": 0
+          },
+          "rounding_adjustment_kopecks": {
+            "type": "integer",
+            "title": "Rounding Adjustment Kopecks",
+            "default": 0
+          },
+          "fiscal_total_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiscal Total Amount Kopecks"
+          },
+          "vat_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vat Amount Kopecks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "payer_id",
+          "total_amount_kopecks",
+          "items"
+        ],
+        "title": "CreateReceiptRequest"
+      },
+      "CreateShareItemRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "share_value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Share Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "share_value"
+        ],
+        "title": "CreateShareItemRequest"
+      },
+      "Dispute": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "resource_type": {
+            "type": "string",
+            "title": "Resource Type"
+          },
+          "resource_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Resource Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolution_note": {
+            "type": "string",
+            "title": "Resolution Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "resource_type",
+          "resource_id",
+          "reason",
+          "status",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Dispute"
+      },
+      "DisputeCreate": {
+        "properties": {
+          "resource_type": {
+            "type": "string",
+            "title": "Resource Type"
+          },
+          "resource_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Resource Id"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resource_type",
+          "resource_id",
+          "reason"
+        ],
+        "title": "DisputeCreate"
+      },
+      "DisputePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Dispute"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "total"
+        ],
+        "title": "DisputePage"
+      },
+      "DisputeResolve": {
+        "properties": {
+          "resolution_note": {
+            "type": "string",
+            "title": "Resolution Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "DisputeResolve"
+      },
+      "Event": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "creator_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creator Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "is_closed": {
+            "type": "boolean",
+            "title": "Is Closed"
+          },
+          "split_strategy": {
+            "type": "string",
+            "title": "Split Strategy",
+            "default": "equal_default"
+          },
+          "receipt_creation_policy": {
+            "type": "string",
+            "title": "Receipt Creation Policy",
+            "default": "participants_can_add"
+          },
+          "receipt_finalization_policy": {
+            "type": "string",
+            "title": "Receipt Finalization Policy",
+            "default": "payer_finalizes"
+          },
+          "participants_invite_policy": {
+            "type": "string",
+            "title": "Participants Invite Policy",
+            "default": "creator_only"
+          },
+          "debt_display_mode": {
+            "type": "string",
+            "title": "Debt Display Mode",
+            "default": "simplified_default"
+          },
+          "settlement_deadline_policy": {
+            "type": "string",
+            "title": "Settlement Deadline Policy",
+            "default": "disabled"
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/EventMembership"
+            },
+            "type": "array",
+            "title": "Participants"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "creator_id",
+          "name",
+          "is_closed",
+          "participants",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Event"
+      },
+      "EventBalance": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "debitor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Debitor Id"
+          },
+          "creditor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creditor Id"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "title": "Amount Kopecks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "debitor_id",
+          "creditor_id",
+          "amount_kopecks"
+        ],
+        "title": "EventBalance"
+      },
+      "EventBalanceExplanation": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "debitor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Debitor Id"
+          },
+          "creditor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creditor Id"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "title": "Amount Kopecks"
+          },
+          "contributions": {
+            "items": {
+              "$ref": "#/components/schemas/BalanceContribution"
+            },
+            "type": "array",
+            "title": "Contributions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "debitor_id",
+          "creditor_id",
+          "amount_kopecks",
+          "contributions"
+        ],
+        "title": "EventBalanceExplanation"
+      },
+      "EventCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "split_strategy": {
+            "type": "string",
+            "title": "Split Strategy",
+            "default": "equal_default"
+          },
+          "receipt_creation_policy": {
+            "type": "string",
+            "title": "Receipt Creation Policy",
+            "default": "participants_can_add"
+          },
+          "receipt_finalization_policy": {
+            "type": "string",
+            "title": "Receipt Finalization Policy",
+            "default": "payer_finalizes"
+          },
+          "participants_invite_policy": {
+            "type": "string",
+            "title": "Participants Invite Policy",
+            "default": "creator_only"
+          },
+          "debt_display_mode": {
+            "type": "string",
+            "title": "Debt Display Mode",
+            "default": "simplified_default"
+          },
+          "settlement_deadline_policy": {
+            "type": "string",
+            "title": "Settlement Deadline Policy",
+            "default": "disabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "EventCreate"
+      },
+      "EventInvite": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "invite_url": {
+            "type": "string",
+            "title": "Invite Url"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "accepted_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted By"
+          },
+          "accepted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "token",
+          "invite_url",
+          "status",
+          "created_by",
+          "expires_at",
+          "created_at"
+        ],
+        "title": "EventInvite"
+      },
+      "EventInvitePreview": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "event_name": {
+            "type": "string",
+            "title": "Event Name"
+          },
+          "creator_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creator Id"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "participant_count": {
+            "type": "integer",
+            "title": "Participant Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "event_name",
+          "creator_id",
+          "expires_at",
+          "participant_count"
+        ],
+        "title": "EventInvitePreview"
+      },
+      "EventMembership": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "joined_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Joined At"
+          },
+          "removed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "user_id",
+          "role",
+          "status",
+          "joined_at"
+        ],
+        "title": "EventMembership"
+      },
+      "EventPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "total"
+        ],
+        "title": "EventPage"
+      },
+      "EventUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "is_closed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Closed"
+          },
+          "split_strategy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split Strategy"
+          },
+          "receipt_creation_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Creation Policy"
+          },
+          "receipt_finalization_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Finalization Policy"
+          },
+          "participants_invite_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Participants Invite Policy"
+          },
+          "debt_display_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debt Display Mode"
+          },
+          "settlement_deadline_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settlement Deadline Policy"
+          }
+        },
+        "type": "object",
+        "title": "EventUpdate"
+      },
+      "FriendRequestCreate": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "FriendRequestCreate"
+      },
+      "Friendship": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "requester_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Requester Id"
+          },
+          "addressee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Addressee Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "requester_id",
+          "addressee_id",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Friendship"
+      },
+      "FriendshipPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Friendship"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "total"
+        ],
+        "title": "FriendshipPage"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LoginResponse": {
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In",
+            "description": "Access token lifetime in seconds."
+          }
+        },
+        "type": "object",
+        "required": [
+          "user",
+          "access_token",
+          "refresh_token",
+          "expires_in"
+        ],
+        "title": "LoginResponse"
+      },
+      "LoginYandexRequest": {
+        "properties": {
+          "yandex_token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Yandex Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "yandex_token"
+        ],
+        "title": "LoginYandexRequest"
+      },
+      "NearbyInviteCode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "code",
+          "status",
+          "created_by",
+          "expires_at",
+          "created_at"
+        ],
+        "title": "NearbyInviteCode"
+      },
+      "Payment": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "sender_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Sender Id"
+          },
+          "receiver_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Receiver Id"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "title": "Amount Kopecks"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "payment_request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Request Id"
+          },
+          "rejected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "sender_id",
+          "receiver_id",
+          "amount_kopecks",
+          "status",
+          "confirmed",
+          "created_at"
+        ],
+        "title": "Payment"
+      },
+      "PaymentCreate": {
+        "properties": {
+          "sender_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Sender Id"
+          },
+          "receiver_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Receiver Id"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Kopecks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sender_id",
+          "receiver_id",
+          "amount_kopecks"
+        ],
+        "title": "PaymentCreate"
+      },
+      "PaymentPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Payment"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "total"
+        ],
+        "title": "PaymentPage"
+      },
+      "PaymentRequest": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "debtor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Debtor Id"
+          },
+          "creditor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creditor Id"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "title": "Amount Kopecks"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": ""
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "payment_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Id"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          },
+          "acknowledged_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged At"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
+          },
+          "disputed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disputed At"
+          },
+          "extension_requested_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extension Requested At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "debtor_id",
+          "creditor_id",
+          "amount_kopecks",
+          "status",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PaymentRequest"
+      },
+      "PaymentRequestCreate": {
+        "properties": {
+          "debtor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Debtor Id"
+          },
+          "creditor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creditor Id"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Kopecks"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": ""
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "debtor_id",
+          "creditor_id",
+          "amount_kopecks"
+        ],
+        "title": "PaymentRequestCreate"
+      },
+      "PaymentRequestPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentRequest"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "total"
+        ],
+        "title": "PaymentRequestPage"
+      },
+      "PaymentUpdate": {
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirmed"
+        ],
+        "title": "PaymentUpdate"
+      },
+      "Receipt": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "payer_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Payer Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "total_amount_kopecks": {
+            "type": "integer",
+            "title": "Total Amount Kopecks"
+          },
+          "discount_amount_kopecks": {
+            "type": "integer",
+            "title": "Discount Amount Kopecks",
+            "default": 0
+          },
+          "service_fee_amount_kopecks": {
+            "type": "integer",
+            "title": "Service Fee Amount Kopecks",
+            "default": 0
+          },
+          "delivery_fee_amount_kopecks": {
+            "type": "integer",
+            "title": "Delivery Fee Amount Kopecks",
+            "default": 0
+          },
+          "tip_amount_kopecks": {
+            "type": "integer",
+            "title": "Tip Amount Kopecks",
+            "default": 0
+          },
+          "rounding_adjustment_kopecks": {
+            "type": "integer",
+            "title": "Rounding Adjustment Kopecks",
+            "default": 0
+          },
+          "fiscal_total_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiscal Total Amount Kopecks"
+          },
+          "vat_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vat Amount Kopecks"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReceiptItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "corrected_from_receipt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrected From Receipt Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "payer_id",
+          "status",
+          "version",
+          "total_amount_kopecks",
+          "created_at",
+          "updated_at",
+          "items"
+        ],
+        "title": "Receipt"
+      },
+      "ReceiptImagePresignedUrlResponse": {
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "title": "Image Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "title": "ReceiptImagePresignedUrlResponse"
+      },
+      "ReceiptImageUploadResponse": {
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "title": "Image Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "title": "ReceiptImageUploadResponse"
+      },
+      "ReceiptItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "receipt_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Receipt Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": ""
+          },
+          "cost_kopecks": {
+            "type": "integer",
+            "title": "Cost Kopecks"
+          },
+          "split_mode": {
+            "type": "string",
+            "title": "Split Mode",
+            "default": "custom"
+          },
+          "share_items": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Share Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "receipt_id",
+          "cost_kopecks",
+          "share_items"
+        ],
+        "title": "ReceiptItem"
+      },
+      "ReceiptItemClaim": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "receipt_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Receipt Id"
+          },
+          "receipt_item_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Receipt Item Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "receipt_id",
+          "receipt_item_id",
+          "user_id",
+          "status",
+          "created_at"
+        ],
+        "title": "ReceiptItemClaim"
+      },
+      "ReceiptItemClaimRequest": {
+        "properties": {
+          "receipt_item_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Receipt Item Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "receipt_item_id"
+        ],
+        "title": "ReceiptItemClaimRequest"
+      },
+      "ReceiptPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Receipt"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "total"
+        ],
+        "title": "ReceiptPage"
+      },
+      "RefreshRequest": {
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Refresh Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "refresh_token"
+        ],
+        "title": "RefreshRequest"
+      },
+      "RefreshResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In",
+            "description": "Access token lifetime in seconds."
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "refresh_token",
+          "expires_in"
+        ],
+        "title": "RefreshResponse"
+      },
+      "UpdateReceiptRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "total_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Amount Kopecks"
+          },
+          "items": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CreateReceiptItemRequest"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Items"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
+          "discount_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Amount Kopecks"
+          },
+          "service_fee_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Fee Amount Kopecks"
+          },
+          "delivery_fee_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Fee Amount Kopecks"
+          },
+          "tip_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tip Amount Kopecks"
+          },
+          "rounding_adjustment_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rounding Adjustment Kopecks"
+          },
+          "fiscal_total_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fiscal Total Amount Kopecks"
+          },
+          "vat_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vat Amount Kopecks"
+          }
+        },
+        "type": "object",
+        "title": "UpdateReceiptRequest"
+      },
+      "User": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "phone_number": {
+            "type": "string",
+            "title": "Phone Number"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "public_handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Handle"
+          },
+          "discovery_enabled": {
+            "type": "boolean",
+            "title": "Discovery Enabled",
+            "default": false
+          },
+          "payment_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Phone"
+          },
+          "phone_verified": {
+            "type": "boolean",
+            "title": "Phone Verified",
+            "default": false
+          },
+          "payment_phone_visibility": {
+            "type": "string",
+            "title": "Payment Phone Visibility",
+            "default": "nobody"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "phone_number"
+        ],
+        "title": "User"
+      },
+      "UserFinancialStats": {
+        "properties": {
+          "open_events_count": {
+            "type": "integer",
+            "title": "Open Events Count"
+          },
+          "closed_events_count": {
+            "type": "integer",
+            "title": "Closed Events Count"
+          },
+          "outstanding_owed_kopecks": {
+            "type": "integer",
+            "title": "Outstanding Owed Kopecks"
+          },
+          "outstanding_receivable_kopecks": {
+            "type": "integer",
+            "title": "Outstanding Receivable Kopecks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "open_events_count",
+          "closed_events_count",
+          "outstanding_owed_kopecks",
+          "outstanding_receivable_kopecks"
+        ],
+        "title": "UserFinancialStats"
+      },
+      "UserPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/User"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "total"
+        ],
+        "title": "UserPage"
+      },
+      "UserUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "public_handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Handle"
+          },
+          "discovery_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discovery Enabled"
+          },
+          "payment_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Phone"
+          },
+          "payment_phone_visibility": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Phone Visibility"
+          }
+        },
+        "type": "object",
+        "title": "UserUpdate"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}
