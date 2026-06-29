@@ -362,6 +362,38 @@ class PaymentRequestPage(BaseModel):
     total: int
 
 
+class DisputeCreate(BaseModel):
+    resource_type: str
+    resource_id: UUID
+    reason: str = Field(min_length=1)
+
+
+class DisputeResolve(BaseModel):
+    resolution_note: str = ""
+
+
+class Dispute(BaseModel):
+    id: UUID
+    event_id: UUID
+    resource_type: str
+    resource_id: UUID
+    reason: str
+    status: str
+    created_by: UUID
+    created_at: datetime
+    updated_at: datetime
+    resolved_by: UUID | None = None
+    resolved_at: datetime | None = None
+    resolution_note: str = ""
+
+
+class DisputePage(BaseModel):
+    items: list[Dispute]
+    limit: int
+    offset: int
+    total: int
+
+
 class EventBalance(BaseModel):
     event_id: UUID
     debitor_id: UUID

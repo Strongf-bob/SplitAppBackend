@@ -122,6 +122,14 @@ Event settings include settlement policies: `split_strategy`, `receipt_creation_
 
 Payment requests may include `deadline_at`; backend rejects deadlines less than 30 minutes out.
 
+## Disputes
+
+| Method | Path | Назначение | Notes |
+| --- | --- | --- | --- |
+| `POST` | `/api/disputes` | Создать спор по receipt/payment/payment_request. | Требуется event membership через resource. |
+| `GET` | `/api/events/{id}/disputes` | Список споров события. | Paginated; требуется event membership. |
+| `POST` | `/api/disputes/{id}/resolve` | Закрыть спор. | Creator-only MVP resolution. |
+
 ## Health и operations
 
 | Method | Path | Назначение | Notes |
