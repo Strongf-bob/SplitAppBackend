@@ -121,4 +121,5 @@ jobs:
               done; \
             done; \
             docker compose up -d --build; \
+            docker compose up -d --force-recreate prometheus grafana alloy; \
             for attempt in \$(seq 1 20); do curl -fsS \"http://127.0.0.1:\${HOST_PORT}/api/ping\" && exit 0; sleep 3; done; docker compose logs --tail=80 api; exit 1"
