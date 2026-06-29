@@ -191,6 +191,7 @@ class ShareItem(BaseModel):
 class CreateReceiptItemRequest(BaseModel):
     name: str = ""
     cost_kopecks: int = Field(gt=0)
+    split_mode: str = "custom"
     share_items: list[CreateShareItemRequest] = Field(min_length=1)
 
 
@@ -199,6 +200,7 @@ class ReceiptItem(BaseModel):
     receipt_id: UUID
     name: str = ""
     cost_kopecks: int
+    split_mode: str = "custom"
     share_items: list[UUID]
 
 
@@ -207,6 +209,13 @@ class CreateReceiptRequest(BaseModel):
     title: str = ""
     total_amount_kopecks: int = Field(gt=0)
     items: list[CreateReceiptItemRequest] = Field(min_length=1)
+    discount_amount_kopecks: int = 0
+    service_fee_amount_kopecks: int = 0
+    delivery_fee_amount_kopecks: int = 0
+    tip_amount_kopecks: int = 0
+    rounding_adjustment_kopecks: int = 0
+    fiscal_total_amount_kopecks: int | None = None
+    vat_amount_kopecks: int | None = None
 
 
 class UpdateReceiptRequest(BaseModel):
@@ -214,6 +223,13 @@ class UpdateReceiptRequest(BaseModel):
     total_amount_kopecks: int | None = Field(default=None, gt=0)
     items: list[CreateReceiptItemRequest] | None = None
     expected_version: int | None = Field(default=None, ge=1)
+    discount_amount_kopecks: int | None = None
+    service_fee_amount_kopecks: int | None = None
+    delivery_fee_amount_kopecks: int | None = None
+    tip_amount_kopecks: int | None = None
+    rounding_adjustment_kopecks: int | None = None
+    fiscal_total_amount_kopecks: int | None = None
+    vat_amount_kopecks: int | None = None
 
 
 class Receipt(BaseModel):
@@ -224,6 +240,13 @@ class Receipt(BaseModel):
     status: str
     version: int
     total_amount_kopecks: int
+    discount_amount_kopecks: int = 0
+    service_fee_amount_kopecks: int = 0
+    delivery_fee_amount_kopecks: int = 0
+    tip_amount_kopecks: int = 0
+    rounding_adjustment_kopecks: int = 0
+    fiscal_total_amount_kopecks: int | None = None
+    vat_amount_kopecks: int | None = None
     created_at: datetime
     updated_at: datetime
     items: list[ReceiptItem]

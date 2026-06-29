@@ -15,6 +15,15 @@ from app.services.common import (
 from app.services.idempotency import run_idempotent_create
 
 _ONE = decimal_from_value("1")
+_RECEIPT_MONEY_METADATA_FIELDS = (
+    "discount_amount_kopecks",
+    "service_fee_amount_kopecks",
+    "delivery_fee_amount_kopecks",
+    "tip_amount_kopecks",
+    "rounding_adjustment_kopecks",
+    "fiscal_total_amount_kopecks",
+    "vat_amount_kopecks",
+)
 
 
 def _validate_receipt_users(
@@ -73,6 +82,7 @@ def _build_receipt_items(
                 "receipt_id": receipt_id,
                 "name": item.name,
                 "cost_kopecks": money_to_storage(item.cost_kopecks),
+                "split_mode": item.split_mode,
                 "share_items": share_ids,
             }
         )
@@ -115,8 +125,14 @@ def _receipt_to_api(receipt: dict, *, include_internal_shares: bool = False) -> 
             normalized_item, "cost_kopecks", "cost"
         )
         normalized_item.pop("cost", None)
+        normalized_item["split_mode"] = normalized_item.get("split_mode", "custom")
         items.append(normalized_item)
     cleaned["items"] = items
+    for field in _RECEIPT_MONEY_METADATA_FIELDS:
+        if field in {"fiscal_total_amount_kopecks", "vat_amount_kopecks"}:
+            cleaned[field] = cleaned.get(field)
+        else:
+            cleaned[field] = int(cleaned.get(field, 0))
 
     if not include_internal_shares:
         cleaned.pop("share_items", None)
@@ -171,6 +187,13 @@ def _create_receipt(
         "status": "draft",
         "version": 1,
         "total_amount_kopecks": money_to_storage(payload.total_amount_kopecks),
+        "discount_amount_kopecks": money_to_storage(payload.discount_amount_kopecks),
+        "service_fee_amount_kopecks": money_to_storage(payload.service_fee_amount_kopecks),
+        "delivery_fee_amount_kopecks": money_to_storage(payload.delivery_fee_amount_kopecks),
+        "tip_amount_kopecks": money_to_storage(payload.tip_amount_kopecks),
+        "rounding_adjustment_kopecks": money_to_storage(payload.rounding_adjustment_kopecks),
+        "fiscal_total_amount_kopecks": payload.fiscal_total_amount_kopecks,
+        "vat_amount_kopecks": payload.vat_amount_kopecks,
         "created_at": now,
         "updated_at": now,
         "items": stored_items,
@@ -229,6 +252,16 @@ def update_receipt(
         stored_items, stored_share_items = _build_receipt_items(receipt_id, payload.items)
         update_fields["items"] = stored_items
         update_fields["share_items"] = stored_share_items
+
+    for field in _RECEIPT_MONEY_METADATA_FIELDS:
+        value = getattr(payload, field)
+        if value is not None:
+            if is_confirmed:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Confirmed receipt financial metadata cannot be changed.",
+                )
+            update_fields[field] = money_to_storage(value)
 
     if not update_fields:
         raise HTTPException(status_code=400, detail="At least one field must be provided.")
@@ -398,6 +431,7 @@ def create_receipt_correction(db: Database, receipt_id: str, actor_user_id: str)
         "total_amount_kopecks": stored_money_to_kopecks(
             receipt, "total_amount_kopecks", "total_amount"
         ),
+        **{field: receipt.get(field, 0) for field in _RECEIPT_MONEY_METADATA_FIELDS},
         "created_at": now,
         "updated_at": now,
         "items": items,
