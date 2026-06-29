@@ -54,9 +54,9 @@
 ### Product/API
 
 - [ ] **Финансовая статистика профиля** — определить contract и добавить `closedBillsAmount` / `openBillsAmount`.
-- [ ] **Групповые долги и взаимозачеты** — оптимизировать "кто кому платит" с минимизацией транзакций.
+- [x] **Групповые долги и объяснения** — backend возвращает simplified debtor-creditor rows и `/balances/explain` с receipt/payment contributions.
 - [ ] **Push-уведомления: backend contract** — события для нового чека, платежа, подтверждения и закрытия события.
-- [ ] **Инвайт-коды в события** — ссылки/коды вместо ручного поиска по UUID.
+- [x] **Инвайт-ссылки в события** — token preview/accept/revoke backend endpoints добавлены для link/QR сценария.
 - [ ] **Категории чеков** — модель, API и аналитика расходов по категориям.
 - [ ] **Шаблоны повторяющихся чеков** — backend-модель и API для периодических расходов.
 - [ ] **AI-ассистент: backend boundary** — определить, какие команды обрабатывает сервер.
@@ -118,4 +118,4 @@
 2. Довести production deploy: server env, systemd, CD secrets, smoke check после deploy.
 3. Добавить backend rate limiting и Docker, потому что это инфраструктурная база.
 4. Перейти во frontend-репозиторий и закрыть интеграцию уже готовых backend endpoints: payments, receipt delete/images, pagination.
-5. После этого брать новые product features: invite codes, categories, group debt optimization, export, multicurrency.
+5. После этого брать новые product features: categories, advanced debt optimization, export, multicurrency.
