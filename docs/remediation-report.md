@@ -25,6 +25,12 @@ Date: 2026-06-29
   - `f7ffc4c feat(monitoring): expose metrics and optional error reporting`
   - `9d1ca93 build(deploy): add systemd deployment path`
   - `f070de9 build(lint): add Ruff lint and format checks`
+- Added follow-up critical authorization, money, and storage fixes:
+  - `991f607 fix(events): restrict event management to creators`
+  - `94f33eb fix(payments): prevent sender impersonation`
+  - `d7d44e1 fix(users): limit user listing to visible participants`
+  - `ec18396 fix(money): use Decimal for monetary calculations`
+  - `9dff159 fix(receipts): keep receipt images private in S3`
 
 ## Branches Pushed
 - `strongf/docs-security-baseline`
@@ -34,9 +40,10 @@ Date: 2026-06-29
 - `strongf/backend-profile-storage-audit`
 - `strongf/backend-ops-hardening`
 - `strongf/backend-remediation-report`
+- `strongf/backend-critical-auth-money-storage-fixes`
 
 ## Verification
-- `make test`: 22 passed, 4 warnings.
+- `make test`: 27 passed, 4 warnings.
 - `make lint`: all checks passed.
 - Warnings are from `fastapi.testclient` deprecation and short test-only JWT secret length.
 
@@ -57,3 +64,6 @@ These items belong to `/Users/strongf/Developer/SplitApp Yandex/SplitApp` and we
 - The backend still does not implement pagination for existing list endpoints. That should be designed as a separate API contract change because it affects iOS data flows.
 - MongoDB transactional event deletion requires transaction support in the deployed MongoDB topology.
 - `/api/metrics` is part of the backend API and should be protected by deployment/network policy if the service is publicly reachable.
+- `GET /api/users` now returns only the current user and users sharing an active event with the caller, not the whole user table.
+- New receipt and payment money values are stored as decimal strings; old numeric records are still read through Decimal conversion for compatibility.
+- Receipt image uploads no longer request public object ACLs. Clients should use the presigned URL endpoint for temporary read access.
