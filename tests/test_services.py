@@ -118,6 +118,17 @@ def test_payment_create_and_confirm(db):
     assert updated["confirmed"] is True
 
 
+def test_payment_sender_must_match_authenticated_user(db):
+    seed_event(db)
+
+    try:
+        payments.create_payment(db, EVENT_ID, payment_payload(), USER_B)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected payment creation for another sender to fail")
+
+
 def test_only_payment_receiver_can_confirm(db):
     seed_event(db)
     payment = payments.create_payment(db, EVENT_ID, payment_payload(), USER_A)
