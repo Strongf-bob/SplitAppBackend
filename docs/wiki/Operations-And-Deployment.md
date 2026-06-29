@@ -90,7 +90,8 @@ journalctl -u splitapp-backend -f
 На push в `main` workflow запускает lint, tests и затем Docker Compose deploy
 over SSH, если настроены production secrets. Workflow отправляет checkout на
 сервер tar-архивом, сохраняет существующий server-side `.env`, запускает
-`docker compose up -d --build` и проверяет `GET /api/ping`.
+port preflight, запускает `docker compose up -d --build` и проверяет
+`GET /api/ping`.
 
 Required deployment secrets:
 
@@ -105,6 +106,10 @@ Server prerequisites:
 - Docker и Docker Compose доступны для `DEPLOY_USER`.
 - В `DEPLOY_PATH/.env` уже лежат runtime secrets (`JWT_SECRET`, Mongo/S3 config).
 - `HOST_PORT` в `.env` задает host port для smoke check; default `8080`.
+- `GRAFANA_ADMIN_PASSWORD` задан в server-side `.env`.
+- `GRAFANA_HOST_PORT` задает localhost port для Grafana; default `3001`.
+- Перед deploy workflow проверяет, что `HOST_PORT` и `GRAFANA_HOST_PORT` не заняты
+  другим контейнером или host process.
 
 ## Runtime environment variables
 
@@ -128,6 +133,11 @@ Security и app behavior:
 - JWT/access token settings, используемые token helpers.
 - `CORS_ALLOWED_ORIGINS`
 - Optional Sentry/error reporting configuration.
+- Grafana:
+  - `GRAFANA_BIND_ADDRESS` — default `127.0.0.1`.
+  - `GRAFANA_HOST_PORT` — default `3001`.
+  - `GRAFANA_ADMIN_USER`.
+  - `GRAFANA_ADMIN_PASSWORD` — required on the server.
 
 ## Metrics
 
@@ -135,11 +145,29 @@ Prometheus metrics:
 
 - `GET /api/metrics`
 
-Если backend публично доступен, metrics нужно закрыть deployment или network policy.
+В Docker Compose Prometheus скрейпит этот endpoint внутри private network.
+Prometheus и Loki не публикуются на host. Grafana публикуется только на
+`${GRAFANA_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_HOST_PORT:-3001}`.
+
+Перед ручным изменением портов проверьте listeners:
+
+```bash
+ss -ltnp | grep -E ':(${HOST_PORT:-8080}|${GRAFANA_HOST_PORT:-3001})'
+```
+
+Если нужен публичный доступ к Grafana, используйте reverse proxy с auth/TLS или
+SSH tunnel. Не публикуйте `/api/metrics`, Prometheus или Loki напрямую наружу.
+
+Dashboard `SplitApp Backend` включает RPS, 5xx error ratio, p50/p95/p99 latency,
+slow endpoints, service/db operations и API logs через Loki.
 
 ## Logs
 
-Request middleware пишет structured request completion logs с request ID, method, path, status и duration. Unexpected exceptions логируются внутри сервера и возвращаются клиентам как generic errors.
+Request middleware пишет structured JSON completion logs с level, request ID,
+method, route-template path, raw path, status и duration. Loki получает docker
+logs через Grafana Alloy; `request_id` остается полем JSON для поиска, но не
+становится Loki label. Unexpected exceptions логируются внутри сервера и
+возвращаются клиентам как generic errors.
 
 ## Operational checks
 

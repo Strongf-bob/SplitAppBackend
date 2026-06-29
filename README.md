@@ -59,24 +59,35 @@ MongoDB connection health is available at `GET /api/health/db`.
 
 ### Docker Compose
 
-The backend can run in an isolated Docker Compose project with a private MongoDB
-container. Only the API port is published to the host.
+The backend can run in an isolated Docker Compose project with private MongoDB,
+Prometheus, and Loki containers. Only the API port and localhost-bound Grafana
+port are published to the host.
 
 1. `cp .env.docker.example .env`
 2. Generate a long random `JWT_SECRET` and update `.env`.
 3. Optionally change `HOST_PORT` if `8080` is already used.
-4. `docker compose up -d --build`
-5. `docker compose ps`
+4. Set `GRAFANA_ADMIN_PASSWORD` to a long random value.
+5. Optionally change `GRAFANA_HOST_PORT` if `3001` is already used.
+6. `docker compose up -d --build`
+7. `docker compose ps`
 
 The API listens on `http://<server-ip>:${HOST_PORT:-8080}`. MongoDB data is kept
 in the `mongo-data` Docker volume and is not exposed outside the Compose network.
+Prometheus and Loki are internal-only services. Grafana binds to
+`127.0.0.1:${GRAFANA_HOST_PORT:-3001}` by default; use an SSH tunnel or a
+reverse proxy with authentication instead of exposing all observability ports.
+
+Before changing ports on a shared server, check listeners:
+
+`ss -ltnp | grep -E ':(${HOST_PORT:-8080}|${GRAFANA_HOST_PORT:-3001})'`
 
 Receipt image endpoints require S3 settings in `.env`; without them, those
 endpoints return a configuration error while the rest of the API remains usable.
 
 GitHub Actions deploy uses the same Compose runtime on pushes to `main`. Configure
 `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, and `DEPLOY_PATH` repository
-secrets; keep production runtime secrets in the server-side `.env`.
+secrets; keep production runtime secrets and Grafana credentials in the
+server-side `.env`.
 
 ### Systemd
 

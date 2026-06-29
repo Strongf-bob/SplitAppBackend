@@ -104,4 +104,20 @@ jobs:
               "set -euo pipefail; tar -xzf - -C '$DEPLOY_PATH'"
 
           ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "set -euo pipefail; cd '$DEPLOY_PATH'; test -f .env; docker compose up -d --build; HOST_PORT=\$(grep -E '^HOST_PORT=' .env | tail -1 | cut -d= -f2-); HOST_PORT=\${HOST_PORT:-8080}; for attempt in \$(seq 1 20); do curl -fsS \"http://127.0.0.1:\${HOST_PORT}/api/ping\" && exit 0; sleep 3; done; docker compose logs --tail=80 api; exit 1"
+            "set -euo pipefail; cd '$DEPLOY_PATH'; test -f .env; \
+            HOST_PORT=\$(grep -E '^HOST_PORT=' .env | tail -1 | cut -d= -f2-); HOST_PORT=\${HOST_PORT:-8080}; \
+            GRAFANA_HOST_PORT=\$(grep -E '^GRAFANA_HOST_PORT=' .env | tail -1 | cut -d= -f2-); GRAFANA_HOST_PORT=\${GRAFANA_HOST_PORT:-3001}; \
+            CURRENT_PROJECT_CONTAINERS=\$(docker compose ps -q 2>/dev/null | tr '\n' ' '); \
+            for PORT in \"\$HOST_PORT\" \"\$GRAFANA_HOST_PORT\"; do \
+              [ -n \"\$PORT\" ] || continue; \
+              LISTENERS=\$(docker ps --filter publish=\"\$PORT\" --format '{{.ID}}' | tr '\n' ' '); \
+              if [ -z \"\$LISTENERS\" ]; then \
+                if ss -ltnH \"sport = :\$PORT\" | grep -q .; then echo \"Host port \$PORT is already used by a non-Compose process\"; exit 1; fi; \
+                continue; \
+              fi; \
+              for CONTAINER in \$LISTENERS; do \
+                case \" \$CURRENT_PROJECT_CONTAINERS \" in *\" \$CONTAINER \"*) ;; *) echo \"Host port \$PORT is already used by another container: \$CONTAINER\"; exit 1 ;; esac; \
+              done; \
+            done; \
+            docker compose up -d --build; \
+            for attempt in \$(seq 1 20); do curl -fsS \"http://127.0.0.1:\${HOST_PORT}/api/ping\" && exit 0; sleep 3; done; docker compose logs --tail=80 api; exit 1"

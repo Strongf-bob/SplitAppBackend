@@ -14,6 +14,8 @@ logger = logging.getLogger("splitapp")
 UNAUTHENTICATED_PATHS = frozenset(
     {
         "/api/ping",
+        "/api/health/db",
+        "/api/metrics",
         "/api/login",
         "/api/refresh",
     }

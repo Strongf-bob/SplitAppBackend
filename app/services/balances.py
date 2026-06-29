@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from pymongo.database import Database
 
+from app.core.monitoring import track_service_operation
 from app.services.access import assert_event_access
 from app.services.common import active_filter, decimal_from_value, money_round, strip_mongo_id
 
@@ -14,6 +15,7 @@ def _apply_transfer(
     ledger[(debtor, creditor)] = ledger.get((debtor, creditor), Decimal("0")) + amount
 
 
+@track_service_operation("balances.get_event")
 def get_event_balances(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
     assert_event_access(db, event_id, actor_user_id)
     receipts = [

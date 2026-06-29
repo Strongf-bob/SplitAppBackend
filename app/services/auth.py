@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from pymongo.database import Database
 
 from app.core import tokens
+from app.core.monitoring import track_service_operation
 
 from app.services.common import new_uuid, utc_now, user_to_api_dict
 
@@ -94,6 +95,7 @@ def _issue_refresh_token(db: Database, user_id: str) -> str:
     return raw
 
 
+@track_service_operation("auth.login_yandex")
 def login_with_yandex_oauth(db: Database, oauth_token: str) -> dict:
     try:
         tokens.ensure_jwt_secret_configured()
@@ -160,6 +162,7 @@ def login_with_yandex_oauth(db: Database, oauth_token: str) -> dict:
     }
 
 
+@track_service_operation("auth.refresh")
 def rotate_refresh_token(db: Database, raw_refresh: str) -> dict:
     try:
         tokens.ensure_jwt_secret_configured()

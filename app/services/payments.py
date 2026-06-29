@@ -2,12 +2,14 @@ from fastapi import HTTPException
 from pymongo.database import Database
 
 from app import schemas
+from app.core.monitoring import track_service_operation
 
 from app.services.access import assert_event_access, assert_event_open, get_payment_or_404
 from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
 from app.services.common import money_to_storage
 
 
+@track_service_operation("payments.create")
 def create_payment(
     db: Database, event_id: str, payload: schemas.PaymentCreate, actor_user_id: str
 ) -> dict:
@@ -41,6 +43,7 @@ def create_payment(
     return payment
 
 
+@track_service_operation("payments.list")
 def list_payments_by_event(
     db: Database, event_id: str, actor_user_id: str, *, limit: int, offset: int
 ) -> dict:
@@ -56,6 +59,7 @@ def list_payments_by_event(
     }
 
 
+@track_service_operation("payments.update")
 def update_payment(
     db: Database, payment_id: str, payload: schemas.PaymentUpdate, actor_user_id: str
 ) -> dict:
@@ -78,6 +82,7 @@ def update_payment(
     return strip_mongo_id(get_payment_or_404(db, payment_id))
 
 
+@track_service_operation("payments.delete")
 def delete_payment(db: Database, payment_id: str, actor_user_id: str) -> None:
     payment = get_payment_or_404(db, payment_id)
     event = assert_event_access(db, payment["event_id"], actor_user_id)

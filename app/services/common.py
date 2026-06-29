@@ -2,6 +2,8 @@ from datetime import UTC, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from uuid import uuid4
 
+from app.core.monitoring import monitor_db_operation
+
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
@@ -49,17 +51,18 @@ def record_audit_event(
     actor_user_id: str,
     session=None,
 ) -> None:
-    db.audit_events.insert_one(
-        {
-            "id": new_uuid(),
-            "action": action,
-            "resource_type": resource_type,
-            "resource_id": resource_id,
-            "actor_user_id": actor_user_id,
-            "created_at": utc_now(),
-        },
-        session=session,
-    )
+    with monitor_db_operation("audit_events.insert"):
+        db.audit_events.insert_one(
+            {
+                "id": new_uuid(),
+                "action": action,
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "actor_user_id": actor_user_id,
+                "created_at": utc_now(),
+            },
+            session=session,
+        )
 
 
 def yandex_avatar_url(default_avatar_id: str | None) -> str | None:

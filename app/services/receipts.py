@@ -2,6 +2,7 @@ from fastapi import HTTPException
 from pymongo.database import Database
 
 from app import schemas
+from app.core.monitoring import track_service_operation
 
 from app.services.access import assert_event_access, assert_event_open, get_receipt_or_404
 from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
@@ -10,7 +11,9 @@ from app.services.common import decimal_from_value, decimal_to_storage, money_to
 _ONE = decimal_from_value("1")
 
 
-def _validate_receipt_users(event: dict, payer_id: str, items: list[schemas.CreateReceiptItemRequest]) -> None:
+def _validate_receipt_users(
+    event: dict, payer_id: str, items: list[schemas.CreateReceiptItemRequest]
+) -> None:
     if payer_id not in event["users"]:
         raise HTTPException(status_code=400, detail="payer_id must belong to event users.")
 
@@ -71,6 +74,7 @@ def _build_receipt_items(
     return stored_items, stored_share_items
 
 
+@track_service_operation("receipts.create")
 def create_receipt(
     db: Database, event_id: str, payload: schemas.CreateReceiptRequest, actor_user_id: str
 ) -> dict:
@@ -106,6 +110,7 @@ def create_receipt(
     return strip_mongo_id(receipt)
 
 
+@track_service_operation("receipts.update")
 def update_receipt(
     db: Database, receipt_id: str, payload: schemas.UpdateReceiptRequest, actor_user_id: str
 ) -> dict:
@@ -128,9 +133,9 @@ def update_receipt(
         _validate_share_sum(payload.items)
 
         calculated_total = sum(item.cost for item in payload.items)
-        if payload.total_amount is not None and money_to_storage(calculated_total) != money_to_storage(
-            payload.total_amount
-        ):
+        if payload.total_amount is not None and money_to_storage(
+            calculated_total
+        ) != money_to_storage(payload.total_amount):
             raise HTTPException(
                 status_code=400,
                 detail="total_amount must be equal to the sum of all item costs.",
@@ -153,6 +158,7 @@ def update_receipt(
     return strip_mongo_id(get_receipt_or_404(db, receipt_id))
 
 
+@track_service_operation("receipts.list")
 def list_receipts_by_event(
     db: Database, event_id: str, actor_user_id: str, *, limit: int, offset: int
 ) -> dict:
@@ -168,6 +174,7 @@ def list_receipts_by_event(
     return {"items": receipts, "limit": limit, "offset": offset, "total": total}
 
 
+@track_service_operation("receipts.get")
 def get_receipt(db: Database, receipt_id: str, actor_user_id: str) -> dict:
     receipt = get_receipt_or_404(db, receipt_id)
     assert_event_access(db, receipt["event_id"], actor_user_id)
@@ -176,6 +183,7 @@ def get_receipt(db: Database, receipt_id: str, actor_user_id: str) -> dict:
     return cleaned
 
 
+@track_service_operation("receipts.delete")
 def delete_receipt(db: Database, receipt_id: str, actor_user_id: str) -> None:
     receipt = get_receipt_or_404(db, receipt_id)
     event = assert_event_access(db, receipt["event_id"], actor_user_id)

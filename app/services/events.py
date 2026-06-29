@@ -3,6 +3,7 @@ from pymongo.errors import ConfigurationError, InvalidOperation, OperationFailur
 from pymongo.database import Database
 
 from app import schemas
+from app.core.monitoring import track_service_operation
 
 from app.services.access import (
     assert_event_access,
@@ -21,6 +22,7 @@ from app.services.common import (
 )
 
 
+@track_service_operation("events.create")
 def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str) -> dict:
     creator_id = actor_user_id
     get_user_or_404(db, creator_id)
@@ -42,6 +44,7 @@ def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str)
     return event
 
 
+@track_service_operation("events.list")
 def list_events(db: Database, user_id: str, *, limit: int, offset: int) -> dict:
     query = active_filter({"$or": [{"users": user_id}, {"creator_id": user_id}]})
     total = db.events.count_documents(query)
@@ -50,11 +53,13 @@ def list_events(db: Database, user_id: str, *, limit: int, offset: int) -> dict:
     return {"items": events, "limit": limit, "offset": offset, "total": total}
 
 
+@track_service_operation("events.get")
 def get_event(db: Database, event_id: str, actor_user_id: str) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
     return strip_mongo_id(event)
 
 
+@track_service_operation("events.delete")
 def delete_event(db: Database, event_id: str, actor_user_id: str) -> None:
     event = get_event_or_404(db, event_id)
     assert_event_creator(event, actor_user_id)
@@ -105,7 +110,10 @@ def delete_event(db: Database, event_id: str, actor_user_id: str) -> None:
         raise
 
 
-def update_event(db: Database, event_id: str, payload: schemas.EventUpdate, actor_user_id: str) -> dict:
+@track_service_operation("events.update")
+def update_event(
+    db: Database, event_id: str, payload: schemas.EventUpdate, actor_user_id: str
+) -> dict:
     event = assert_event_access(db, event_id, actor_user_id)
     assert_event_creator(event, actor_user_id)
     update_fields: dict = {}
@@ -127,6 +135,7 @@ def update_event(db: Database, event_id: str, payload: schemas.EventUpdate, acto
     return strip_mongo_id(get_event_or_404(db, event_id))
 
 
+@track_service_operation("events.add_participants")
 def add_participants(
     db: Database, event_id: str, payload: schemas.AddParticipantsRequest, actor_user_id: str
 ) -> list[dict]:
@@ -153,6 +162,7 @@ def add_participants(
     return users
 
 
+@track_service_operation("events.remove_participant")
 def remove_participant(db: Database, event_id: str, user_id: str, actor_user_id: str) -> None:
     event = assert_event_access(db, event_id, actor_user_id)
     assert_event_creator(event, actor_user_id)

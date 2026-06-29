@@ -52,7 +52,20 @@ def configure_cors(api: FastAPI) -> None:
 
 
 def _log_json(level: int, message: str, **fields: object) -> None:
-    logger.log(level, json.dumps({"message": message, **fields}, default=str))
+    logger.log(
+        level,
+        json.dumps(
+            {"level": logging.getLevelName(level), "message": message, **fields}, default=str
+        ),
+    )
+
+
+def _route_template(request: Request) -> str:
+    route = request.scope.get("route")
+    path = getattr(route, "path", None)
+    if isinstance(path, str):
+        return path
+    return "__unmatched__"
 
 
 def configure_exception_handlers(api: FastAPI) -> None:
@@ -81,22 +94,29 @@ def configure_request_logging(api: FastAPI) -> None:
         request_id = request.headers.get("X-Request-ID") or str(uuid4())
         request.state.request_id = request_id
         started = time.monotonic()
+        status_code = 500
+        route_path = "__unmatched__"
 
-        response = await call_next(request)
-        duration_seconds = time.monotonic() - started
-        duration_ms = round(duration_seconds * 1000, 2)
-        response.headers["X-Request-ID"] = request_id
-        record_request_metrics(request.method, request.url.path, response.status_code, duration_seconds)
-        _log_json(
-            logging.INFO,
-            "request_completed",
-            request_id=request_id,
-            method=request.method,
-            path=request.url.path,
-            status_code=response.status_code,
-            duration_ms=duration_ms,
-        )
-        return response
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            route_path = _route_template(request)
+            response.headers["X-Request-ID"] = request_id
+            return response
+        finally:
+            duration_seconds = time.monotonic() - started
+            duration_ms = round(duration_seconds * 1000, 2)
+            record_request_metrics(request.method, route_path, status_code, duration_seconds)
+            _log_json(
+                logging.INFO,
+                "request_completed",
+                request_id=request_id,
+                method=request.method,
+                path=route_path,
+                raw_path=request.url.path,
+                status_code=status_code,
+                duration_ms=duration_ms,
+            )
 
 
 @asynccontextmanager

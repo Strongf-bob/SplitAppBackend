@@ -81,7 +81,7 @@ Authorization: Bearer <access_token>
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
 | `GET` | `/api/health/db` | MongoDB health check. | Operational check. |
-| `GET` | `/api/metrics` | Prometheus metrics. | Закрыть deployment/network policy, если сервис публичный. |
+| `GET` | `/api/metrics` | Prometheus metrics. | Internal Prometheus scrape endpoint; не публиковать наружу. |
 
 ## Error shape
 
