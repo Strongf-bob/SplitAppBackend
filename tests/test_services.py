@@ -3,7 +3,7 @@ from uuid import UUID
 
 from app import schemas
 from app.core import tokens
-from app.services import auth, balances, events, payments, receipt_image, receipts, users
+from app.services import auth, balances, events, friends, payments, receipt_image, receipts, users
 
 from tests.conftest import (
     EVENT_ID,
@@ -118,6 +118,77 @@ def test_payment_phone_visibility_respects_event_membership(db):
     bob_visible = next(user for user in visible["items"] if user["id"] == USER_B)
     assert bob_visible["payment_phone"] == "+79990000002"
     assert hidden["items"] == []
+
+
+def test_friend_request_accept_remove_and_block(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+
+    request = friends.create_friend_request(
+        db, schemas.FriendRequestCreate(user_id=USER_B), USER_A
+    )
+    accepted = friends.accept_friend_request(db, request["id"], USER_B)
+    page = friends.list_friendships(db, USER_A, status_filter="accepted", limit=50, offset=0)
+
+    assert request["status"] == "requested"
+    assert accepted["status"] == "accepted"
+    assert [item["id"] for item in page["items"]] == [request["id"]]
+
+    friends.remove_friendship(db, request["id"], USER_A)
+    removed = db.friends.find_one({"id": request["id"]})
+    assert removed["status"] == "removed"
+
+    second = friends.create_friend_request(
+        db, schemas.FriendRequestCreate(user_id=USER_B), USER_A
+    )
+    blocked = friends.block_friendship(db, second["id"], USER_B)
+    assert blocked["status"] == "blocked"
+    assert blocked["blocked_by"] == USER_B
+
+
+def test_friend_request_reject_and_authorization(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    request = friends.create_friend_request(
+        db, schemas.FriendRequestCreate(user_id=USER_B), USER_A
+    )
+
+    try:
+        friends.accept_friend_request(db, request["id"], USER_A)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected requester accept to fail")
+
+    rejected = friends.reject_friend_request(db, request["id"], USER_B)
+
+    assert rejected["status"] == "rejected"
+
+
+def test_payment_phone_visibility_respects_friendship(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    request = friends.create_friend_request(
+        db, schemas.FriendRequestCreate(user_id=USER_B), USER_A
+    )
+    friends.accept_friend_request(db, request["id"], USER_B)
+    users.update_current_user(
+        db,
+        USER_B,
+        schemas.UserUpdate(
+            discovery_enabled=True,
+            public_handle="bob_friend",
+            payment_phone="+79990000002",
+            payment_phone_visibility="friends",
+        ),
+    )
+
+    result = users.search_users(db, USER_A, "bob", limit=20, offset=0)
+
+    assert result["items"][0]["payment_phone"] == "+79990000002"
 
 
 def test_list_users_only_returns_visible_users(db):

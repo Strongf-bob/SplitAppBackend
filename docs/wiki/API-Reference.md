@@ -39,6 +39,17 @@ Authorization: Bearer <access_token>
 
 Payment phone visibility is conservative: `nobody`, `event_members`, or `friends`. Phone search is disabled.
 
+## Friends
+
+| Method | Path | Назначение | Notes |
+| --- | --- | --- | --- |
+| `POST` | `/api/friends` | Создать private friend request. | Friendship не равен event membership. |
+| `GET` | `/api/friends` | Список friendship records текущего user. | Paginated; optional `status` filter. |
+| `POST` | `/api/friends/{id}/accept` | Принять friend request. | Только addressee. |
+| `POST` | `/api/friends/{id}/reject` | Отклонить friend request. | Только addressee. |
+| `DELETE` | `/api/friends/{id}` | Удалить friendship. | Любая сторона. |
+| `POST` | `/api/friends/{id}/block` | Заблокировать friendship. | Любая сторона. |
+
 ## Events
 
 | Method | Path | Назначение | Notes |
