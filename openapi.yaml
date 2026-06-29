@@ -89,6 +89,29 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/User"
+
+  /api/users/me:
+    patch:
+      tags: [Users]
+      summary: Update current user profile
+      operationId: updateCurrentUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: Updated current user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/events:
     post:
       tags: [Events]
@@ -556,6 +579,21 @@ components:
           format: uri
           nullable: true
       required: [id, name, phone_number]
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+          nullable: true
+        avatar_url:
+          type: string
+          format: uri
+          nullable: true
+      minProperties: 1
 
     LoginYandexRequest:
       type: object
