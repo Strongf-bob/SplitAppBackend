@@ -90,6 +90,19 @@ paths:
                 items:
                   $ref: "#/components/schemas/User"
 
+  /api/metrics:
+    get:
+      tags: [Health]
+      summary: Export Prometheus metrics
+      operationId: getMetrics
+      responses:
+        "200":
+          description: Prometheus text exposition payload
+          content:
+            text/plain:
+              schema:
+                type: string
+
   /api/users/me:
     patch:
       tags: [Users]

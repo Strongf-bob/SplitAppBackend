@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from app.main import configure_cors, cors_allowed_origins
 from app.main import configure_exception_handlers, configure_request_logging
+from app.routers.health import router as health_router
 
 
 def test_cors_allowed_origins_parse_env(monkeypatch):
@@ -70,3 +71,14 @@ def test_unhandled_errors_return_generic_500():
     assert response.status_code == 500
     assert response.json() == {"detail": "Internal server error."}
     assert response.headers["X-Request-ID"] == "req-123"
+
+
+def test_metrics_endpoint_exposes_prometheus_payload():
+    api = FastAPI()
+    api.include_router(health_router)
+
+    client = TestClient(api)
+    response = client.get("/api/metrics")
+
+    assert response.status_code == 200
+    assert "splitapp_http_requests_total" in response.text

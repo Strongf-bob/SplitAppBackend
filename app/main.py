@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.db import close_mongodb, connect_mongodb, load_env_file
+from app.core.monitoring import init_sentry, record_request_metrics
 from app.core.s3 import connect_s3
 from app.dependencies import require_auth_token
 from app.routers import (
@@ -82,8 +83,10 @@ def configure_request_logging(api: FastAPI) -> None:
         started = time.monotonic()
 
         response = await call_next(request)
-        duration_ms = round((time.monotonic() - started) * 1000, 2)
+        duration_seconds = time.monotonic() - started
+        duration_ms = round(duration_seconds * 1000, 2)
         response.headers["X-Request-ID"] = request_id
+        record_request_metrics(request.method, request.url.path, response.status_code, duration_seconds)
         _log_json(
             logging.INFO,
             "request_completed",
@@ -100,6 +103,7 @@ def configure_request_logging(api: FastAPI) -> None:
 async def lifespan(app: FastAPI):
     try:
         load_env_file()
+        init_sentry()
         connect_mongodb(app)
         connect_s3(app)
         ensure_indexes(app.state.db)
