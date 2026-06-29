@@ -315,7 +315,7 @@ def build_summary(result: ReviewResult, inline_count: int, blocking: set[str]) -
     if not findings:
         if result.message:
             lines.extend(["", f"OpenCodeReview: {result.message}"])
-        lines.extend(["", "**Итог:** все нормально, блокирующих замечаний нет."])
+        lines.extend(["", "**Итог:** блокирующих замечаний не найдено."])
         return "\n".join(lines)
 
     lines.extend(["", "| Severity | Count | Blocks merge |", "| --- | ---: | --- |"])
