@@ -1,74 +1,74 @@
-# Testing And CI
+# Тесты и CI
 
-## Local Test Commands
+## Локальные команды
 
-Run tests:
+Tests:
 
 ```bash
 make test
 ```
 
-Run lint:
+Lint:
 
 ```bash
 make lint
 ```
 
-Run format check:
+Format check:
 
 ```bash
 make format-check
 ```
 
-## Current CI
+## Текущий CI
 
-The backend CI workflow:
+Backend CI workflow:
 
-- Runs on pull requests.
-- Runs on pushes to `main`.
-- Runs on pushes to `strongf/**` branches.
-- Installs Python dependencies.
-- Runs Ruff.
-- Runs pytest.
-- Deploys only on push to `main`.
+- Запускается на pull requests.
+- Запускается на pushes в `main`.
+- Запускается на pushes в `strongf/**` branches.
+- Устанавливает Python dependencies.
+- Запускает Ruff.
+- Запускает pytest.
+- Deploy делает только на push в `main`.
 
 Workflow source:
 
 - [.github/workflows/ci.yml](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.github/workflows/ci.yml)
 
-## Regression Testing Expectations
+## Regression testing expectations
 
-Add or update tests when changing:
+Добавлять или обновлять tests при изменении:
 
 - Authentication behavior.
 - Authorization checks.
 - Event membership rules.
 - Receipt money logic.
-- Payment sender or receiver permissions.
+- Payment sender/receiver permissions.
 - Closed-event behavior.
-- Storage deletion or replacement behavior.
-- CORS, logging, or monitoring behavior.
+- Storage deletion/replacement behavior.
+- CORS, logging или monitoring behavior.
 
-## Backend Change Checklist
+## Backend change checklist
 
-For behavior changes:
+Для behavior changes:
 
-1. Update service or route code.
-2. Update Pydantic schemas if payloads changed.
-3. Update `openapi.yaml`.
-4. Add or update tests.
-5. Update Wiki source under `docs/wiki/` when developer usage changed.
-6. Run `make test`.
-7. Run `make lint` if lint tooling is available.
+1. Обновить service или route code.
+2. Обновить Pydantic schemas, если payload изменился.
+3. Обновить `openapi.yaml`.
+4. Добавить или обновить tests.
+5. Обновить Wiki source в `docs/wiki/`, если изменилось developer-facing поведение.
+6. Запустить `make test`.
+7. Запустить `make lint`, если lint tooling доступен.
 
-## Pull Request Review Focus
+## Review focus
 
-Reviewers should check:
+При review проверять:
 
-- Does the authenticated actor control the operation?
-- Does membership or creator authorization happen in the service layer?
-- Are write payloads validated server-side?
-- Do errors avoid leaking sensitive internal state?
-- Does the OpenAPI contract match the code?
-- Are frontend follow-ups documented when iOS behavior must change?
+- Контролирует ли authenticated actor операцию?
+- Есть ли membership/creator authorization в service layer?
+- Валидируются ли write payloads на сервере?
+- Не раскрывают ли ошибки sensitive internal state?
+- Совпадает ли OpenAPI contract с кодом?
+- Задокументированы ли frontend follow-ups, если iOS behavior должен измениться?
 

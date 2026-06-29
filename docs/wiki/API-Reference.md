@@ -1,91 +1,91 @@
-# API Reference
+# API
 
-The canonical API contract is [openapi.yaml](https://github.com/Strongf-bob/SplitAppBackend/blob/main/openapi.yaml). This page is a human-readable map of the current backend surface.
+Канонический API-контракт находится в [openapi.yaml](https://github.com/Strongf-bob/SplitAppBackend/blob/main/openapi.yaml). Эта страница - человекочитаемая карта текущего backend API.
 
 ## Servers
 
-| Environment | Base URL |
+| Среда | Base URL |
 | --- | --- |
 | Local development | `http://localhost:8000` |
 | Production | `https://splitapp.tech` |
 
 ## Authentication
 
-Most endpoints require:
+Большинство endpoints требуют:
 
 ```http
 Authorization: Bearer <access_token>
 ```
 
-Public endpoints:
+Публичные endpoints:
 
 - `POST /api/login`
 - `POST /api/refresh`
 
-## Auth Endpoints
+## Auth
 
-| Method | Path | Purpose | iOS usage |
+| Method | Path | Назначение | iOS |
 | --- | --- | --- | --- |
-| `POST` | `/api/login` | Exchange Yandex OAuth token for app access and refresh tokens. | `AuthUserEndpoint` |
-| `POST` | `/api/refresh` | Rotate refresh token and issue a new access token. | `RefreshTokenEndpoint` |
+| `POST` | `/api/login` | Обмен Yandex OAuth token на app access/refresh tokens. | `AuthUserEndpoint` |
+| `POST` | `/api/refresh` | Ротация refresh token и выдача нового access token. | `RefreshTokenEndpoint` |
 
 ## Users
 
-| Method | Path | Purpose | Notes |
+| Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
-| `GET` | `/api/users` | List users visible to the current user. | Returns current user and users sharing active events with the caller. |
-| `PATCH` | `/api/users/me` | Update current user's profile. | Accepts name, email, avatar URL. |
+| `GET` | `/api/users` | Список пользователей, видимых текущему actor. | Возвращает current user и пользователей из общих active events. |
+| `PATCH` | `/api/users/me` | Обновить профиль текущего пользователя. | `name`, `email`, `avatar_url`. |
 
 ## Events
 
-| Method | Path | Purpose | Notes |
+| Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
-| `POST` | `/api/events` | Create event. | Creator becomes the event owner. |
-| `GET` | `/api/events` | List events visible to caller. | Caller must be creator or participant. |
-| `GET` | `/api/events/{id}` | Get event details. | Membership required. |
-| `PATCH` | `/api/events/{id}` | Update event name or `is_closed`. | Creator-only management. |
-| `DELETE` | `/api/events/{id}` | Delete event. | Creator-only; deletes related receipts and payments through service logic. |
-| `POST` | `/api/events/{id}/participants` | Add participants. | Creator-only management. |
-| `DELETE` | `/api/events/{id}/participants/{user_id}` | Remove participant. | Creator-only management. |
+| `POST` | `/api/events` | Создать событие. | Creator становится owner события. |
+| `GET` | `/api/events` | Получить события, видимые caller. | Caller должен быть creator или participant. |
+| `GET` | `/api/events/{id}` | Получить детали события. | Требуется membership. |
+| `PATCH` | `/api/events/{id}` | Обновить name или `is_closed`. | Creator-only management. |
+| `DELETE` | `/api/events/{id}` | Удалить событие. | Creator-only; service удаляет связанные receipts/payments. |
+| `POST` | `/api/events/{id}/participants` | Добавить участников. | Creator-only management. |
+| `DELETE` | `/api/events/{id}/participants/{user_id}` | Удалить участника. | Creator-only management. |
 
 ## Receipts
 
-| Method | Path | Purpose | Notes |
+| Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
-| `POST` | `/api/events/{id}/receipts` | Create receipt with items and shares. | Event membership required; blocked for closed events. |
-| `GET` | `/api/events/{id}/receipts` | List event receipts. | Event membership required. |
-| `GET` | `/api/receipts/{id}` | Get receipt details. | Event membership required. |
-| `PATCH` | `/api/receipts/{id}` | Update receipt. | Event membership required; blocked for closed events. |
-| `DELETE` | `/api/receipts/{id}` | Delete receipt. | Event membership required; soft-delete behavior is handled in services. |
-| `POST` | `/api/receipts/{id}/image` | Upload JPEG receipt image. | Multipart field can be `file` or `image`. |
-| `DELETE` | `/api/receipts/{id}/image` | Delete receipt image. | Deletes/replaces storage state, not upload-only behavior. |
-| `GET` | `/api/receipts/{id}/image/presigned-url` | Get temporary private image URL. | Use this instead of permanent public image URLs. |
+| `POST` | `/api/events/{id}/receipts` | Создать чек с items и shares. | Требуется membership; closed event запрещает mutation. |
+| `GET` | `/api/events/{id}/receipts` | Список чеков события. | Требуется membership. |
+| `GET` | `/api/receipts/{id}` | Детали чека. | Требуется membership через событие. |
+| `PATCH` | `/api/receipts/{id}` | Обновить чек. | Требуется membership; closed event запрещает mutation. |
+| `DELETE` | `/api/receipts/{id}` | Удалить чек. | Требуется authorization; delete behavior реализован в service layer. |
+| `POST` | `/api/receipts/{id}/image` | Загрузить JPEG изображения чека. | Multipart field: `file` или `image`. |
+| `DELETE` | `/api/receipts/{id}/image` | Удалить изображение чека. | Storage state должен быть очищен. |
+| `GET` | `/api/receipts/{id}/image/presigned-url` | Получить временный private image URL. | Использовать вместо permanent public URLs. |
 
 ## Balances
 
-| Method | Path | Purpose | Notes |
+| Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
-| `GET` | `/api/events/{id}/balances` | Calculate event debts. | Returns debtor-creditor edges for the event. |
+| `GET` | `/api/events/{id}/balances` | Рассчитать долги внутри события. | Возвращает debtor-creditor edges. |
 
 ## Payments
 
-| Method | Path | Purpose | Notes |
+| Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
-| `POST` | `/api/events/{id}/payments` | Create payment declaration. | Sender must be the authenticated user. |
-| `GET` | `/api/events/{id}/payments` | List event payments. | Event membership required. |
-| `PATCH` | `/api/payments/{id}` | Confirm or update payment state. | Confirmation is restricted to the receiver. |
-| `DELETE` | `/api/payments/{id}` | Delete unconfirmed payment. | Intended for cleanup of mistaken declarations. |
+| `POST` | `/api/events/{id}/payments` | Создать payment declaration. | Sender должен быть authenticated user. |
+| `GET` | `/api/events/{id}/payments` | Список платежей события. | Требуется membership. |
+| `PATCH` | `/api/payments/{id}` | Подтвердить или обновить payment state. | Confirmation restricted to receiver. |
+| `DELETE` | `/api/payments/{id}` | Удалить unconfirmed payment. | Для cleanup ошибочных declarations. |
 
-## Health And Operations
+## Health и operations
 
-| Method | Path | Purpose | Notes |
+| Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
-| `GET` | `/api/health/db` | MongoDB health check. | Used for operational checks. |
-| `GET` | `/api/metrics` | Prometheus metrics. | Protect by deployment or network policy if public. |
+| `GET` | `/api/health/db` | MongoDB health check. | Operational check. |
+| `GET` | `/api/metrics` | Prometheus metrics. | Закрыть deployment/network policy, если сервис публичный. |
 
-## Error Shape
+## Error shape
 
-Standard client-facing errors use:
+Обычные client-facing ошибки:
 
 ```json
 {
@@ -93,5 +93,5 @@ Standard client-facing errors use:
 }
 ```
 
-Unexpected server failures should return a generic `500` response and log internal details with request context.
+Unexpected failures должны возвращать generic `500`, а полные детали должны попадать только в server logs.
 

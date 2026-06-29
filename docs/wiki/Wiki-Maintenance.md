@@ -1,22 +1,22 @@
-# Wiki Maintenance
+# Поддержка Wiki
 
-## Source Files
+## Source files
 
-The source of this GitHub Wiki is stored in the backend repository:
+Источник этой GitHub Wiki хранится в backend-репозитории:
 
 - [docs/wiki](https://github.com/Strongf-bob/SplitAppBackend/tree/main/docs/wiki)
 
-The GitHub Wiki itself is a separate git repository:
+Сама GitHub Wiki - отдельный git repository:
 
 - `https://github.com/Strongf-bob/SplitAppBackend.wiki.git`
 
-## Automatic Sync
+## Automatic sync
 
-The repository includes a GitHub Actions workflow that synchronizes `docs/wiki/*.md` to the GitHub Wiki.
+В репозитории есть GitHub Actions workflow, который синхронизирует `docs/wiki/*.md` в GitHub Wiki.
 
 Sync triggers:
 
-- Push to `main` when Wiki source or core backend contract files change.
+- Push в `main`, когда меняются Wiki source или core backend contract files.
 - Daily scheduled run.
 - Manual `workflow_dispatch`.
 
@@ -24,25 +24,25 @@ Workflow source:
 
 - [.github/workflows/sync-wiki.yml](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.github/workflows/sync-wiki.yml)
 
-## Why Keep Wiki Source In The Repo
+## Почему Wiki source лежит в repo
 
-GitHub Wiki pages are useful for reading, but they are easy to forget during code changes. Keeping the source in `docs/wiki/` gives the project:
+GitHub Wiki удобно читать, но ее легко забыть при изменении кода. Source в `docs/wiki/` дает:
 
-- Normal code review for documentation changes.
-- History next to backend code.
-- Easy sync from CI.
-- A clear reminder to update docs with API, security, or behavior changes.
+- Normal code review для документации.
+- Историю рядом с backend-кодом.
+- Автоматическую синхронизацию из CI.
+- Явное напоминание обновлять docs вместе с API, security или behavior changes.
 
-## How To Update The Wiki
+## Как обновлять Wiki
 
-1. Edit the relevant file in `docs/wiki/`.
-2. If API behavior changed, update `openapi.yaml` and tests in the same change.
-3. Commit with a Conventional Commit message.
-4. Push to `main`, or run the `Sync GitHub Wiki` workflow manually.
+1. Изменить нужный файл в `docs/wiki/`.
+2. Если изменилось API behavior, обновить `openapi.yaml` и tests в том же изменении.
+3. Сделать commit с Conventional Commit message.
+4. Push в `main` или manual run workflow `Sync GitHub Wiki`.
 
-## Page Naming
+## Page naming
 
-Use stable page file names:
+Используем стабильные имена файлов:
 
 - `Home.md`
 - `Project-Overview.md`
@@ -55,9 +55,9 @@ Use stable page file names:
 - `Testing-And-CI.md`
 - `Wiki-Maintenance.md`
 
-Internal Wiki links should use GitHub Wiki syntax:
+Internal Wiki links:
 
 ```markdown
-[API Reference](API-Reference)
+[API](API-Reference)
 ```
 

@@ -1,41 +1,41 @@
-# Authentication And Security
+# Аутентификация и безопасность
 
-## Authentication Model
+## Authentication model
 
-The backend uses Yandex OAuth as the external identity provider:
+Backend использует Yandex OAuth как внешний identity provider:
 
-1. iOS obtains a Yandex token.
-2. iOS sends it to `POST /api/login`.
-3. Backend validates the Yandex token and creates or finds the backend user.
-4. Backend returns an app access token and refresh token.
-5. Protected API calls use `Authorization: Bearer <access_token>`.
-6. `POST /api/refresh` rotates the refresh token and returns a new access token.
+1. iOS получает Yandex token.
+2. iOS отправляет его в `POST /api/login`.
+3. Backend валидирует Yandex token и создает или находит backend user.
+4. Backend возвращает app access token и refresh token.
+5. Protected API calls используют `Authorization: Bearer <access_token>`.
+6. `POST /api/refresh` ротирует refresh token и возвращает новый access token.
 
-## Authorization Baseline
+## Authorization baseline
 
-Backend services must check the authenticated actor close to the operation being protected.
+Backend services должны проверять authenticated actor рядом с защищаемой операцией.
 
-Rules:
+Правила:
 
-- Never trust client-supplied user IDs without checking the authenticated actor.
-- Event reads require creator or participant membership.
-- Event management is creator-only where the operation changes event membership or event lifecycle.
-- Payment creation requires authenticated actor to be the sender.
-- Payment confirmation requires authenticated actor to be the receiver.
-- Closed events reject financial mutations.
-- User listing is visibility-limited, not a full user table dump.
+- Никогда не доверять client-supplied user IDs без проверки authenticated actor.
+- Event reads требуют creator или participant membership.
+- Event management creator-only там, где операция меняет membership или lifecycle события.
+- Payment creation требует, чтобы authenticated actor был sender.
+- Payment confirmation требует, чтобы authenticated actor был receiver.
+- Closed events отклоняют financial mutations.
+- User listing visibility-limited, а не full user table dump.
 
-## Storage Rules
+## Storage rules
 
-- Receipt image objects should remain private.
-- Clients should use presigned URLs for temporary reads.
-- Replacements and deletes must clean up old storage state.
-- Secrets belong in environment variables or managed secret stores.
-- Do not commit `.env`, access keys, private keys, production credentials, database dumps, or user data.
+- Receipt image objects должны оставаться private.
+- Clients должны использовать presigned URLs для временного чтения.
+- Replacements и deletes должны чистить старое storage state.
+- Secrets хранятся только в environment variables или managed secret stores.
+- Нельзя коммитить `.env`, access keys, private keys, production credentials, database dumps или user data.
 
-## Error Handling
+## Error handling
 
-Client-facing unexpected failures should be generic:
+Client-facing unexpected failures должны быть generic:
 
 ```json
 {
@@ -43,28 +43,28 @@ Client-facing unexpected failures should be generic:
 }
 ```
 
-Server logs should include request context such as:
+Server logs должны содержать request context:
 
 - request ID
 - method
 - path
 - status code
 - duration
-- internal exception type for unexpected failures
+- internal exception type для unexpected failures
 
 ## CORS
 
-Allowed origins should be explicit. Default development and production origins are configured in `app/main.py`, and production can override through `CORS_ALLOWED_ORIGINS`.
+Allowed origins должны быть явными. Default development и production origins настроены в `app/main.py`; production может переопределять их через `CORS_ALLOWED_ORIGINS`.
 
-## Security Checklist Before Release
+## Security checklist перед release
 
-- Run `make test`.
-- Run `make lint`.
-- Confirm `openapi.yaml` matches route behavior.
-- Confirm no secrets or user data are committed.
-- Confirm production CORS origins are explicit.
-- Confirm metrics exposure is protected by network or deployment policy.
-- Confirm MongoDB and object storage encryption at rest.
-- Confirm receipt images are private and read through presigned URLs.
-- Review [docs/security-baseline.md](https://github.com/Strongf-bob/SplitAppBackend/blob/main/docs/security-baseline.md).
+- Запустить `make test`.
+- Запустить `make lint`.
+- Проверить, что `openapi.yaml` совпадает с route behavior.
+- Проверить, что в git нет secrets или user data.
+- Проверить, что production CORS origins заданы явно.
+- Проверить, что metrics защищены deployment или network policy.
+- Проверить encryption at rest для MongoDB и object storage.
+- Проверить, что receipt images private и читаются через presigned URLs.
+- Пересмотреть [docs/security-baseline.md](https://github.com/Strongf-bob/SplitAppBackend/blob/main/docs/security-baseline.md).
 
