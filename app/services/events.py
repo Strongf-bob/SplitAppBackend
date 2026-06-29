@@ -53,6 +53,10 @@ def _invite_to_api(invite: dict) -> dict:
     return cleaned
 
 
+def _nearby_code_to_api(code: dict) -> dict:
+    return strip_mongo_id(code)
+
+
 def _upsert_membership(
     db: Database,
     *,
@@ -109,6 +113,26 @@ def _get_active_invite_or_error(db: Database, token: str) -> dict:
         )
         raise HTTPException(status_code=410, detail="Invite has expired.")
     return invite
+
+
+def _get_active_nearby_code_or_error(db: Database, code: str) -> dict:
+    invite_code = db.nearby_invite_codes.find_one(
+        {"code": code, "deleted_at": {"$exists": False}}
+    )
+    if not invite_code:
+        raise HTTPException(status_code=404, detail="Nearby invite code not found.")
+    if invite_code["status"] != "active":
+        raise HTTPException(status_code=410, detail="Nearby invite code is no longer active.")
+    expires_at = invite_code["expires_at"]
+    if isinstance(expires_at, datetime) and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at <= utc_now():
+        db.nearby_invite_codes.update_one(
+            {"id": invite_code["id"]},
+            {"$set": {"status": "expired", "updated_at": utc_now()}},
+        )
+        raise HTTPException(status_code=410, detail="Nearby invite code has expired.")
+    return invite_code
 
 
 @track_service_operation("events.create")
@@ -383,3 +407,76 @@ def revoke_event_invite(
         {"$set": {"status": "revoked", "revoked_at": now, "updated_at": now}},
     )
     record_domain_event("events", "invite_revoked")
+
+
+@track_service_operation("events.nearby_codes.create")
+def create_nearby_invite_code(
+    db: Database,
+    event_id: str,
+    payload: schemas.CreateNearbyInviteCodeRequest,
+    actor_user_id: str,
+) -> dict:
+    event = assert_event_access(db, event_id, actor_user_id)
+    assert_event_creator(event, actor_user_id)
+    assert_event_open(event)
+
+    now = utc_now()
+    for _ in range(10):
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        if not db.nearby_invite_codes.find_one({"code": code, "status": "active"}):
+            break
+    else:
+        raise HTTPException(status_code=503, detail="Could not allocate nearby invite code.")
+
+    invite_code = {
+        "id": new_uuid(),
+        "event_id": event_id,
+        "code": code,
+        "status": "active",
+        "created_by": actor_user_id,
+        "expires_at": now + timedelta(seconds=payload.expires_in_seconds),
+        "created_at": now,
+        "updated_at": now,
+    }
+    db.nearby_invite_codes.insert_one(invite_code)
+    record_domain_event("events", "nearby_code_created")
+    return _nearby_code_to_api(invite_code)
+
+
+@track_service_operation("events.nearby_codes.preview")
+def preview_nearby_invite_code(db: Database, code: str, actor_user_id: str) -> dict:
+    get_user_or_404(db, actor_user_id)
+    invite_code = _get_active_nearby_code_or_error(db, code)
+    event = get_event_or_404(db, invite_code["event_id"])
+    return {
+        "event_id": event["id"],
+        "event_name": event["name"],
+        "creator_id": event["creator_id"],
+        "expires_at": invite_code["expires_at"],
+        "participant_count": len(active_event_user_ids(db, event["id"])),
+    }
+
+
+@track_service_operation("events.nearby_codes.accept")
+def accept_nearby_invite_code(db: Database, code: str, actor_user_id: str) -> dict:
+    get_user_or_404(db, actor_user_id)
+    invite_code = _get_active_nearby_code_or_error(db, code)
+    event = get_event_or_404(db, invite_code["event_id"])
+    assert_event_open(event)
+
+    now = utc_now()
+    _upsert_membership(
+        db,
+        event_id=event["id"],
+        user_id=actor_user_id,
+        role="member" if actor_user_id != event["creator_id"] else "creator",
+        now=now,
+    )
+    db.nearby_invite_codes.update_one(
+        {"id": invite_code["id"]},
+        {"$set": {"accepted_by": actor_user_id, "accepted_at": now, "updated_at": now}},
+    )
+    db.events.update_one({"id": event["id"]}, {"$set": {"updated_at": now}})
+    record_domain_event("events", "nearby_code_accepted")
+    observe_event_participants(len(active_event_user_ids(db, event["id"])))
+    return _event_to_api(db, get_event_or_404(db, event["id"]))

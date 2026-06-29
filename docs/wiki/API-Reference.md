@@ -65,6 +65,9 @@ Payment phone visibility is conservative: `nobody`, `event_members`, or `friends
 | `GET` | `/api/invites/{token}/preview` | Посмотреть event preview перед вступлением. | Требует auth, membership не требуется. |
 | `POST` | `/api/invites/{token}/accept` | Принять приглашение и стать участником. | Создает или reactivates `member` membership. |
 | `DELETE` | `/api/events/{id}/invites/{invite_id}` | Отозвать invite. | Creator-only; revoked token больше не принимается. |
+| `POST` | `/api/events/{id}/nearby-code` | Создать 6-значный nearby invite code. | Creator-only; TTL 1-5 минут. |
+| `GET` | `/api/nearby-invites/{code}/preview` | Посмотреть event preview по nearby code. | Требует auth. |
+| `POST` | `/api/nearby-invites/{code}/accept` | Принять nearby code и вступить в событие. | Создает или reactivates `member` membership. |
 
 Events return `participants` as membership records with `role` (`creator`, `member`) and `status`. Authorization uses `event_memberships`, not legacy `events.users`.
 

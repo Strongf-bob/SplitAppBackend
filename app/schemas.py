@@ -144,6 +144,20 @@ class EventInvitePreview(BaseModel):
     participant_count: int
 
 
+class CreateNearbyInviteCodeRequest(BaseModel):
+    expires_in_seconds: int = Field(default=180, ge=60, le=300)
+
+
+class NearbyInviteCode(BaseModel):
+    id: UUID
+    event_id: UUID
+    code: str
+    status: str
+    created_by: UUID
+    expires_at: datetime
+    created_at: datetime
+
+
 class CreateShareItemRequest(BaseModel):
     user_id: UUID
     share_value: Decimal = Field(gt=0, le=1)
