@@ -47,6 +47,10 @@ Authorization: Bearer <access_token>
 | `DELETE` | `/api/events/{id}` | Удалить событие. | Creator-only; service удаляет связанные receipts/payments. |
 | `POST` | `/api/events/{id}/participants` | Добавить участников. | Creator-only management. |
 | `DELETE` | `/api/events/{id}/participants/{user_id}` | Удалить участника. | Creator-only management. |
+| `POST` | `/api/events/{id}/invites` | Создать invite token/link для QR или ссылки. | Creator-only; token имеет TTL. |
+| `GET` | `/api/invites/{token}/preview` | Посмотреть event preview перед вступлением. | Требует auth, membership не требуется. |
+| `POST` | `/api/invites/{token}/accept` | Принять приглашение и стать участником. | Создает или reactivates `member` membership. |
+| `DELETE` | `/api/events/{id}/invites/{invite_id}` | Отозвать invite. | Creator-only; revoked token больше не принимается. |
 
 Events return `participants` as membership records with `role` (`creator`, `member`) and `status`. Authorization uses `event_memberships`, not legacy `events.users`.
 
