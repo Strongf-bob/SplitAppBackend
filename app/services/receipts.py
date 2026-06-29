@@ -156,6 +156,14 @@ def list_receipts_by_event(db: Database, event_id: str, actor_user_id: str) -> l
     return receipts
 
 
+def get_receipt(db: Database, receipt_id: str, actor_user_id: str) -> dict:
+    receipt = get_receipt_or_404(db, receipt_id)
+    assert_event_access(db, receipt["event_id"], actor_user_id)
+    cleaned = strip_mongo_id(receipt)
+    cleaned.pop("share_items", None)
+    return cleaned
+
+
 def delete_receipt(db: Database, receipt_id: str, actor_user_id: str) -> None:
     receipt = get_receipt_or_404(db, receipt_id)
     event = assert_event_access(db, receipt["event_id"], actor_user_id)
