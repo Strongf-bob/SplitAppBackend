@@ -23,6 +23,7 @@ from app.routers import (
     payments_router,
     receipts_router,
     reports_router,
+    splitik_router,
     users_router,
 )
 from app.services import ensure_indexes
@@ -155,6 +156,7 @@ def create_app() -> FastAPI:
     api.include_router(receipts_router)
     api.include_router(payments_router)
     api.include_router(reports_router)
+    api.include_router(splitik_router)
     configure_exception_handlers(api)
     configure_request_logging(api)
     configure_cors(api)
