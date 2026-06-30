@@ -438,3 +438,61 @@ class BalanceContribution(BaseModel):
 
 class EventBalanceExplanation(EventBalance):
     contributions: list[BalanceContribution]
+
+
+class SplitikEntryPoint(BaseModel):
+    type: str = "general"
+    event_id: UUID | None = None
+    receipt_id: UUID | None = None
+    target_user_id: UUID | None = None
+
+
+class SplitikMessageRequest(BaseModel):
+    session_id: UUID | None = None
+    mode: str = "general"
+    message: str = Field(min_length=1)
+    entry_point: SplitikEntryPoint | None = None
+    locale: str = "ru-RU"
+    timezone: str = "Europe/Moscow"
+
+
+class SplitikContextChip(BaseModel):
+    type: str
+    label: str
+    value: str
+
+
+class SplitikDraft(BaseModel):
+    id: UUID
+    type: str
+    status: str
+    payload: dict
+    created_at: datetime
+    committed_at: datetime | None = None
+    committed_resource_id: UUID | None = None
+
+
+class SplitikMessageResponse(BaseModel):
+    session_id: UUID
+    message_id: UUID
+    assistant_message: str
+    mode: str
+    context_chips: list[SplitikContextChip]
+    capabilities: list[str]
+    drafts: list[SplitikDraft] = []
+
+
+class SplitikSession(BaseModel):
+    id: UUID
+    owner_user_id: UUID
+    mode: str
+    locale: str
+    timezone: str
+    messages: list[dict]
+    created_at: datetime
+    updated_at: datetime
+
+
+class SplitikDraftCommitResponse(BaseModel):
+    draft: SplitikDraft
+    resource: dict

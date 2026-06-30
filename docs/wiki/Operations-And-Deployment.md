@@ -133,6 +133,11 @@ Security и app behavior:
 - JWT/access token settings, используемые token helpers.
 - `CORS_ALLOWED_ORIGINS`
 - Optional Sentry/error reporting configuration.
+- Splitik LLM:
+  - `SPLITIK_LLM_BASE_URL`
+  - `SPLITIK_LLM_API_KEY`
+  - `SPLITIK_LLM_MODEL`
+  - `SPLITIK_LLM_TIMEOUT_SECONDS`
 - Grafana:
   - `GRAFANA_BIND_ADDRESS` — default `127.0.0.1`.
   - `GRAFANA_HOST_PORT` — default `3001`.

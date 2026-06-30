@@ -13,6 +13,7 @@
 - [Операции и деплой](Operations-And-Deployment) - production runtime, env-переменные, systemd, логи и метрики.
 - [Тесты и CI](Testing-And-CI) - локальные проверки, GitHub Actions и правила для backend-изменений.
 - [Поддержка Wiki](Wiki-Maintenance) - как Wiki синхронизируется из репозитория.
+- [Сплитик](Splitik-Agent) - контекстный LLM-агент с backend capabilities и подтверждаемыми draft actions.
 - [Receipt Agent Backlog](Receipt-Agent-Backlog) - AI/OCR receipt draft boundary, currently blocked on provider contracts.
 - [AI Code Review](https://github.com/Strongf-bob/SplitAppBackend/blob/main/docs/ai-code-review.md) - настройка OpenCodeReview и правила блокировки PR.
 
@@ -37,6 +38,7 @@
 - Загрузка, удаление и временный доступ к изображениям чеков.
 - Расчет долгов, объяснения балансов и CSV export внутри события.
 - Payment requests, mark-paid declarations, confirmation/rejection, disputes and activity feed.
+- Контекстный агент Сплитик для объяснения событий, расходов, участников и создания подтверждаемых draft actions.
 - Lightweight rate limiting for sensitive auth/search/invite flows.
 - Явный CORS, структурные request-логи, Prometheus-метрики и optional error reporting.
 - Production-деплой через systemd.
