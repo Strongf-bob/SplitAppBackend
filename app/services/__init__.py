@@ -28,6 +28,12 @@ from app.services.friends import (
 )
 from app.services.indexes import ensure_indexes
 from app.services.home import get_home_summary
+from app.services.notifications import (
+    delete_notification_device,
+    list_notification_devices,
+    register_notification_device,
+    send_user_notification,
+)
 from app.services.payments import (
     acknowledge_payment_request,
     cancel_payment_request,
@@ -87,6 +93,7 @@ __all__ = [
     "create_event_invite",
     "create_friend_request",
     "delete_event",
+    "delete_notification_device",
     "decline_event_invite",
     "dispute_receipt_share_review",
     "create_payment",
@@ -114,6 +121,7 @@ __all__ = [
     "list_event_disputes",
     "list_event_activity",
     "list_friendships",
+    "list_notification_devices",
     "list_user_contacts",
     "list_payment_requests_by_event",
     "list_payments_by_event",
@@ -128,12 +136,14 @@ __all__ = [
     "preview_event_invite",
     "reject_payment",
     "reject_friend_request",
+    "register_notification_device",
     "remove_participant",
     "remove_friendship",
     "resolve_dispute",
     "revoke_event_invite",
     "rotate_refresh_token",
     "search_users",
+    "send_user_notification",
     "start_allocation_session",
     "unclaim_receipt_item",
     "update_event",

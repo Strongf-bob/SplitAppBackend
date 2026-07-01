@@ -55,7 +55,8 @@
 
 - [x] **Финансовая статистика профиля** — добавлен `/api/users/me/financial-stats` с open/closed event totals и owed/receivable kopecks.
 - [x] **Групповые долги и объяснения** — backend возвращает simplified debtor-creditor rows и `/balances/explain` с receipt/payment contributions.
-- [ ] **Push-уведомления: backend contract** — события для нового чека, платежа, подтверждения и закрытия события.
+- [x] **Push-уведомления: базовый delivery contract** — регистрация APNs device token, список/отключение устройств и test push endpoint.
+- [ ] **Push-уведомления: business fanout** — события для нового чека, платежа, подтверждения и закрытия события.
 - [x] **Инвайт-ссылки в события** — token preview/accept/revoke backend endpoints добавлены для link/QR сценария.
 - [x] **Категории чеков** — receipt metadata `category` и `/api/receipt-categories` добавлены.
 - [ ] **Шаблоны повторяющихся чеков** — backend-модель и API для периодических расходов.

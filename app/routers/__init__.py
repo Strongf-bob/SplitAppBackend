@@ -5,6 +5,7 @@ from .events import router as events_router
 from .friends import router as friends_router
 from .health import router as health_router
 from .home import router as home_router
+from .notifications import router as notifications_router
 from .payments import router as payments_router
 from .receipts import router as receipts_router
 from .reports import router as reports_router
@@ -19,6 +20,7 @@ __all__ = [
     "friends_router",
     "health_router",
     "home_router",
+    "notifications_router",
     "payments_router",
     "receipts_router",
     "reports_router",

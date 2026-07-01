@@ -1833,6 +1833,198 @@
         ]
       }
     },
+    "/api/notification-devices": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Register Notification Device",
+        "operationId": "register_notification_device_api_notification_devices_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationDeviceRegister"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDevice"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "List Notification Devices",
+        "operationId": "list_notification_devices_api_notification_devices_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDevicePage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notification-devices/{id}": {
+      "delete": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Delete Notification Device",
+        "operationId": "delete_notification_device_api_notification_devices__id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/test": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Send Test Notification",
+        "operationId": "send_test_notification_api_notifications_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSendResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/events/{id}/receipts": {
       "post": {
         "tags": [
@@ -5710,6 +5902,221 @@
           "yandex_token"
         ],
         "title": "LoginYandexRequest"
+      },
+      "NotificationDeliveryResult": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Device Id"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "device_id",
+          "provider",
+          "status"
+        ],
+        "title": "NotificationDeliveryResult"
+      },
+      "NotificationDevice": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "platform": {
+            "type": "string",
+            "title": "Platform"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "last_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Seen At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "platform",
+          "provider",
+          "environment",
+          "enabled",
+          "created_at",
+          "updated_at",
+          "last_seen_at"
+        ],
+        "title": "NotificationDevice"
+      },
+      "NotificationDevicePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationDevice"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "total"
+        ],
+        "title": "NotificationDevicePage"
+      },
+      "NotificationDeviceRegister": {
+        "properties": {
+          "platform": {
+            "type": "string",
+            "pattern": "^ios$",
+            "title": "Platform"
+          },
+          "provider": {
+            "type": "string",
+            "pattern": "^apns$",
+            "title": "Provider",
+            "default": "apns"
+          },
+          "token": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 16,
+            "title": "Token"
+          },
+          "environment": {
+            "type": "string",
+            "pattern": "^(sandbox|production)$",
+            "title": "Environment",
+            "default": "sandbox"
+          }
+        },
+        "type": "object",
+        "required": [
+          "platform",
+          "token"
+        ],
+        "title": "NotificationDeviceRegister"
+      },
+      "NotificationSendResponse": {
+        "properties": {
+          "attempted": {
+            "type": "integer",
+            "title": "Attempted"
+          },
+          "sent": {
+            "type": "integer",
+            "title": "Sent"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationDeliveryResult"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attempted",
+          "sent",
+          "failed",
+          "results"
+        ],
+        "title": "NotificationSendResponse"
+      },
+      "NotificationTestRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "default": "SplitApp"
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Body",
+            "default": "Тестовое уведомление"
+          },
+          "data": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "title": "NotificationTestRequest"
       },
       "Payment": {
         "properties": {

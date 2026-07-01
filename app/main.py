@@ -23,6 +23,7 @@ from app.routers import (
     friends_router,
     health_router,
     home_router,
+    notifications_router,
     payments_router,
     receipts_router,
     reports_router,
@@ -187,6 +188,7 @@ def create_app() -> FastAPI:
     api.include_router(events_router)
     api.include_router(friends_router)
     api.include_router(users_router)
+    api.include_router(notifications_router)
     api.include_router(receipts_router)
     api.include_router(payments_router)
     api.include_router(reports_router)

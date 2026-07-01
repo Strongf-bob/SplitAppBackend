@@ -11,6 +11,7 @@ from app.services import (
     disputes,
     events,
     friends,
+    notifications,
     payments,
     receipt_image,
     receipts,
@@ -242,6 +243,109 @@ def test_import_contacts_upserts_and_matches_by_normalized_phone(db):
     assert second["items"][0]["display_name"] == "Bob Local"
     assert db.user_contacts.count_documents({"owner_user_id": USER_A}) == 1
     assert page["total"] == 1
+
+
+def test_notification_device_registers_upserts_and_lists_without_token(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    payload = schemas.NotificationDeviceRegister(
+        platform="ios",
+        provider="apns",
+        token="apns-token-1234567890",
+        environment="sandbox",
+    )
+
+    first = notifications.register_notification_device(db, USER_A, payload)
+    second = notifications.register_notification_device(db, USER_A, payload)
+    page = notifications.list_notification_devices(db, USER_A, limit=20, offset=0)
+
+    assert first["id"] == second["id"]
+    assert first["user_id"] == USER_A
+    assert first["provider"] == "apns"
+    assert first["enabled"] is True
+    assert "token" not in first
+    assert db.notification_devices.count_documents({}) == 1
+    assert page["total"] == 1
+    assert page["items"][0]["id"] == first["id"]
+
+
+def test_notification_devices_are_private_and_soft_deleted(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    device = notifications.register_notification_device(
+        db,
+        USER_A,
+        schemas.NotificationDeviceRegister(
+            platform="ios",
+            provider="apns",
+            token="apns-token-abcdef123456",
+            environment="production",
+        ),
+    )
+
+    try:
+        notifications.delete_notification_device(db, USER_B, device["id"])
+    except Exception as exc:
+        assert_status(exc, 404)
+    else:
+        raise AssertionError("Expected cross-user notification device delete to fail")
+
+    notifications.delete_notification_device(db, USER_A, device["id"])
+    page = notifications.list_notification_devices(db, USER_A, limit=20, offset=0)
+    stored = db.notification_devices.find_one({"id": device["id"]})
+
+    assert page["items"] == []
+    assert stored["enabled"] is False
+    assert stored["deleted_at"] is not None
+
+
+def test_send_user_notification_uses_active_devices(db, monkeypatch):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    active = notifications.register_notification_device(
+        db,
+        USER_A,
+        schemas.NotificationDeviceRegister(
+            platform="ios",
+            provider="apns",
+            token="apns-token-active123456",
+            environment="sandbox",
+        ),
+    )
+    deleted = notifications.register_notification_device(
+        db,
+        USER_A,
+        schemas.NotificationDeviceRegister(
+            platform="ios",
+            provider="apns",
+            token="apns-token-deleted123456",
+            environment="sandbox",
+        ),
+    )
+    notifications.delete_notification_device(db, USER_A, deleted["id"])
+    calls = []
+
+    def fake_send(device, *, title, body, data):
+        calls.append((device["id"], title, body, data))
+
+    monkeypatch.setattr(notifications, "_send_apns_notification", fake_send)
+
+    result = notifications.send_user_notification(
+        db,
+        USER_A,
+        title="SplitApp",
+        body="Ping",
+        data={"kind": "test"},
+    )
+
+    assert result["attempted"] == 1
+    assert result["sent"] == 1
+    assert result["failed"] == 0
+    assert result["results"][0]["device_id"] == active["id"]
+    assert calls == [(active["id"], "SplitApp", "Ping", {"kind": "test"})]
 
 
 def test_contacts_are_private_to_owner(db):

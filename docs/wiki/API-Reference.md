@@ -53,6 +53,20 @@ Config:
 
 Payment phone visibility is conservative: `nobody`, `event_members`, or `friends`. Phone search is disabled. Contact import is owner-scoped and does not create friend requests automatically.
 
+## Notifications
+
+| Method | Path | Назначение | Notes |
+| --- | --- | --- | --- |
+| `POST` | `/api/notification-devices` | Зарегистрировать APNs device token текущего пользователя. | Upsert по provider/environment/token; token не возвращается в response. |
+| `GET` | `/api/notification-devices` | Список активных notification devices текущего пользователя. | Paginated; видны только свои устройства. |
+| `DELETE` | `/api/notification-devices/{id}` | Отключить notification device. | Soft delete; чужой device id возвращает `404`. |
+| `POST` | `/api/notifications/test` | Отправить тестовый push текущему пользователю. | Использует активные APNs devices; нужен настроенный APNs provider. |
+
+Initial notification delivery supports iOS/APNs. Runtime config: `APNS_TEAM_ID`,
+`APNS_KEY_ID`, `APNS_BUNDLE_ID`, and either `APNS_PRIVATE_KEY` or
+`APNS_PRIVATE_KEY_PATH`. Business event fanout for receipts, payments,
+confirmations, and event close remains a separate product wiring step.
+
 ## Friends
 
 | Method | Path | Назначение | Notes |
