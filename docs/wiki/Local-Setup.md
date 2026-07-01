@@ -98,5 +98,4 @@ PORT=8080 HOST=0.0.0.0 make run
 
 ## Подключение iOS к локальному backend
 
-iOS-клиент сейчас использует `https://splitapp.tech` в `APIClient`. Для локальной backend-разработки frontend-репозиторию нужен development base URL switch, чтобы не менять production URL руками в коде. Подробнее: [Интеграция с iOS](iOS-Frontend-Integration).
-
+iOS-клиент должен использовать production API `https://split-app.ru` в `APIClient`. Для локальной backend-разработки frontend-репозиторию нужен development base URL switch, чтобы не менять production URL руками в коде. Подробнее: [Интеграция с iOS](iOS-Frontend-Integration).

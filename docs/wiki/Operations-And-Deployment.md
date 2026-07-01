@@ -1,5 +1,8 @@
 # Операции и деплой
 
+P1 production rollout для актуального домена `https://split-app.ru` описан в
+[P1 Production Rollout](../p1-production-rollout.md).
+
 ## Production Runtime
 
 ### Docker Compose
