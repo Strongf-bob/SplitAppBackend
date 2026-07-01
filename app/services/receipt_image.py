@@ -71,6 +71,7 @@ def upload_receipt_image(
 
     key = f"receipts/{receipt_id}/{new_uuid()}.jpg"
     image_url = public_url_for_object(bucket, key)
+    old_key = _receipt_image_key(receipt, bucket)
 
     s3.put_object(
         Bucket=bucket,
@@ -78,6 +79,8 @@ def upload_receipt_image(
         Body=body,
         ContentType="image/jpeg",
     )
+    if old_key and old_key != key:
+        s3.delete_object(Bucket=bucket, Key=old_key)
 
     now = utc_now()
     db.receipts.update_one(

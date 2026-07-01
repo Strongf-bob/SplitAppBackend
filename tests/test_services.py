@@ -1057,6 +1057,37 @@ def test_receipt_image_upload_presign_and_delete(db, fake_s3, monkeypatch):
     assert "image_key" not in after_delete
 
 
+def test_receipt_image_replacement_deletes_previous_object(db, fake_s3, monkeypatch):
+    monkeypatch.setenv("S3_BUCKET", "split-bucket")
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+
+    receipt_image.upload_receipt_image(
+        db,
+        fake_s3,
+        receipt["id"],
+        b"\xff\xd8\xfffirst",
+        "image/jpeg",
+        USER_A,
+    )
+    first = db.receipts.find_one({"id": receipt["id"]})
+
+    receipt_image.upload_receipt_image(
+        db,
+        fake_s3,
+        receipt["id"],
+        b"\xff\xd8\xffsecond",
+        "image/jpeg",
+        USER_A,
+    )
+    second = db.receipts.find_one({"id": receipt["id"]})
+
+    assert first["image_key"] != second["image_key"]
+    assert fake_s3.deleted == [("split-bucket", first["image_key"])]
+    assert ("split-bucket", first["image_key"]) not in fake_s3.objects
+    assert ("split-bucket", second["image_key"]) in fake_s3.objects
+
+
 def test_payment_create_and_confirm(db):
     seed_event(db)
     payment = payments.create_payment(db, EVENT_ID, payment_payload(), USER_A)
