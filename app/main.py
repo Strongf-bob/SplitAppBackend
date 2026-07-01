@@ -143,7 +143,9 @@ def configure_pwa(api: FastAPI) -> None:
 
     @api.get("/manifest.webmanifest", include_in_schema=False)
     async def pwa_manifest() -> FileResponse:
-        return FileResponse(WEB_ROOT / "manifest.webmanifest", media_type="application/manifest+json")
+        return FileResponse(
+            WEB_ROOT / "manifest.webmanifest", media_type="application/manifest+json"
+        )
 
     @api.get("/sw.js", include_in_schema=False)
     async def pwa_service_worker() -> FileResponse:

@@ -32,7 +32,12 @@ from app.services.common import (
 )
 
 _EVENT_POLICY_OPTIONS = {
-    "split_strategy": {"equal_default", "itemized_creator", "itemized_self_select", "agent_assisted"},
+    "split_strategy": {
+        "equal_default",
+        "itemized_creator",
+        "itemized_self_select",
+        "agent_assisted",
+    },
     "receipt_creation_policy": {"creator_only", "participants_can_add"},
     "receipt_finalization_policy": {
         "creator_finalizes",
@@ -73,7 +78,9 @@ def _validate_event_policy(field: str, value: str) -> str:
 
 
 def _assert_can_create_invite(event: dict, actor_user_id: str) -> None:
-    policy = event.get("participants_invite_policy", _EVENT_POLICY_DEFAULTS["participants_invite_policy"])
+    policy = event.get(
+        "participants_invite_policy", _EVENT_POLICY_DEFAULTS["participants_invite_policy"]
+    )
     if policy == "creator_only" and actor_user_id != event["creator_id"]:
         raise HTTPException(status_code=403, detail="Only the event creator can invite.")
     if policy == "participants_can_invite_with_approval" and actor_user_id != event["creator_id"]:
@@ -92,13 +99,14 @@ def _event_to_api(db: Database, event: dict) -> dict:
     for field, default in _EVENT_POLICY_DEFAULTS.items():
         cleaned[field] = cleaned.get(field, default)
     cleaned["participants"] = [
-        _membership_to_api(membership)
-        for membership in active_event_memberships(db, cleaned["id"])
+        _membership_to_api(membership) for membership in active_event_memberships(db, cleaned["id"])
     ]
     return cleaned
 
 
-def _invite_decision(db: Database, *, invite_type: str, invite_id: str, actor_user_id: str) -> str | None:
+def _invite_decision(
+    db: Database, *, invite_type: str, invite_id: str, actor_user_id: str
+) -> str | None:
     decision = db.invite_decisions.find_one(
         {
             "invite_type": invite_type,
@@ -214,9 +222,7 @@ def _get_active_invite_or_error(db: Database, token: str) -> dict:
 
 
 def _get_active_nearby_code_or_error(db: Database, code: str) -> dict:
-    invite_code = db.nearby_invite_codes.find_one(
-        {"code": code, "deleted_at": {"$exists": False}}
-    )
+    invite_code = db.nearby_invite_codes.find_one({"code": code, "deleted_at": {"$exists": False}})
     if not invite_code:
         raise HTTPException(status_code=404, detail="Nearby invite code not found.")
     if invite_code["status"] != "active":
@@ -286,7 +292,9 @@ def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str)
 @track_service_operation("events.list")
 def list_events(db: Database, user_id: str, *, limit: int, offset: int) -> dict:
     membership_query = {"user_id": user_id, "status": "active", "deleted_at": {"$exists": False}}
-    event_ids = [membership["event_id"] for membership in db.event_memberships.find(membership_query)]
+    event_ids = [
+        membership["event_id"] for membership in db.event_memberships.find(membership_query)
+    ]
     query = active_filter({"id": {"$in": event_ids}})
     total = db.events.count_documents(query)
     cursor = db.events.find(query).sort("created_at", -1).skip(offset).limit(limit)
@@ -381,7 +389,9 @@ def update_event(
                 update_fields[field] = value
             elif field == "auto_confirm_on_timeout":
                 if value:
-                    raise HTTPException(status_code=400, detail="auto_confirm_on_timeout is not allowed.")
+                    raise HTTPException(
+                        status_code=400, detail="auto_confirm_on_timeout is not allowed."
+                    )
                 update_fields[field] = False
             else:
                 update_fields[field] = _validate_event_policy(field, value)
@@ -601,9 +611,7 @@ def decline_event_invite(db: Database, token: str, actor_user_id: str) -> dict:
 
 
 @track_service_operation("events.invites.revoke")
-def revoke_event_invite(
-    db: Database, event_id: str, invite_id: str, actor_user_id: str
-) -> None:
+def revoke_event_invite(db: Database, event_id: str, invite_id: str, actor_user_id: str) -> None:
     event = assert_event_access(db, event_id, actor_user_id)
     assert_event_creator(event, actor_user_id)
     invite = db.event_invites.find_one(

@@ -95,7 +95,10 @@ def redact_secrets(text: str) -> str:
 def shannon_entropy(value: str) -> float:
     if not value:
         return 0.0
-    return -sum((value.count(char) / len(value)) * math.log2(value.count(char) / len(value)) for char in set(value))
+    return -sum(
+        (value.count(char) / len(value)) * math.log2(value.count(char) / len(value))
+        for char in set(value)
+    )
 
 
 def redact_high_entropy_values(text: str) -> str:
@@ -112,10 +115,14 @@ def redact_high_entropy_values(text: str) -> str:
 
 
 def sanitize_llm_markdown(text: str) -> str:
-    dangerous_tags = r"</?(script|iframe|object|embed|link|style|img|a|meta|form|input|button)\b[^>]*>"
+    dangerous_tags = (
+        r"</?(script|iframe|object|embed|link|style|img|a|meta|form|input|button)\b[^>]*>"
+    )
     text = re.sub(dangerous_tags, "", text, flags=re.IGNORECASE)
     text = re.sub(r"!\[[^\]]*]\([^)]*\)", "[image removed]", text)
-    text = re.sub(r"\[([^\]]+)]\((?!https://github\.com/|https://api\.github\.com/)[^)]+\)", r"\1", text)
+    text = re.sub(
+        r"\[([^\]]+)]\((?!https://github\.com/|https://api\.github\.com/)[^)]+\)", r"\1", text
+    )
     if len(text) <= MAX_ANALYSIS_CHARS:
         return text
     return f"{text[:MAX_ANALYSIS_CHARS]}\n\n... [analysis truncated] ..."
@@ -296,7 +303,9 @@ def main() -> int:
 
     try:
         event = json.loads(Path(event_path).read_text(encoding="utf-8"))
-        pr_number = str((event.get("pull_request") or {}).get("number") or event.get("number") or "")
+        pr_number = str(
+            (event.get("pull_request") or {}).get("number") or event.get("number") or ""
+        )
     except (OSError, json.JSONDecodeError) as exc:
         log(f"Unable to read GitHub event payload: {exc}")
         return 0

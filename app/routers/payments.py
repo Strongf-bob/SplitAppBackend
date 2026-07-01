@@ -34,9 +34,7 @@ def list_payments_by_event(
     db: Database = Depends(get_db),
     current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
-    return services.list_payments_by_event(
-        db, str(id), current_user_id, limit=limit, offset=offset
-    )
+    return services.list_payments_by_event(db, str(id), current_user_id, limit=limit, offset=offset)
 
 
 @router.post(

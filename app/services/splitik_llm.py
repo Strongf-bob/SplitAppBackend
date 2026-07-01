@@ -77,7 +77,9 @@ def _model_for_role(
     }
     model = model_by_role[model_role]
     if not model:
-        raise HTTPException(status_code=503, detail="Splitik receipt draft models are not configured.")
+        raise HTTPException(
+            status_code=503, detail="Splitik receipt draft models are not configured."
+        )
     return model
 
 
@@ -109,7 +111,9 @@ def _parse_json_object(content: str) -> dict:
     try:
         parsed = json.loads(cleaned)
     except ValueError as exc:
-        raise HTTPException(status_code=502, detail="Splitik LLM JSON response was invalid.") from exc
+        raise HTTPException(
+            status_code=502, detail="Splitik LLM JSON response was invalid."
+        ) from exc
     if not isinstance(parsed, dict):
         raise HTTPException(status_code=502, detail="Splitik LLM JSON response was invalid.")
     return parsed
