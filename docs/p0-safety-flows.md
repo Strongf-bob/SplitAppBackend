@@ -1,62 +1,21 @@
 # P0 Safety Flows
 
-This backend implements P0 as an API-first safety layer. Clients must still build
-the PWA and iOS screens that present these states to users.
+Backend реализует P0 как API-first safety layer. Клиенты все еще должны
+построить PWA и iOS screens, которые показывают эти состояния пользователю.
 
 ## Event Safety Defaults
 
-New events use explicit review by default:
+Новые events используют explicit review по умолчанию:
 
 - `safety_policy = explicit_review`
 - `review_window_seconds = 86400`
 - `auto_confirm_on_timeout = false`
 
-The backend rejects attempts to enable auto-confirm on timeout. A timeout is only
-metadata for clients and background reminders; it never turns silence into debt.
+Auto-confirm отключен намеренно: финансовые изменения должны пройти human review.
 
-## Invites
+## Confirmation Summary Endpoints
 
-Invite preview is safe to show before joining an event. Link and nearby-code
-invites support explicit decline:
-
-- `POST /api/invites/{token}/decline`
-- `POST /api/nearby-invites/{code}/decline`
-
-Decline records an actor decision and does not create event membership. Preview
-responses include `actor_decision` when the current user has accepted or
-declined.
-
-## Receipt Review Lifecycle
-
-Receipts start as `draft` and do not affect balances. The creator or payer calls
-`POST /api/receipts/{id}/validate` to move the receipt to
-`pending_confirmation` and create one `ReceiptShareReview` per participant found
-in receipt shares.
-
-Required review actions:
-
-- `GET /api/receipts/{id}/share-reviews`
-- `POST /api/receipts/{id}/share-reviews/me/accept`
-- `POST /api/receipts/{id}/share-reviews/me/dispute`
-
-`POST /api/receipts/{id}/confirm` succeeds only after every required review is
-accepted. Disputed, pending, draft, voided, and corrected receipts do not affect
-pairwise balances.
-
-## Home Summary
-
-`GET /api/home/summary` returns separate money buckets:
-
-- `confirmed`: net confirmed receipt/payment balances.
-- `pending`: pending receipt reviews, payment requests, and standalone pending
-  payments.
-- `disputed`: disputed receipt reviews and disputed payment requests.
-
-Self-shares are ignored in money buckets, matching the balance ledger behavior.
-
-## Explicit Confirmation Screens
-
-Clients can fetch confirmation summaries before mutating financial state:
+Перед необратимыми или чувствительными действиями UI может запросить summary:
 
 - `GET /api/events/{id}/close/confirmation-summary`
 - `GET /api/receipts/{id}/confirm/confirmation-summary`
@@ -64,5 +23,43 @@ Clients can fetch confirmation summaries before mutating financial state:
 - `GET /api/payments/{id}/confirm/confirmation-summary`
 - `GET /api/payments/{id}/reject/confirmation-summary`
 
-Frontend follow-up work should render these summaries before calling the final
-mutating endpoints.
+Каждый response возвращает resource, action, current status, amount when relevant
+и warnings. Клиент должен показать explicit confirmation до mutation endpoint.
+
+## Receipt Review Flow
+
+1. `POST /api/events/{id}/receipts` создает draft receipt.
+2. `POST /api/receipts/{id}/validate` переводит чек в `pending_confirmation` и
+   создает share reviews.
+3. Участники принимают или оспаривают свои доли:
+   - `POST /api/receipts/{id}/share-reviews/me/accept`
+   - `POST /api/receipts/{id}/share-reviews/me/dispute`
+4. `POST /api/receipts/{id}/confirm` разрешен только когда все required reviews
+   accepted и нет disputes.
+
+Confirmed receipts влияют на balances. Draft, disputed, voided и corrected
+receipts не должны менять итоговый debt ledger.
+
+## Invite Decisions
+
+Invite flows поддерживают decline без вступления в событие:
+
+- `POST /api/invites/{token}/decline`
+- `POST /api/nearby-invites/{code}/decline`
+
+Это нужно, чтобы клиент мог показать пользователю осознанный выбор и не
+оставлять ambiguous invite state.
+
+## Payment Safety
+
+Payment request и payment confirmation разделены:
+
+- debtor может создать pending payment через `mark-paid`;
+- receiver должен подтвердить payment;
+- только confirmed payments влияют на balances;
+- confirmed payments нельзя delete, reject или перевести обратно в pending.
+
+## Audit Trail
+
+Security-sensitive actions пишут audit/domain events: receipts, payments,
+payment requests, profile updates, deletes и confirmation state changes.
