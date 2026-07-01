@@ -130,6 +130,8 @@ def update_payment(
             status_code=403,
             detail="Only the payment receiver can update confirmation.",
         )
+    if payment.get("confirmed") and not payload.confirmed:
+        raise HTTPException(status_code=409, detail="Confirmed payments cannot be unconfirmed.")
     status = "confirmed" if payload.confirmed else "pending"
     db.payments.update_one(
         {"id": payment_id},

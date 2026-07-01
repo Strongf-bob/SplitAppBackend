@@ -1508,6 +1508,19 @@ def test_confirmed_payment_cannot_be_deleted(db):
         raise AssertionError("Expected confirmed payment delete to fail")
 
 
+def test_confirmed_payment_cannot_be_unconfirmed(db):
+    seed_event(db)
+    payment = payments.create_payment(db, EVENT_ID, payment_payload(), USER_A)
+    payments.update_payment(db, payment["id"], schemas.PaymentUpdate(confirmed=True), USER_B)
+
+    try:
+        payments.update_payment(db, payment["id"], schemas.PaymentUpdate(confirmed=False), USER_B)
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected confirmed payment unconfirm to fail")
+
+
 def test_receipt_delete_soft_deletes_and_hides_from_reads(db):
     seed_event(db)
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
