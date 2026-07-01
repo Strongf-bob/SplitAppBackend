@@ -149,3 +149,14 @@ def payment_payload():
     from app import schemas
 
     return schemas.PaymentCreate(sender_id=USER_A, receiver_id=USER_B, amount_kopecks=5000)
+
+
+def confirm_receipt_for_all(db, receipt_id: str, actor_user_id: str = USER_A):
+    from app.services import receipts
+
+    validated = receipts.validate_receipt(db, receipt_id, actor_user_id)
+    for review in receipts.list_receipt_share_reviews(
+        db, receipt_id, actor_user_id, limit=50, offset=0
+    )["items"]:
+        receipts.accept_receipt_share_review(db, receipt_id, review["user_id"])
+    return receipts.confirm_receipt(db, receipt_id, actor_user_id), validated
