@@ -334,6 +334,11 @@ code {
   gap: 12px;
 }
 
+.auth-actions {
+  display: grid;
+  gap: 10px;
+}
+
 .form-grid.two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -399,6 +404,32 @@ textarea {
   border: 1px solid var(--danger);
   background: #fff;
   color: var(--danger);
+}
+
+.yandex-button {
+  display: inline-flex;
+  min-height: 48px;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #111;
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  background: #111;
+  color: #fff;
+  font-weight: 800;
+}
+
+.yandex-mark {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: #fc3f1d;
+  color: #fff;
+  font-weight: 900;
 }
 
 .list {

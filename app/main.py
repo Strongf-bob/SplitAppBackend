@@ -136,18 +136,23 @@ def configure_pwa(api: FastAPI) -> None:
     api.mount("/assets", StaticFiles(directory=WEB_ROOT / "assets"), name="pwa-assets")
 
     @api.get("/", include_in_schema=False)
+    @api.head("/", include_in_schema=False)
     @api.get("/app", include_in_schema=False)
+    @api.head("/app", include_in_schema=False)
     @api.get("/app/{path:path}", include_in_schema=False)
+    @api.head("/app/{path:path}", include_in_schema=False)
     async def pwa_shell() -> FileResponse:
         return FileResponse(WEB_ROOT / "index.html")
 
     @api.get("/manifest.webmanifest", include_in_schema=False)
+    @api.head("/manifest.webmanifest", include_in_schema=False)
     async def pwa_manifest() -> FileResponse:
         return FileResponse(
             WEB_ROOT / "manifest.webmanifest", media_type="application/manifest+json"
         )
 
     @api.get("/sw.js", include_in_schema=False)
+    @api.head("/sw.js", include_in_schema=False)
     async def pwa_service_worker() -> FileResponse:
         return FileResponse(WEB_ROOT / "sw.js", media_type="application/javascript")
 

@@ -64,20 +64,18 @@
           <section id="authPanel" class="panel auth-panel">
             <div>
               <p class="eyebrow">Вход</p>
-              <h2>Yandex token</h2>
+              <h2>Войти через Яндекс</h2>
               <p class="muted">
-                PWA использует текущий backend contract: отправляет токен в
-                <code>POST /api/login</code>, хранит app tokens локально и обновляет access token через
-                <code>POST /api/refresh</code>.
+                Откроется страница Яндекса. После подтверждения SplitApp создаст сессию и вернет вас
+                обратно в приложение.
               </p>
             </div>
-            <form id="loginForm" class="form-grid">
-              <label>
-                Yandex token
-                <input id="yandexTokenInput" autocomplete="off" required type="password" />
-              </label>
-              <button class="primary-button" type="submit">Войти</button>
-            </form>
+            <div class="auth-actions">
+              <button id="yandexLoginButton" class="yandex-button" type="button">
+                <span class="yandex-mark">Я</span>
+                <span>Войти через Яндекс</span>
+              </button>
+            </div>
           </section>
 
           <section id="workspace" class="workspace" hidden>

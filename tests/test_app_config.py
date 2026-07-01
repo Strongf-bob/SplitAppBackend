@@ -166,10 +166,39 @@ def test_pwa_static_routes_are_registered():
     assert "bootstrap" in app_asset.text
 
 
+def test_pwa_static_routes_support_head_smoke_checks():
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+    configure_pwa(api)
+
+    client = TestClient(api)
+
+    assert client.head("/").status_code == 200
+    assert client.head("/app").status_code == 200
+    assert client.head("/app/events/demo").status_code == 200
+    assert client.head("/manifest.webmanifest").status_code == 200
+    assert client.head("/sw.js").status_code == 200
+    assert client.head("/assets/app.js").status_code == 200
+
+
 def test_docker_image_includes_pwa_assets():
     dockerfile = (PROJECT_ROOT / "Dockerfile").read_text()
 
     assert "COPY web ./web" in dockerfile
+
+
+def test_pwa_uses_yandex_oauth_button_instead_of_manual_token_field():
+    index_html = (PROJECT_ROOT / "web" / "index.html").read_text()
+    app_js = (PROJECT_ROOT / "web" / "assets" / "app.js").read_text()
+
+    assert "yandexLoginButton" in index_html
+    assert "Войти через Яндекс" in index_html
+    assert "yandexTokenInput" not in index_html
+    assert "6c5725f5868c4604adaea1e4b892c14d" in app_js
+    assert "https://split-app.ru/app" in app_js
+    assert "https://oauth.yandex.ru/authorize" in app_js
+    assert "access_token" in app_js
+    assert "POST" in app_js
+    assert "/api/login" in app_js
 
 
 def test_operations_scrape_allows_private_and_loopback_clients():
