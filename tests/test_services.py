@@ -17,6 +17,7 @@ from app.services import (
     home,
     users,
 )
+from app.services.idempotency import _request_hash, run_idempotent_create
 
 from tests.conftest import (
     EVENT_ID,
@@ -1135,6 +1136,63 @@ def test_payment_create_rejects_idempotency_key_reuse_with_different_payload(db)
         assert_status(exc, 409)
     else:
         raise AssertionError("Expected idempotency key reuse with different payload to fail")
+
+
+def test_idempotency_key_in_progress_blocks_duplicate_create(db):
+    payload = {"value": 1}
+    db.idempotency_keys.insert_one(
+        {
+            "actor_user_id": USER_A,
+            "scope": "test-scope",
+            "key": "in-flight",
+            "request_hash": _request_hash(payload),
+            "status": "in_progress",
+        }
+    )
+
+    try:
+        run_idempotent_create(
+            db,
+            actor_user_id=USER_A,
+            scope="test-scope",
+            key="in-flight",
+            request_payload=payload,
+            create=lambda: {"ok": True},
+        )
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected in-progress idempotency key to reject duplicate create")
+
+
+def test_idempotency_reservation_is_removed_after_create_failure(db):
+    def fail_create():
+        raise RuntimeError("create failed")
+
+    try:
+        run_idempotent_create(
+            db,
+            actor_user_id=USER_A,
+            scope="test-scope",
+            key="retryable",
+            request_payload={"value": 1},
+            create=fail_create,
+        )
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("Expected create failure")
+
+    response = run_idempotent_create(
+        db,
+        actor_user_id=USER_A,
+        scope="test-scope",
+        key="retryable",
+        request_payload={"value": 1},
+        create=lambda: {"ok": True},
+    )
+
+    assert response == {"ok": True}
 
 
 def test_payment_request_mark_paid_confirm_and_balance_impact(db):
