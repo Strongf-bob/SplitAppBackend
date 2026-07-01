@@ -25,9 +25,6 @@ def ensure_indexes(db: Database) -> None:
         [("invite_type", 1), ("invite_id", 1), ("user_id", 1)], unique=True
     )
     db.invite_decisions.create_index([("event_id", 1), ("user_id", 1)])
-    db.nearby_invite_codes.create_index("id", unique=True)
-    db.nearby_invite_codes.create_index([("code", 1), ("status", 1)])
-    db.nearby_invite_codes.create_index([("event_id", 1), ("status", 1)])
     db.receipts.create_index("id", unique=True)
     db.receipts.create_index([("event_id", 1), ("created_at", -1)])
     db.receipts.create_index([("event_id", 1), ("status", 1)])

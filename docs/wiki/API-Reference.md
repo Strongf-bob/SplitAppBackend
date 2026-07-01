@@ -32,7 +32,7 @@ Authorization: Bearer <access_token>
 
 ## Security
 
-Sensitive endpoints have lightweight per-actor/IP rate limiting and return `429` on excess traffic. Covered scopes include auth login/refresh, user search, invite preview/accept/create, and nearby invite code preview/accept/create.
+Sensitive endpoints have lightweight per-actor/IP rate limiting and return `429` on excess traffic. Covered scopes include auth login/refresh, user search, and invite preview/accept/create.
 
 Config:
 
@@ -89,10 +89,6 @@ Payment phone visibility is conservative: `nobody`, `event_members`, or `friends
 | `POST` | `/api/invites/{token}/accept` | Принять приглашение и стать участником. | Создает или reactivates `member` membership. |
 | `POST` | `/api/invites/{token}/decline` | Отклонить invite token. | Записывает user decision без вступления в событие. |
 | `DELETE` | `/api/events/{id}/invites/{invite_id}` | Отозвать invite. | Creator-only; revoked token больше не принимается. |
-| `POST` | `/api/events/{id}/nearby-code` | Создать 6-значный nearby invite code. | Creator-only; TTL 1-5 минут. |
-| `GET` | `/api/nearby-invites/{code}/preview` | Посмотреть event preview по nearby code. | Требует auth. |
-| `POST` | `/api/nearby-invites/{code}/accept` | Принять nearby code и вступить в событие. | Создает или reactivates `member` membership. |
-| `POST` | `/api/nearby-invites/{code}/decline` | Отклонить nearby invite code. | Записывает user decision без вступления в событие. |
 
 Events return `participants` as membership records with `role` (`creator`, `member`) and `status`. Authorization uses `event_memberships`, not legacy `events.users`.
 

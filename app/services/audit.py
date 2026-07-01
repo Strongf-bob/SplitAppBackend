@@ -17,7 +17,6 @@ def _event_activity_resource_ids(db: Database, event_id: str) -> set[str]:
         "payment_requests",
         "disputes",
         "event_invites",
-        "nearby_invite_codes",
         "invite_decisions",
     ):
         collection = getattr(db, collection_name)

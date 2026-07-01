@@ -45,7 +45,6 @@ receipts не должны менять итоговый debt ledger.
 Invite flows поддерживают decline без вступления в событие:
 
 - `POST /api/invites/{token}/decline`
-- `POST /api/nearby-invites/{code}/decline`
 
 Это нужно, чтобы клиент мог показать пользователю осознанный выбор и не
 оставлять ambiguous invite state.
