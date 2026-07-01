@@ -226,6 +226,36 @@ class CreateReceiptRequest(BaseModel):
     vat_amount_kopecks: int | None = None
 
 
+class ReceiptAIDraftRequest(BaseModel):
+    source_text: str = Field(min_length=1, max_length=12000)
+    payer_id: UUID | None = None
+    locale: str = "ru-RU"
+    timezone: str = "Europe/Moscow"
+
+
+class ReceiptAIModelResult(BaseModel):
+    model_role: str
+    model_id: str
+    payload: CreateReceiptRequest | None = None
+    warnings: list[str] = []
+
+
+class ReceiptAIDraftResponse(BaseModel):
+    id: UUID
+    event_id: UUID
+    owner_user_id: UUID
+    status: str
+    model_status: str
+    needs_human_review: bool
+    draft_payload: CreateReceiptRequest
+    primary_result: ReceiptAIModelResult
+    verification_result: ReceiptAIModelResult
+    escalation_result: ReceiptAIModelResult | None = None
+    disagreements: list[str] = []
+    created_at: datetime
+    updated_at: datetime
+
+
 class UpdateReceiptRequest(BaseModel):
     title: str | None = None
     category: str | None = None

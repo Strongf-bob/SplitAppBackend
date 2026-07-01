@@ -2,12 +2,14 @@ from contextlib import asynccontextmanager
 import json
 import logging
 import os
+from pathlib import Path
 import time
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.core.db import close_mongodb, connect_mongodb, load_env_file
 from app.core.monitoring import init_sentry, record_request_metrics
@@ -29,6 +31,8 @@ from app.routers import (
 from app.services import ensure_indexes
 
 logger = logging.getLogger("splitapp")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+WEB_ROOT = PROJECT_ROOT / "web"
 
 DEFAULT_CORS_ALLOWED_ORIGINS = (
     "http://localhost:3000",
@@ -124,6 +128,27 @@ def configure_request_logging(api: FastAPI) -> None:
             )
 
 
+def configure_pwa(api: FastAPI) -> None:
+    if not WEB_ROOT.exists():
+        return
+
+    api.mount("/assets", StaticFiles(directory=WEB_ROOT / "assets"), name="pwa-assets")
+
+    @api.get("/", include_in_schema=False)
+    @api.get("/app", include_in_schema=False)
+    @api.get("/app/{path:path}", include_in_schema=False)
+    async def pwa_shell() -> FileResponse:
+        return FileResponse(WEB_ROOT / "index.html")
+
+    @api.get("/manifest.webmanifest", include_in_schema=False)
+    async def pwa_manifest() -> FileResponse:
+        return FileResponse(WEB_ROOT / "manifest.webmanifest", media_type="application/manifest+json")
+
+    @api.get("/sw.js", include_in_schema=False)
+    async def pwa_service_worker() -> FileResponse:
+        return FileResponse(WEB_ROOT / "sw.js", media_type="application/javascript")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -160,6 +185,7 @@ def create_app() -> FastAPI:
     configure_exception_handlers(api)
     configure_request_logging(api)
     configure_cors(api)
+    configure_pwa(api)
     return api
 
 

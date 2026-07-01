@@ -55,6 +55,16 @@
 The login handler is available at `POST /api/login`.
 MongoDB connection health is available at `GET /api/health/db`.
 
+The PWA client is served by the same FastAPI process:
+
+- `GET /` and `GET /app` return the SplitApp web/PWA shell from `web/`.
+- `GET /manifest.webmanifest` and `GET /sw.js` provide installability.
+- Static assets live in `web/assets/`.
+- Protected product data still comes from `/api/*` with bearer authentication.
+
+There is no frontend build step yet; edit the vanilla PWA files in `web/` and
+restart the API for a full local smoke check.
+
 ## Run on remote server
 
 ### Docker Compose

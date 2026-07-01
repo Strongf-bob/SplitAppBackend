@@ -136,8 +136,28 @@ Security и app behavior:
 - Splitik LLM:
   - `SPLITIK_LLM_BASE_URL`
   - `SPLITIK_LLM_API_KEY`
-  - `SPLITIK_LLM_MODEL`
+  - `SPLITIK_PRIMARY_MODEL`
+  - `SPLITIK_VERIFICATION_MODEL`
+  - `SPLITIK_ESCALATION_MODEL`
   - `SPLITIK_LLM_TIMEOUT_SECONDS`
+  - `SPLITIK_LLM_MODEL` legacy fallback for primary model only.
+
+`SPLITIK_LLM_MODEL` or `SPLITIK_PRIMARY_MODEL` is enough for normal Splitik chat
+replies. AI receipt drafts additionally require `SPLITIK_VERIFICATION_MODEL` and
+`SPLITIK_ESCALATION_MODEL`; if they are missing, only that draft endpoint returns
+a configuration error while the backend and normal Splitik chat keep serving.
+Keep model IDs in environment variables, not in code, so the runtime
+provider/model mix can be changed without rebuilding the backend.
+
+- PWA:
+  - `web/` contains the installable SplitApp web client.
+  - `/`, `/app`, `/manifest.webmanifest`, `/sw.js`, and `/assets/*` are public
+    static routes served by FastAPI.
+  - `/api/*` remains bearer-token protected except documented auth/health
+    exceptions.
+  - The service worker caches only the app shell and static assets. It does not
+    cache authenticated API responses.
+
 - Grafana:
   - `GRAFANA_BIND_ADDRESS` — default `127.0.0.1`.
   - `GRAFANA_HOST_PORT` — default `3001`.

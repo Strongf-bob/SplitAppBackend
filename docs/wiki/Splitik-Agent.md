@@ -9,8 +9,19 @@
 
 - `SPLITIK_LLM_BASE_URL`
 - `SPLITIK_LLM_API_KEY`
-- `SPLITIK_LLM_MODEL`
+- `SPLITIK_PRIMARY_MODEL` - primary model for Splitik replies and future receipt understanding.
+- `SPLITIK_VERIFICATION_MODEL` - independent verification model for receipt understanding cross-checks.
+- `SPLITIK_ESCALATION_MODEL` - escalation model used when primary and verification results disagree.
 - `SPLITIK_LLM_TIMEOUT_SECONDS`
+
+`SPLITIK_LLM_MODEL` remains a legacy fallback for the primary model only. New
+runtime config must use the role-specific variables above so model IDs can be
+changed without code changes or rebuilds.
+
+When LLM runtime config is present, backend startup validates all configured
+role models against the provider's OpenAI-compatible `/models` endpoint. If a
+configured model is unavailable or provider credentials are rejected, startup
+fails before serving requests.
 
 Значения секретов должны жить только в runtime `.env` на машине разработчика или
 сервере. Не добавлять ключи в `.env.example`, GitHub secrets для CI, docs,

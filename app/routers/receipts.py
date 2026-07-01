@@ -39,6 +39,20 @@ def list_receipts_by_event(
     )
 
 
+@router.post(
+    "/api/events/{id}/receipt-drafts/ai",
+    response_model=schemas.ReceiptAIDraftResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_receipt_ai_draft(
+    id: UUID,
+    payload: schemas.ReceiptAIDraftRequest,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.create_receipt_ai_draft(db, str(id), payload, current_user_id)
+
+
 @router.get("/api/receipts/{id}", response_model=schemas.Receipt)
 def get_receipt(
     id: UUID,

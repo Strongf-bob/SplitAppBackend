@@ -99,6 +99,7 @@ Event settings include settlement policies: `split_strategy`, `receipt_creation_
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
 | `POST` | `/api/events/{id}/receipts` | Создать draft чек с items и shares. | Требуется membership; closed event запрещает mutation; нужен `Idempotency-Key`. |
+| `POST` | `/api/events/{id}/receipt-drafts/ai` | Создать AI draft чека из текста через primary/verification/escalation model flow. | Требуется membership; draft требует human review и не влияет на balances. |
 | `GET` | `/api/events/{id}/receipts` | Список чеков события. | Paginated; требуется membership. |
 | `GET` | `/api/receipt-categories` | Список стандартных категорий чеков. | Для UI metadata; custom category можно хранить на receipt. |
 | `GET` | `/api/receipts/{id}` | Детали чека. | Требуется membership через событие. |
