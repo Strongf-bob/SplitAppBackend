@@ -1,4 +1,7 @@
 const tokenKey = "splitapp.tokens";
+const yandexOAuthStateKey = "splitapp.yandexOAuthState";
+const yandexOAuthClientId = "6c5725f5868c4604adaea1e4b892c14d";
+
 const state = {
   tokens: loadTokens(),
   user: null,
@@ -19,6 +22,7 @@ const installButton = document.querySelector("#installButton");
 const welcomeInstallButton = document.querySelector("#welcomeInstallButton");
 const logoutButton = document.querySelector("#logoutButton");
 const networkStatus = document.querySelector("#networkStatus");
+const yandexLoginButton = document.querySelector("#yandexLoginButton");
 
 function loadTokens() {
   try {
@@ -127,6 +131,7 @@ async function bootstrap() {
   setupInstall();
   setupNavigation();
   setupAuth();
+  await handleYandexOAuthCallback();
   renderAuthState();
   if (state.tokens) {
     await safeLoadInitialData();
@@ -183,23 +188,68 @@ function setupNavigation() {
 }
 
 function setupAuth() {
-  document.querySelector("#loginForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const token = document.querySelector("#yandexTokenInput").value.trim();
-    try {
-      const login = await api("/api/login", {
-        method: "POST",
-        body: JSON.stringify({ yandex_token: token })
-      });
-      saveTokens(login);
-      state.user = login.user;
-      document.querySelector("#yandexTokenInput").value = "";
-      await safeLoadInitialData();
-      showToast("Вход выполнен.");
-    } catch (error) {
-      showToast(error.message);
-    }
+  yandexLoginButton.addEventListener("click", startYandexLogin);
+}
+
+function yandexRedirectUri() {
+  if (window.location.hostname === "split-app.ru" || window.location.hostname === "www.split-app.ru") {
+    return "https://split-app.ru/app";
+  }
+  return `${window.location.origin}/app`;
+}
+
+function startYandexLogin() {
+  const oauthState = crypto.randomUUID();
+  sessionStorage.setItem(yandexOAuthStateKey, oauthState);
+
+  const params = new URLSearchParams({
+    response_type: "token",
+    client_id: yandexOAuthClientId,
+    redirect_uri: yandexRedirectUri(),
+    state: oauthState
   });
+
+  window.location.assign(`https://oauth.yandex.ru/authorize?${params.toString()}`);
+}
+
+async function handleYandexOAuthCallback() {
+  if (!window.location.hash) return;
+
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  const yandexToken = fragment.get("access_token");
+  const error = fragment.get("error");
+  if (!yandexToken && !error) return;
+
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+
+  if (error) {
+    const description = fragment.get("error_description") || "Яндекс не подтвердил вход.";
+    showToast(description);
+    return;
+  }
+
+  const expectedState = sessionStorage.getItem(yandexOAuthStateKey);
+  sessionStorage.removeItem(yandexOAuthStateKey);
+  if (!expectedState || fragment.get("state") !== expectedState) {
+    showToast("Не удалось подтвердить OAuth-сессию. Попробуйте войти снова.");
+    return;
+  }
+
+  try {
+    await loginWithYandexToken(yandexToken);
+    showToast("Вход выполнен.");
+  } catch (loginError) {
+    showToast(loginError.message);
+  }
+}
+
+async function loginWithYandexToken(yandexToken) {
+  const login = await api("/api/login", {
+    method: "POST",
+    body: JSON.stringify({ yandex_token: yandexToken })
+  });
+  saveTokens(login);
+  state.user = login.user;
 }
 
 function updateOnlineStatus() {
