@@ -73,7 +73,7 @@ iOS app использует:
 
 - Держать local event/receipt models синхронными с backend DTO.
 - Добавить endpoint support для receipt detail, receipt image deletion, presigned receipt image reads, profile updates и payment deletion.
-- Сделать переключение API base URL для local development вместо hard-coded production `https://splitapp.tech`.
+- Сделать переключение API base URL для local development вместо hard-coded production `https://split-app.ru`.
 - Держать `FriendsView` и settlement UI привязанными к backend balances/payments.
 - Нормализовать server error presentation для user-facing alerts.
 - Обновить frontend list decoders под backend pagination envelope: `items`, `limit`, `offset`, `total`.

@@ -7,7 +7,7 @@
 | Среда | Base URL |
 | --- | --- |
 | Local development | `http://localhost:8000` |
-| Production | `https://splitapp.tech` |
+| Production | `https://split-app.ru` |
 
 ## Authentication
 
