@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#101820" />
+    <meta name="description" content="SplitApp PWA для событий, чеков, долгов и Сплитика." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/assets/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/assets/icon.svg" />
+    <link rel="stylesheet" href="/assets/app.css" />
+    <title>SplitApp</title>
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="SplitApp">
+          <span class="brand-mark">S</span>
+          <span>
+            <strong>SplitApp</strong>
+            <small>PWA</small>
+          </span>
+        </a>
+        <div class="topbar-actions">
+          <span id="networkStatus" class="status-pill">online</span>
+          <button id="installButton" class="ghost-button" type="button" hidden>Установить</button>
+          <button id="logoutButton" class="ghost-button" type="button" hidden>Выйти</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="sidebar" aria-label="Навигация">
+          <nav class="nav-list">
+            <button class="nav-item active" type="button" data-view="home">Главная</button>
+            <button class="nav-item" type="button" data-view="events">События</button>
+            <button class="nav-item" type="button" data-view="receipts">Чеки</button>
+            <button class="nav-item" type="button" data-view="payments">Платежи</button>
+            <button class="nav-item" type="button" data-view="friends">Люди</button>
+            <button class="nav-item" type="button" data-view="profile">Профиль</button>
+            <button class="nav-item accent" type="button" data-view="splitik">Сплитик</button>
+          </nav>
+        </aside>
+
+        <section class="content">
+          <section id="welcomePanel" class="welcome-grid">
+            <div class="hero-copy">
+              <p class="eyebrow">web + PWA</p>
+              <h1>SplitApp на телефоне и компьютере</h1>
+              <p>
+                Откройте приложение, войдите через backend-авторизацию и покажите наставникам
+                события, чеки, долги, платежи и Сплитика без iOS-сборки.
+              </p>
+              <div class="hero-actions">
+                <button id="welcomeInstallButton" class="primary-button" type="button">Установить</button>
+                <button class="secondary-button" type="button" data-scroll-login>Войти</button>
+              </div>
+              <p id="installHint" class="muted">
+                На iPhone откройте Share -> Add to Home Screen. На Android появится системная установка.
+              </p>
+            </div>
+            <img class="hero-preview" src="/assets/app-preview.svg" alt="Экран SplitApp PWA" />
+          </section>
+
+          <section id="authPanel" class="panel auth-panel">
+            <div>
+              <p class="eyebrow">Вход</p>
+              <h2>Yandex token</h2>
+              <p class="muted">
+                PWA использует текущий backend contract: отправляет токен в
+                <code>POST /api/login</code>, хранит app tokens локально и обновляет access token через
+                <code>POST /api/refresh</code>.
+              </p>
+            </div>
+            <form id="loginForm" class="form-grid">
+              <label>
+                Yandex token
+                <input id="yandexTokenInput" autocomplete="off" required type="password" />
+              </label>
+              <button class="primary-button" type="submit">Войти</button>
+            </form>
+          </section>
+
+          <section id="workspace" class="workspace" hidden>
+            <div id="viewRoot"></div>
+          </section>
+        </section>
+      </main>
+
+      <nav class="mobile-tabs" aria-label="Нижняя навигация">
+        <button class="nav-item active" type="button" data-view="home">Главная</button>
+        <button class="nav-item" type="button" data-view="events">События</button>
+        <button class="nav-item" type="button" data-view="receipts">Чеки</button>
+        <button class="nav-item" type="button" data-view="payments">Платежи</button>
+        <button class="nav-item accent" type="button" data-view="splitik">Сплитик</button>
+      </nav>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>

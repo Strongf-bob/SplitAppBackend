@@ -42,6 +42,7 @@ from app.services.payments import (
     update_payment,
 )
 from app.services.receipt_image import upload_receipt_image
+from app.services.receipt_ai_drafts import create_receipt_ai_draft
 from app.services.receipts import (
     claim_receipt_item,
     confirm_receipt,
@@ -81,6 +82,7 @@ __all__ = [
     "create_payment_request",
     "dispute_payment_request",
     "create_receipt",
+    "create_receipt_ai_draft",
     "create_receipt_correction",
     "delete_receipt",
     "ensure_indexes",

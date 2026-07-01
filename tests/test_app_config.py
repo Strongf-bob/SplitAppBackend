@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app.core.monitoring import metrics_response, monitor_db_operation, monitor_service_operation
 from app.core.monitoring import record_domain_event, refresh_database_metrics
 from app.dependencies import _is_internal_client, require_auth_token
-from app.main import configure_cors, cors_allowed_origins
+from app.main import configure_cors, configure_pwa, cors_allowed_origins
 from app.main import configure_exception_handlers, configure_request_logging
 from app.routers.health import router as health_router
 
@@ -113,6 +113,48 @@ def test_metrics_endpoint_accepts_metrics_token(monkeypatch):
 
     assert response.status_code == 200
     assert "splitapp_http_requests_total" in response.text
+
+
+def test_non_api_paths_are_public_for_pwa_shell():
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+
+    @api.get("/app")
+    def app_shell() -> dict[str, str]:
+        return {"app": "splitapp"}
+
+    client = TestClient(api)
+    response = client.get("/app")
+
+    assert response.status_code == 200
+    assert response.json() == {"app": "splitapp"}
+
+
+def test_api_paths_still_require_bearer_token():
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+
+    @api.get("/api/protected")
+    def protected() -> dict[str, str]:
+        return {"ok": "true"}
+
+    client = TestClient(api)
+    response = client.get("/api/protected")
+
+    assert response.status_code == 401
+
+
+def test_pwa_static_routes_are_registered():
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+    configure_pwa(api)
+
+    client = TestClient(api)
+
+    assert client.get("/").status_code == 200
+    manifest = client.get("/manifest.webmanifest")
+    assert manifest.status_code == 200
+    assert manifest.json()["short_name"] == "SplitApp"
+    service_worker = client.get("/sw.js")
+    assert service_worker.status_code == 200
+    assert "CACHE_NAME" in service_worker.text
 
 
 def test_operations_scrape_allows_private_and_loopback_clients():

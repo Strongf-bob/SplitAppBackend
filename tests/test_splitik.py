@@ -5,7 +5,7 @@ import pytest
 from fastapi import HTTPException
 
 from app import schemas
-from app.services import splitik, splitik_llm
+from app.services import receipt_ai_drafts, splitik, splitik_llm
 from tests.conftest import EVENT_ID, USER_A, USER_B, USER_C, seed_event, seed_users
 
 
@@ -26,6 +26,55 @@ def _mock_llm(monkeypatch):
     return calls
 
 
+class _FakeResponse:
+    def __init__(self, status_code=200, body=None):
+        self.status_code = status_code
+        self._body = body or {}
+
+    def json(self):
+        return self._body
+
+
+def _set_llm_env(monkeypatch):
+    monkeypatch.setenv("SPLITIK_LLM_BASE_URL", "https://ai.example/v1")
+    monkeypatch.setenv("SPLITIK_LLM_API_KEY", "test-key")
+    monkeypatch.setenv("SPLITIK_PRIMARY_MODEL", "primary-model")
+    monkeypatch.setenv("SPLITIK_VERIFICATION_MODEL", "verification-model")
+    monkeypatch.setenv("SPLITIK_ESCALATION_MODEL", "escalation-model")
+
+
+def _receipt_ai_candidate(model_role, payload=None, warnings=None):
+    draft_payload = payload or {
+        "payer_id": USER_A,
+        "title": "Кофе",
+        "category": "Кафе",
+        "total_amount_kopecks": 1000,
+        "items": [
+            {
+                "name": "Капучино",
+                "cost_kopecks": 1000,
+                "split_mode": "custom",
+                "share_items": [
+                    {"user_id": USER_A, "share_value": "0.5"},
+                    {"user_id": USER_B, "share_value": "0.5"},
+                ],
+            }
+        ],
+        "discount_amount_kopecks": 0,
+        "service_fee_amount_kopecks": 0,
+        "delivery_fee_amount_kopecks": 0,
+        "tip_amount_kopecks": 0,
+        "rounding_adjustment_kopecks": 0,
+        "fiscal_total_amount_kopecks": None,
+        "vat_amount_kopecks": None,
+    }
+    return {
+        "model_role": model_role,
+        "model_id": f"{model_role}-model",
+        "content": {"payload": draft_payload, "warnings": warnings or []},
+    }
+
+
 def test_splitik_event_context_requires_membership(db, monkeypatch):
     _mock_llm(monkeypatch)
     seed_event(db)
@@ -42,6 +91,174 @@ def test_splitik_event_context_requires_membership(db, monkeypatch):
         )
 
     assert exc.value.status_code == 403
+
+
+def test_receipt_ai_draft_uses_primary_and_verification_without_creating_receipt(db, monkeypatch):
+    seed_event(db)
+    calls = []
+
+    def fake_candidate(*, model_role, system_prompt, user_message, context):
+        calls.append({"role": model_role, "context": context, "message": user_message})
+        return _receipt_ai_candidate(model_role)
+
+    monkeypatch.setattr(splitik_llm, "generate_receipt_draft_candidate", fake_candidate)
+
+    draft = receipt_ai_drafts.create_receipt_ai_draft(
+        db,
+        EVENT_ID,
+        schemas.ReceiptAIDraftRequest(source_text="Капучино 10.00", payer_id=USER_A),
+        USER_A,
+    )
+
+    assert [call["role"] for call in calls] == ["primary", "verification"]
+    assert draft["model_status"] == "matched"
+    assert draft["needs_human_review"] is True
+    assert draft["draft_payload"]["total_amount_kopecks"] == 1000
+    assert draft["primary_result"]["payload"]["items"][0]["name"] == "Капучино"
+    assert db.receipt_ai_drafts.count_documents({"event_id": EVENT_ID}) == 1
+    assert db.receipts.count_documents({"event_id": EVENT_ID}) == 0
+
+
+def test_receipt_ai_draft_escalates_when_models_disagree(db, monkeypatch):
+    seed_event(db)
+    calls = []
+    verification_payload = _receipt_ai_candidate("verification")["content"]["payload"]
+    verification_payload = {**verification_payload, "total_amount_kopecks": 1200}
+
+    def fake_candidate(*, model_role, system_prompt, user_message, context):
+        calls.append(model_role)
+        if model_role == "verification":
+            return _receipt_ai_candidate(model_role, verification_payload)
+        if model_role == "escalation":
+            return _receipt_ai_candidate(model_role, warnings=["Primary and verification disagreed."])
+        return _receipt_ai_candidate(model_role)
+
+    monkeypatch.setattr(splitik_llm, "generate_receipt_draft_candidate", fake_candidate)
+
+    draft = receipt_ai_drafts.create_receipt_ai_draft(
+        db,
+        EVENT_ID,
+        schemas.ReceiptAIDraftRequest(source_text="Капучино спорная сумма", payer_id=USER_A),
+        USER_A,
+    )
+
+    assert calls == ["primary", "verification", "escalation"]
+    assert draft["model_status"] == "escalated"
+    assert "total_amount_kopecks" in draft["disagreements"]
+    assert draft["escalation_result"]["warnings"] == ["Primary and verification disagreed."]
+    assert draft["draft_payload"]["total_amount_kopecks"] == 1000
+    assert db.receipts.count_documents({"event_id": EVENT_ID}) == 0
+
+
+def test_receipt_ai_draft_requires_event_membership(db, monkeypatch):
+    seed_event(db)
+    monkeypatch.setattr(
+        splitik_llm,
+        "generate_receipt_draft_candidate",
+        lambda **kwargs: _receipt_ai_candidate(kwargs["model_role"]),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        receipt_ai_drafts.create_receipt_ai_draft(
+            db,
+            EVENT_ID,
+            schemas.ReceiptAIDraftRequest(source_text="Капучино 10.00", payer_id=USER_A),
+            USER_C,
+        )
+
+    assert exc.value.status_code == 403
+    assert db.receipt_ai_drafts.count_documents({}) == 0
+
+
+def test_splitik_llm_uses_runtime_primary_model(monkeypatch):
+    _set_llm_env(monkeypatch)
+    requests = []
+
+    def fake_post(url, headers, json, timeout):
+        requests.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
+        return _FakeResponse(body={"choices": [{"message": {"content": "Сплитик: готово."}}]})
+
+    monkeypatch.setattr(splitik_llm.httpx, "post", fake_post)
+
+    reply = splitik_llm.generate_splitik_reply(
+        system_prompt="system",
+        user_message="hello",
+        context={"allowed": True},
+    )
+
+    assert reply == "Сплитик: готово."
+    assert requests[0]["url"] == "https://ai.example/v1/chat/completions"
+    assert requests[0]["json"]["model"] == "primary-model"
+
+
+def test_splitik_chat_supports_legacy_primary_model_without_receipt_models(monkeypatch):
+    monkeypatch.setenv("SPLITIK_LLM_BASE_URL", "https://ai.example/v1")
+    monkeypatch.setenv("SPLITIK_LLM_API_KEY", "test-key")
+    monkeypatch.setenv("SPLITIK_LLM_MODEL", "legacy-primary")
+    monkeypatch.delenv("SPLITIK_PRIMARY_MODEL", raising=False)
+    monkeypatch.delenv("SPLITIK_VERIFICATION_MODEL", raising=False)
+    monkeypatch.delenv("SPLITIK_ESCALATION_MODEL", raising=False)
+    requests = []
+
+    def fake_post(url, headers, json, timeout):
+        requests.append(json)
+        return _FakeResponse(body={"choices": [{"message": {"content": "Сплитик: legacy."}}]})
+
+    monkeypatch.setattr(splitik_llm.httpx, "post", fake_post)
+
+    assert (
+        splitik_llm.generate_splitik_reply(
+            system_prompt="system",
+            user_message="hello",
+            context={"allowed": True},
+        )
+        == "Сплитик: legacy."
+    )
+    assert requests[0]["model"] == "legacy-primary"
+
+    with pytest.raises(HTTPException) as exc:
+        splitik_llm.generate_receipt_draft_candidate(
+            model_role="verification",
+            system_prompt="system",
+            user_message="receipt",
+            context={},
+        )
+    assert exc.value.status_code == 503
+
+
+def test_splitik_startup_validation_accepts_available_runtime_models(monkeypatch):
+    _set_llm_env(monkeypatch)
+    requests = []
+
+    def fake_get(url, headers, timeout):
+        requests.append({"url": url, "headers": headers, "timeout": timeout})
+        return _FakeResponse(
+            body={
+                "data": [
+                    {"id": "primary-model"},
+                    {"id": "verification-model"},
+                    {"id": "escalation-model"},
+                ]
+            }
+        )
+
+    monkeypatch.setattr(splitik_llm.httpx, "get", fake_get)
+
+    splitik_llm.validate_configured_models_available()
+
+    assert requests[0]["url"] == "https://ai.example/v1/models"
+
+
+def test_splitik_startup_validation_rejects_unavailable_runtime_model(monkeypatch):
+    _set_llm_env(monkeypatch)
+
+    def fake_get(url, headers, timeout):
+        return _FakeResponse(body={"data": [{"id": "primary-model"}, {"id": "verification-model"}]})
+
+    monkeypatch.setattr(splitik_llm.httpx, "get", fake_get)
+
+    with pytest.raises(RuntimeError):
+        splitik_llm.validate_configured_models_available()
 
 
 def test_splitik_llm_is_mocked_and_receives_bounded_event_context(db, monkeypatch):

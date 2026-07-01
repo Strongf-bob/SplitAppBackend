@@ -86,6 +86,9 @@ def require_auth_token(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> None:
+    if not request.url.path.startswith("/api/"):
+        return
+
     if _is_token_protected_operations_path(request.url.path):
         if _has_metrics_access_token(credentials):
             return
