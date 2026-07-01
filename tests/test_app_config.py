@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
@@ -10,6 +11,9 @@ from app.dependencies import _is_internal_client, require_auth_token
 from app.main import configure_cors, configure_pwa, cors_allowed_origins
 from app.main import configure_exception_handlers, configure_request_logging
 from app.routers.health import router as health_router
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_cors_allowed_origins_parse_env(monkeypatch):
@@ -155,6 +159,12 @@ def test_pwa_static_routes_are_registered():
     service_worker = client.get("/sw.js")
     assert service_worker.status_code == 200
     assert "CACHE_NAME" in service_worker.text
+
+
+def test_docker_image_includes_pwa_assets():
+    dockerfile = (PROJECT_ROOT / "Dockerfile").read_text()
+
+    assert "COPY web ./web" in dockerfile
 
 
 def test_operations_scrape_allows_private_and_loopback_clients():

@@ -12,6 +12,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY app ./app
+COPY web ./web
 COPY main.py .
 
 USER splitapp
