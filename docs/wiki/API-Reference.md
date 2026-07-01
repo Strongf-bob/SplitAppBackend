@@ -19,6 +19,7 @@ Authorization: Bearer <access_token>
 
 Публичные endpoints:
 
+- `GET /api/ping`
 - `POST /api/login`
 - `POST /api/refresh`
 
@@ -79,16 +80,19 @@ Payment phone visibility is conservative: `nobody`, `event_members`, or `friends
 | `GET` | `/api/events` | Получить события, видимые caller. | Paginated; caller должен иметь active event membership. |
 | `GET` | `/api/events/{id}` | Получить детали события. | Требуется membership. |
 | `PATCH` | `/api/events/{id}` | Обновить name или `is_closed`. | Creator-only management. |
+| `GET` | `/api/events/{id}/close/confirmation-summary` | Получить summary перед закрытием события. | Требуется membership; UI должен показать explicit confirmation. |
 | `DELETE` | `/api/events/{id}` | Удалить событие. | Creator-only; service удаляет связанные receipts/payments. |
 | `POST` | `/api/events/{id}/participants` | Добавить участников. | Creator-only management. |
 | `DELETE` | `/api/events/{id}/participants/{user_id}` | Удалить участника. | Creator-only management. |
 | `POST` | `/api/events/{id}/invites` | Создать invite token/link для QR или ссылки. | Creator-only; token имеет TTL. |
 | `GET` | `/api/invites/{token}/preview` | Посмотреть event preview перед вступлением. | Требует auth, membership не требуется. |
 | `POST` | `/api/invites/{token}/accept` | Принять приглашение и стать участником. | Создает или reactivates `member` membership. |
+| `POST` | `/api/invites/{token}/decline` | Отклонить invite token. | Записывает user decision без вступления в событие. |
 | `DELETE` | `/api/events/{id}/invites/{invite_id}` | Отозвать invite. | Creator-only; revoked token больше не принимается. |
 | `POST` | `/api/events/{id}/nearby-code` | Создать 6-значный nearby invite code. | Creator-only; TTL 1-5 минут. |
 | `GET` | `/api/nearby-invites/{code}/preview` | Посмотреть event preview по nearby code. | Требует auth. |
 | `POST` | `/api/nearby-invites/{code}/accept` | Принять nearby code и вступить в событие. | Создает или reactivates `member` membership. |
+| `POST` | `/api/nearby-invites/{code}/decline` | Отклонить nearby invite code. | Записывает user decision без вступления в событие. |
 
 Events return `participants` as membership records with `role` (`creator`, `member`) and `status`. Authorization uses `event_memberships`, not legacy `events.users`.
 
@@ -105,7 +109,13 @@ Event settings include settlement policies: `split_strategy`, `receipt_creation_
 | `GET` | `/api/receipts/{id}` | Детали чека. | Требуется membership через событие. |
 | `PATCH` | `/api/receipts/{id}` | Обновить чек. | Financial fields нельзя менять после confirmation; title можно обновить. |
 | `POST` | `/api/receipts/{id}/confirm` | Подтвердить draft чек. | Только confirmed receipts влияют на balances. |
+| `GET` | `/api/receipts/{id}/confirm/confirmation-summary` | Получить summary перед confirmation. | Для explicit confirmation UI. |
+| `POST` | `/api/receipts/{id}/validate` | Перевести чек в review state. | Создает share-review records для участников долей. |
+| `GET` | `/api/receipts/{id}/share-reviews` | Получить reviews долей чека. | Paginated; требуется event membership. |
+| `POST` | `/api/receipts/{id}/share-reviews/me/accept` | Принять свою долю в чеке. | Только участник, для которого создан review. |
+| `POST` | `/api/receipts/{id}/share-reviews/me/dispute` | Оспорить свою долю в чеке. | Требует reason; чек становится disputed. |
 | `POST` | `/api/receipts/{id}/void` | Аннулировать confirmed чек. | Voided receipts не влияют на balances. |
+| `GET` | `/api/receipts/{id}/void/confirmation-summary` | Получить summary перед void. | Для explicit confirmation UI. |
 | `POST` | `/api/receipts/{id}/corrections` | Создать correction draft для confirmed чека. | Original получает `corrected`, новая draft требует confirmation. |
 | `POST` | `/api/receipts/{id}/allocation-session` | Запустить collaborative allocation session. | Только draft receipt; creator/payer. |
 | `GET` | `/api/allocation-sessions/{id}` | Получить session state и item claims. | Требуется event membership. |
@@ -139,7 +149,9 @@ Event settings include settlement policies: `split_strategy`, `receipt_creation_
 | `POST` | `/api/payment-requests/{id}/dispute` | Открыть спор по просьбе оплаты. | Ставит status `disputed`. |
 | `POST` | `/api/payment-requests/{id}/mark-paid` | Debtor нажимает "я оплатил". | Создает pending payment; нужен `Idempotency-Key`. |
 | `POST` | `/api/payments/{id}/confirm` | Receiver подтверждает оплату. | Только confirmed payments уменьшают balances. |
+| `GET` | `/api/payments/{id}/confirm/confirmation-summary` | Получить summary перед confirmation. | Для explicit confirmation UI. |
 | `POST` | `/api/payments/{id}/reject` | Receiver отклоняет оплату. | Rejected payments не влияют на balances. |
+| `GET` | `/api/payments/{id}/reject/confirmation-summary` | Получить summary перед reject. | Для explicit confirmation UI. |
 | `PATCH` | `/api/payments/{id}` | Подтвердить или обновить payment state. | Confirmation restricted to receiver. |
 | `DELETE` | `/api/payments/{id}` | Удалить unconfirmed payment. | Для cleanup ошибочных declarations. |
 
@@ -169,8 +181,15 @@ Payment requests may include `deadline_at`; backend rejects deadlines less than 
 
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
+| `GET` | `/api/ping` | Lightweight liveness check. | Public endpoint для runtime smoke checks. |
 | `GET` | `/api/health/db` | MongoDB health check. | Operational check. |
-| `GET` | `/api/metrics` | Prometheus metrics. | Internal Prometheus scrape endpoint; не публиковать наружу. |
+| `GET` | `/api/metrics` | Prometheus metrics. | Требует `Authorization: Bearer <METRICS_ACCESS_TOKEN>`; не публиковать наружу. |
+
+## Home
+
+| Method | Path | Назначение | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/api/home/summary` | Сводка главного экрана текущего пользователя. | Events, pending reviews, payment requests и lightweight activity. |
 
 ## Error shape
 

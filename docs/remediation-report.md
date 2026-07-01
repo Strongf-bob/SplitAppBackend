@@ -89,7 +89,7 @@ These items belong to `/Users/strongf/Developer/SplitApp Yandex/SplitApp` and we
 ## Notes
 - Backend pagination is implemented for `GET /api/events`, `GET /api/users`, `GET /api/events/{id}/receipts`, and `GET /api/events/{id}/payments`; frontend list clients still need to consume the paginated response envelope.
 - MongoDB transactional event deletion requires transaction support in the deployed MongoDB topology.
-- `/api/metrics` is part of the backend API and should be protected by deployment/network policy if the service is publicly reachable.
+- `/api/metrics` is protected by `METRICS_ACCESS_TOKEN`; production deployment should still keep it off the public user-facing surface with reverse proxy or network policy controls.
 - `GET /api/users` now returns only the current user and users sharing an active event with the caller, not the whole user table.
 - New receipt, payment, and balance money values use integer kopecks in API and MongoDB. Legacy decimal-string records are still read into kopecks during rollout.
 - Receipt image uploads no longer request public object ACLs. Clients should use the presigned URL endpoint for temporary read access.
