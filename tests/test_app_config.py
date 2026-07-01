@@ -153,12 +153,17 @@ def test_pwa_static_routes_are_registered():
     client = TestClient(api)
 
     assert client.get("/").status_code == 200
+    assert client.get("/app").status_code == 200
+    assert client.get("/app/events/demo").status_code == 200
     manifest = client.get("/manifest.webmanifest")
     assert manifest.status_code == 200
     assert manifest.json()["short_name"] == "SplitApp"
     service_worker = client.get("/sw.js")
     assert service_worker.status_code == 200
     assert "CACHE_NAME" in service_worker.text
+    app_asset = client.get("/assets/app.js")
+    assert app_asset.status_code == 200
+    assert "bootstrap" in app_asset.text
 
 
 def test_docker_image_includes_pwa_assets():
