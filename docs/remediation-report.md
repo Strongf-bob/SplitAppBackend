@@ -1,37 +1,38 @@
 # SplitAppBackend Remediation Report
 
-Date: 2026-06-30
+Дата: 2026-06-30
 
-## Backend Work Completed
-- Added repository agent rules and a project security baseline:
+## Что Сделано В Backend
+
+- Добавлены repository agent rules и project security baseline:
   - `8ded172 docs(security): add Codex operating baseline`
-- Added backend regression infrastructure:
+- Добавлена backend regression infrastructure:
   - `6904fab test(backend): add pytest regression harness`
-- Fixed event/payment authorization and closed-event guards:
+- Исправлены event/payment authorization и closed-event guards:
   - `9cedd8c fix(events): block financial mutations for closed events`
   - `4f868a1 fix(events): delete events transactionally`
   - `3783e07 fix(payments): restrict payment confirmation to receivers`
-- Closed auth/API gaps:
+- Закрыты auth/API gaps:
   - `a71b322 fix(auth): add refresh token rotation grace period`
   - `227ee30 feat(payments): add payment deletion endpoint`
   - `ba1a8be feat(receipts): add receipt detail endpoint`
   - `1d9c162 fix(api): configure explicit CORS origins`
-- Added profile, storage lifecycle, and audit behavior:
+- Добавлены profile, storage lifecycle и audit behavior:
   - `ac177f5 feat(users): add current-user profile updates`
   - `fb7820c feat(receipts): add receipt image deletion and presigned URLs`
   - `ee19e9e fix(data): soft-delete records with audit trail`
-- Added operational hardening:
+- Добавлено operational hardening:
   - `2f9602f feat(logging): add structured request logging`
   - `f7ffc4c feat(monitoring): expose metrics and optional error reporting`
   - `9d1ca93 build(deploy): add systemd deployment path`
   - `f070de9 build(lint): add Ruff lint and format checks`
-- Added follow-up critical authorization, money, and storage fixes:
+- Добавлены critical authorization, money и storage fixes:
   - `991f607 fix(events): restrict event management to creators`
   - `94f33eb fix(payments): prevent sender impersonation`
   - `d7d44e1 fix(users): limit user listing to visible participants`
   - `ec18396 fix(money): use Decimal for monetary calculations`
   - `9dff159 fix(receipts): keep receipt images private in S3`
-- Added backend v2 product flows:
+- Добавлены backend v2 product flows:
   - `2c68bb0 refactor(money): store monetary values in kopecks`
   - `9687e84 feat(api): add idempotency for financial create endpoints`
   - `f2f58be feat(events): model event memberships with roles`
@@ -41,7 +42,7 @@ Date: 2026-06-30
   - `75f7665 feat(balances): explain simplified event debts`
   - `e41a70a feat(payments): add request and confirmation workflow`
   - `e8a35f6 docs(api): document backend v2 financial flows`
-- Completed backend-feasible product-spec extensions without AI/OCR:
+- Завершены backend-feasible product-spec extensions без AI/OCR:
   - `c63560f feat(users): add discovery and payment hints`
   - `d9c9d98 feat(friends): add private friendship flow`
   - `31274a2 feat(events): add nearby invite codes`
@@ -57,7 +58,8 @@ Date: 2026-06-30
   - `e246716 feat(security): add rate limiting for sensitive endpoints`
   - `b00f682 docs(ai): record receipt agent backlog`
 
-## Branches Pushed
+## Запушенные Branches
+
 - `strongf/docs-security-baseline`
 - `strongf/backend-test-foundation`
 - `strongf/backend-event-payment-guards`
@@ -69,33 +71,37 @@ Date: 2026-06-30
 - `strongf/backend-v2-money-members-receipts-debts`
 
 ## Verification
+
 - `make test`: 86 passed, 4 warnings.
 - `make lint`: all checks passed.
-- Warnings are from `fastapi.testclient` deprecation and short test-only JWT secret length.
+- Warnings связаны с `fastapi.testclient` deprecation и коротким test-only JWT secret.
 
-## Remaining Frontend Work
-These items belong to `/Users/strongf/Developer/SplitApp Yandex/SplitApp` and were intentionally not changed in this backend series:
+## Оставшаяся Frontend Работа
 
-- Load debts in `FriendsView` from backend balances/payments instead of leaving them empty.
-- Implement real `settleDebt()` network call using backend payment endpoints.
-- Wire receipt swipe-delete to `DELETE /api/receipts/{id}`.
-- Connect `LocalFriendsStore` to `FriendsViewModel` or remove it if the server is the source of truth.
-- Improve offline indication beyond a single warning.
-- Remove the dead `.swift` file with a dot-only name.
-- Either use the CoreData `Payment` mapping or remove unused persistence code.
-- Normalize server error presentation instead of showing raw alerts.
-- Update frontend list decoders and pagination UI for the backend `items`/`limit`/`offset`/`total` envelope.
+Эти пункты относятся к `/Users/strongf/Developer/SplitApp Yandex/SplitApp` и
+намеренно не менялись в backend series:
+
+- Загружать debts в `FriendsView` из backend balances/payments, а не оставлять empty state.
+- Реализовать настоящий `settleDebt()` network call через backend payment endpoints.
+- Привязать receipt swipe-delete к `DELETE /api/receipts/{id}`.
+- Подключить `LocalFriendsStore` к `FriendsViewModel` или удалить, если server является source of truth.
+- Улучшить offline indication.
+- Удалить dead `.swift` file с dot-only name.
+- Использовать CoreData `Payment` mapping или удалить unused persistence code.
+- Нормализовать server error presentation вместо raw alerts.
+- Обновить frontend list decoders и pagination UI под backend envelope `items` / `limit` / `offset` / `total`.
 
 ## Notes
-- Backend pagination is implemented for `GET /api/events`, `GET /api/users`, `GET /api/events/{id}/receipts`, and `GET /api/events/{id}/payments`; frontend list clients still need to consume the paginated response envelope.
-- MongoDB transactional event deletion requires transaction support in the deployed MongoDB topology.
-- `/api/metrics` is protected by `METRICS_ACCESS_TOKEN`; production deployment should still keep it off the public user-facing surface with reverse proxy or network policy controls.
-- `GET /api/users` now returns only the current user and users sharing an active event with the caller, not the whole user table.
-- New receipt, payment, and balance money values use integer kopecks in API and MongoDB. Legacy decimal-string records are still read into kopecks during rollout.
-- Receipt image uploads no longer request public object ACLs. Clients should use the presigned URL endpoint for temporary read access.
-- Event authorization now uses `event_memberships` with `creator` and `member` roles.
-- Invite link/QR backend support is implemented with token preview, accept, and revoke endpoints.
-- New receipts start as `draft` and affect balances only after `POST /api/receipts/{id}/confirm`.
-- Balance explanation and payment request flows are backend-supported; frontend integration remains out of scope for this backend branch.
-- AI/OCR receipt parsing is intentionally not implemented. The future receipt draft agent boundary is documented in `docs/wiki/Receipt-Agent-Backlog.md` and blocked on OCR/model/provider/privacy contracts.
-- CSV export is implemented for event debts, receipts, and payments. PDF export remains future work.
+
+- Backend pagination реализован для `GET /api/events`, `GET /api/users`, `GET /api/events/{id}/receipts` и `GET /api/events/{id}/payments`; frontend list clients еще должны перейти на paginated response envelope.
+- Transactional event deletion требует MongoDB topology с transaction support.
+- `/api/metrics` защищен `METRICS_ACCESS_TOKEN`; production deployment все равно должен убрать endpoint с публичной user-facing surface через reverse proxy или network policy.
+- `GET /api/users` возвращает только current user и users из общих active events, а не всю user table.
+- Новые receipt, payment и balance money values используют integer kopecks в API и MongoDB. Legacy decimal-string records читаются совместимо во время rollout.
+- Receipt image uploads не используют public object ACLs. Clients должны читать изображения через presigned URL endpoint.
+- Event authorization использует `event_memberships` с ролями `creator` и `member`.
+- Invite link/QR backend support реализован через token preview, accept и revoke endpoints.
+- Новые receipts стартуют как `draft` и влияют на balances только после `POST /api/receipts/{id}/confirm`.
+- Balance explanation и payment request flows поддержаны backend'ом; frontend integration остается out of scope для backend branch.
+- AI/OCR receipt parsing намеренно не реализован. Future receipt draft agent boundary описан в `docs/wiki/Receipt-Agent-Backlog.md` и заблокирован OCR/model/provider/privacy contracts.
+- CSV export реализован для event debts, receipts и payments. PDF export остается future work.

@@ -1,67 +1,65 @@
 # AI Code Review
 
-This repository runs Alibaba OpenCodeReview on every pull request through the
-`AI Code Review / OpenCodeReview` GitHub Actions job.
+В репозитории есть GitHub Actions job `AI Code Review / OpenCodeReview`, который
+запускает Alibaba OpenCodeReview на pull request.
 
-It also runs `AI Test Failure Analysis / Analyze Test Failure`. This job executes
-`make test`, and when tests fail it sends the test log plus the PR diff to the
-same LLM endpoint and posts a diagnostic PR comment. The normal `Backend CI/CD /
-Test` job remains the merge-blocking source of truth for test failures.
+Также есть `AI Test Failure Analysis / Analyze Test Failure`: job запускает
+`make test`, а при падении отправляет test log и PR diff в тот же LLM endpoint и
+публикует diagnostic PR comment. Основным merge-blocking источником правды
+остается обычный `Backend CI/CD / Test`.
 
 ## Required Secrets
 
-Configure these repository or organization secrets in GitHub:
+В repository или organization secrets GitHub нужно настроить:
 
-- `OCR_LLM_URL` - LLM API endpoint used by OpenCodeReview.
-- `OCR_LLM_AUTH_TOKEN` - authentication token for the LLM endpoint.
-- `OCR_LLM_MODEL` - model name passed to OpenCodeReview.
+- `OCR_LLM_URL` — LLM API endpoint для OpenCodeReview.
+- `OCR_LLM_AUTH_TOKEN` — authentication token для LLM endpoint.
+- `OCR_LLM_MODEL` — model name для OpenCodeReview.
 
-The workflow also sets the review language to Russian and asks OpenCodeReview to
-write all review comments in Russian.
-
-The same secrets are used by AI test failure analysis.
+Workflow выставляет review language в Russian и просит OpenCodeReview писать
+review comments по-русски. Те же secrets используются для AI test failure
+analysis.
 
 ## Blocking Policy
 
-The publishing script maps findings to these severities:
+Publishing script мапит findings в severities:
 
-- `critical` - blocks merge.
-- `high` - blocks merge.
-- `medium` - comment only.
-- `low` - comment only.
-- `style` - comment only.
+- `critical` — блокирует merge.
+- `high` — блокирует merge.
+- `medium` — comment only.
+- `low` — comment only.
+- `style` — comment only.
 
-Unknown or missing severities are treated as `medium` so unexpected OCR output is
-reported without blocking merges by default.
+Unknown или missing severities считаются `medium`, чтобы неожиданный OCR output
+попал в комментарии, но не блокировал merge по умолчанию.
 
 ## Branch Protection
 
-To make AI review required before merge:
+Чтобы сделать AI review обязательным перед merge:
 
-1. Open GitHub repository settings.
-2. Go to **Rules** > **Rulesets** or **Branches** > **Branch protection rules**.
-3. Create or edit the rule for the protected branch, usually `main`.
-4. Enable required status checks.
-5. Select the `AI Code Review / OpenCodeReview` check.
-6. Save the rule.
+1. Откройте GitHub repository settings.
+2. Перейдите в **Rules** > **Rulesets** или **Branches** > **Branch protection rules**.
+3. Создайте или обновите rule для protected branch, обычно `main`.
+4. Включите required status checks.
+5. Выберите check `AI Code Review / OpenCodeReview`.
+6. Сохраните rule.
 
-With this enabled, pull requests with `critical` or `high` OpenCodeReview
-findings cannot merge until the finding is fixed or the workflow passes.
+После этого PR с `critical` или `high` OpenCodeReview findings нельзя смержить,
+пока finding не исправлен или workflow не пройдет.
 
-Do not make `AI Test Failure Analysis / Analyze Test Failure` a required blocking
-check unless you explicitly want AI diagnostics to be required. The regular test
-check already blocks merges when tests fail; the AI analysis is intended to
-explain failures in the PR discussion.
+`AI Test Failure Analysis / Analyze Test Failure` не стоит делать required
+blocking check без отдельного решения. Regular test check уже блокирует merge при
+падении тестов; AI analysis нужен для объяснения в PR discussion.
 
 ## Manual Testing
 
-Open a test pull request that changes backend code. The workflow runs on
-`opened`, `synchronize`, `reopened`, and `ready_for_review` pull request events.
+Откройте test pull request с backend-code изменением. Workflow запускается на
+`opened`, `synchronize`, `reopened` и `ready_for_review`.
 
-To re-run without pushing a new commit, open the pull request checks page in
-GitHub Actions and use **Re-run jobs**.
+Для rerun без нового commit используйте **Re-run jobs** на странице checks в
+GitHub Actions.
 
-For local parser checks, save a sample OpenCodeReview JSON file and run:
+Для локальной проверки parser сохраните sample OpenCodeReview JSON и выполните:
 
 ```bash
 OCR_OUTPUT_FILE=opencode-review.json \
@@ -71,14 +69,13 @@ GITHUB_EVENT_PATH=/path/to/pull_request_event.json \
 python3 .github/scripts/publish_opencode_review.py
 ```
 
-The raw OpenCodeReview JSON is uploaded as the `opencode-review-result` artifact
-on every workflow run for debugging schema changes.
+Raw OpenCodeReview JSON загружается как artifact `opencode-review-result`.
 
-When tests fail, the AI failure workflow uploads `ai-test-failure-context` with:
+При падении тестов AI failure workflow загружает artifact
+`ai-test-failure-context`:
 
-- `test-output.log` - full `make test` output.
-- `pr-diff.patch` - the PR diff used as LLM context.
+- `test-output.log` — полный `make test` output.
+- `pr-diff.patch` — PR diff, который был передан в LLM context.
 
-Before sending test logs and diffs to the LLM, the analyzer redacts common secret
-patterns. Tests must still avoid printing secrets, tokens, credentials, or
-private user data.
+Перед отправкой logs и diffs в LLM analyzer редактирует common secret patterns.
+Tests все равно не должны печатать secrets, tokens, credentials или private user data.

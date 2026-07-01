@@ -1,38 +1,43 @@
 # SplitApp Security Baseline
 
-This checklist is the default security baseline for SplitApp backend work.
+Этот checklist — базовая security-планка для backend-работы.
 
-## Data And Legal Hygiene
-- Keep a public privacy policy before collecting real user data.
-- Know where user data is stored, including database region and third-party storage/services.
-- Do not export user data into personal tools or store passwords/secrets in plaintext.
-- Do not paste secrets, credentials, private user data, or production dumps into AI chats.
+## Данные И Legal Hygiene
 
-## Authentication And Authorization
-- Verify sessions and authenticated actors in every API route.
-- Never authorize access from a client-supplied user ID alone.
-- Test negative auth flows, not only happy paths.
-- Avoid responses that reveal whether a sensitive account identifier exists unless the product intentionally allows it.
-- Refresh-token behavior must tolerate safe retries without creating permanent lockout after a lost response.
+- До работы с реальными пользователями нужна публичная privacy policy.
+- Нужно понимать, где физически хранятся user data: database region, object storage и third-party services.
+- Нельзя экспортировать user data в личные инструменты или хранить passwords/secrets plaintext.
+- Нельзя вставлять secrets, credentials, private user data или production dumps в AI chats.
 
-## API And Input Safety
-- Validate all incoming write requests on the server: type, length, ranges, ownership, and membership.
-- Use generic user-facing error messages for unexpected internal failures.
-- Log internal exceptions on the server with request/correlation context.
-- Rate-limit public and expensive endpoints before launch.
-- Configure CORS with an explicit allowlist.
-- Avoid over-fetching sensitive fields in API responses.
+## Authentication И Authorization
 
-## Storage And Secrets
-- Keep secret keys only in environment variables or managed secret stores.
-- Public client keys are allowed only when they are designed to be public.
-- Check Git history before launch for committed `.env` files or secrets.
-- Object storage must support deletion/replacement and should avoid permanent public URLs where a presigned URL is more appropriate.
-- Confirm encryption at rest for managed database and object storage.
+- Каждый API route должен проверять session и authenticated actor.
+- Нельзя авторизовать доступ только по client-supplied user ID.
+- Нужны negative auth tests, а не только happy path.
+- Sensitive account identifiers не должны раскрываться в ответах, если продукт явно этого не требует.
+- Refresh-token behavior должен позволять безопасный retry после потерянного ответа.
+
+## API И Input Safety
+
+- Все write requests валидируются на server: type, length, ranges, ownership и membership.
+- Unexpected internal failures возвращают generic user-facing errors.
+- Полные exception details логируются только на сервере с request/correlation context.
+- Public и expensive endpoints rate-limit'ятся до запуска.
+- CORS должен быть explicit allowlist.
+- API responses не должны over-fetch sensitive fields.
+
+## Storage И Secrets
+
+- Secret keys живут только в environment variables или managed secret stores.
+- Public client keys допустимы только если они действительно designed to be public.
+- Перед launch нужно проверить git history на committed `.env` files и secrets.
+- Object storage должен поддерживать deletion/replacement и избегать permanent public URLs, когда достаточно presigned URL.
+- Нужно подтвердить encryption at rest для managed database и object storage.
 
 ## Operations
-- Add structured logging before production usage.
-- Add monitoring and alerting before relying on users to report failures.
-- Prefer supervised deployment such as systemd or containers over `nohup`.
-- Run lint, tests, and a security scan before release.
-- Keep a remediation report for backend fixes and separately track frontend follow-up work.
+
+- Structured logging нужен до production usage.
+- Monitoring и alerting нужны до того, как пользователи станут главным источником ошибок.
+- Для deploy предпочтительны supervised runtime: systemd или containers, не `nohup`.
+- Перед release запускаются lint, tests и security scan.
+- Backend fixes и frontend follow-up work отслеживаются отдельно.

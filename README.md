@@ -1,22 +1,22 @@
 # SplitAppBackend
 
-## Run locally
+## Локальный запуск
 
-1. Create/update virtual environment and install dependencies:
+1. Создать или обновить виртуальное окружение и зависимости:
 
    `make setup`
 
-2. Create your local env file:
+2. Создать локальный env-файл:
 
    `cp .env.example .env`
 
-3. Fill `.env` with your MongoDB values:
+3. Заполнить `.env` настройками MongoDB.
 
-   Option A (full connection string, recommended):
+   Вариант A, полный connection string:
 
    `MONGODB_URI=mongodb://username:password@localhost:27017/?authSource=admin`
 
-   Option B (separate values; app builds the URI for you):
+   Вариант B, отдельные значения:
 
    `MONGODB_HOST=localhost`
 
@@ -30,7 +30,7 @@
 
    `MONGODB_DB_NAME=splitapp`
 
-   Option C (managed cluster, replica set + TLS; similar to your hosting example):
+   Вариант C, managed cluster с replica set и TLS:
 
    `MONGODB_HOSTS=rc1b-4ukf7rtvtpealt1c.mdb.yandexcloud.net:27018`
 
@@ -48,98 +48,98 @@
 
    `MONGODB_TLS_CA_FILE=/home/<your-home>/.mongodb/root.crt`
 
-4. Start the API:
+4. Запустить API:
 
    `make run-dev`
 
-The login handler is available at `POST /api/login`.
-MongoDB connection health is available at `GET /api/health/db`.
+Login endpoint: `POST /api/login`.
+Проверка MongoDB: `GET /api/health/db`.
 
-The PWA client is served by the same FastAPI process:
+PWA-клиент обслуживается тем же FastAPI-процессом:
 
-- `GET /` and `GET /app` return the SplitApp web/PWA shell from `web/`.
-- `GET /manifest.webmanifest` and `GET /sw.js` provide installability.
-- Static assets live in `web/assets/`.
-- Protected product data still comes from `/api/*` with bearer authentication.
+- `GET /` и `GET /app` возвращают web/PWA shell из `web/`.
+- `GET /manifest.webmanifest` и `GET /sw.js` нужны для installability.
+- Static assets лежат в `web/assets/`.
+- Protected product data по-прежнему берется из `/api/*` с bearer auth.
 
-There is no frontend build step yet; edit the vanilla PWA files in `web/` and
-restart the API for a full local smoke check.
+Сборочного шага для frontend пока нет; vanilla PWA-файлы редактируются в `web/`,
+после чего API перезапускается для smoke check.
 
-## Run on remote server
+## Запуск на сервере
 
 ### Docker Compose
 
-The backend can run in an isolated Docker Compose project with private MongoDB,
-Prometheus, and Loki containers. Only the API port and localhost-bound Grafana
-port are published to the host.
+Backend можно запускать как изолированный Docker Compose project с private
+MongoDB, Prometheus и Loki. На host публикуются только API port и localhost-bound
+Grafana port.
 
 1. `cp .env.docker.example .env`
-2. Generate a long random `JWT_SECRET` and update `.env`.
-3. Optionally change `HOST_PORT` if `8080` is already used.
-4. Set `GRAFANA_ADMIN_PASSWORD` to a long random value.
-5. Optionally change `GRAFANA_HOST_PORT` if `3001` is already used.
+2. Сгенерировать длинный случайный `JWT_SECRET` и обновить `.env`.
+3. При необходимости изменить `HOST_PORT`, если `8080` занят.
+4. Указать длинный `GRAFANA_ADMIN_PASSWORD`.
+5. При необходимости изменить `GRAFANA_HOST_PORT`, если `3001` занят.
 6. `docker compose up -d --build`
 7. `docker compose ps`
 
-The API listens on `http://<server-ip>:${HOST_PORT:-8080}`. MongoDB data is kept
-in the `mongo-data` Docker volume and is not exposed outside the Compose network.
-Prometheus and Loki are internal-only services. Grafana binds to
-`127.0.0.1:${GRAFANA_HOST_PORT:-3001}` by default; use an SSH tunnel or a
-reverse proxy with authentication instead of exposing all observability ports.
-The observability stack also scrapes MongoDB, container, and host metrics through
-internal-only exporters.
+API слушает `http://<server-ip>:${HOST_PORT:-8080}`. MongoDB data хранится в
+Docker volume `mongo-data` и не открывается наружу. Prometheus и Loki доступны
+только внутри Compose network. Grafana по умолчанию bind'ится на
+`127.0.0.1:${GRAFANA_HOST_PORT:-3001}`; используйте SSH tunnel или reverse proxy
+с auth вместо публикации observability ports.
 
-Before changing ports on a shared server, check listeners:
+Перед сменой портов на общем сервере проверьте listeners:
 
 `ss -ltnp | grep -E ':(${HOST_PORT:-8080}|${GRAFANA_HOST_PORT:-3001})'`
 
-Receipt image endpoints require S3 settings in `.env`; without them, those
-endpoints return a configuration error while the rest of the API remains usable.
+Receipt image endpoints требуют S3 settings в `.env`; без них эти endpoints
+вернут configuration error, но остальной API остается рабочим.
 
-GitHub Actions deploy uses the same Compose runtime on pushes to `main`. Configure
-`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, and `DEPLOY_PATH` repository
-secrets; keep production runtime secrets and Grafana credentials in the
+GitHub Actions deploy использует тот же Compose runtime на push в `main`.
+Настройте repository secrets `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`,
+`DEPLOY_PATH`; production runtime secrets и Grafana credentials держите в
 server-side `.env`.
 
 ### Systemd
 
-For production, prefer the systemd unit in `deploy/splitapp-backend.service`.
-Install the app under `/opt/splitapp/backend`, put environment variables in
-`/etc/splitapp/backend.env`, then enable the service:
+Для production предпочтительнее Compose runtime выше. Systemd unit
+`deploy/splitapp-backend.service` остается поддерживаемым вариантом для ручного
+деплоя: приложение устанавливается в `/opt/splitapp/backend`, переменные среды
+кладутся в `/etc/splitapp/backend.env`.
 
 1. `sudo cp deploy/splitapp-backend.service /etc/systemd/system/splitapp-backend.service`
 2. `sudo systemctl daemon-reload`
 3. `sudo systemctl enable --now splitapp-backend`
 4. `sudo systemctl status splitapp-backend`
 
-Logs are available through `journalctl -u splitapp-backend -f`.
+Логи:
 
-The legacy Make target still starts the app in the background for quick manual checks:
+`journalctl -u splitapp-backend -f`
+
+Legacy Make target можно использовать для быстрых ручных проверок:
 
 1. `make setup`
 2. `make run`
 
 Defaults:
+
 - Host: `0.0.0.0`
 - Port: `8000`
 
-You can override port/host:
+Переопределить port/host:
 
 `PORT=8080 HOST=0.0.0.0 make run`
 
-Useful process commands:
+Команды процесса:
 
 - `make status`
 - `make logs`
 - `make stop`
 
-You can also override MongoDB settings inline:
+MongoDB settings можно передать inline:
 
 `MONGODB_URI="mongodb://username:password@localhost:27017/?authSource=admin" MONGODB_DB_NAME="splitapp" make run`
 
-## Manual venv commands (optional)
-
-If you prefer to run commands manually:
+## Ручные venv-команды
 
 1. `python3 -m venv .venv`
 2. `source .venv/bin/activate`
