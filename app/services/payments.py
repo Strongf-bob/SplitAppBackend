@@ -91,6 +91,13 @@ def _create_payment(
     }
     db.payments.insert_one(payment)
     record_domain_event("payments", "created")
+    record_audit_event(
+        db,
+        action="payment.created",
+        resource_type="payment",
+        resource_id=payment["id"],
+        actor_user_id=actor_user_id,
+    )
     observe_money_amount("payment_amount", payload.amount_kopecks / 100)
     return _payment_to_api(payment)
 
@@ -304,6 +311,13 @@ def _create_payment_request(
     }
     db.payment_requests.insert_one(payment_request)
     record_domain_event("payment_requests", "created")
+    record_audit_event(
+        db,
+        action="payment_request.created",
+        resource_type="payment_request",
+        resource_id=payment_request["id"],
+        actor_user_id=actor_user_id,
+    )
     observe_money_amount("payment_request_amount", payload.amount_kopecks / 100)
     return _payment_request_to_api(payment_request)
 
@@ -373,6 +387,20 @@ def _mark_payment_request_paid(
     )
     record_domain_event("payment_requests", "marked_paid")
     record_domain_event("payments", "created")
+    record_audit_event(
+        db,
+        action="payment_request.marked_paid",
+        resource_type="payment_request",
+        resource_id=payment_request_id,
+        actor_user_id=actor_user_id,
+    )
+    record_audit_event(
+        db,
+        action="payment.created",
+        resource_type="payment",
+        resource_id=payment["id"],
+        actor_user_id=actor_user_id,
+    )
     return _payment_to_api(payment)
 
 
@@ -394,6 +422,13 @@ def acknowledge_payment_request(
         {"$set": {"acknowledged_at": now, "updated_at": now}},
     )
     record_domain_event("payment_requests", "acknowledged")
+    record_audit_event(
+        db,
+        action="payment_request.acknowledged",
+        resource_type="payment_request",
+        resource_id=payment_request_id,
+        actor_user_id=actor_user_id,
+    )
     return _payment_request_to_api(_get_payment_request_or_404(db, payment_request_id))
 
 
@@ -413,6 +448,13 @@ def cancel_payment_request(db: Database, payment_request_id: str, actor_user_id:
         {"$set": {"status": "cancelled", "cancelled_at": now, "updated_at": now}},
     )
     record_domain_event("payment_requests", "cancelled")
+    record_audit_event(
+        db,
+        action="payment_request.cancelled",
+        resource_type="payment_request",
+        resource_id=payment_request_id,
+        actor_user_id=actor_user_id,
+    )
     return _payment_request_to_api(_get_payment_request_or_404(db, payment_request_id))
 
 
@@ -434,6 +476,13 @@ def request_payment_extension(
         {"$set": {"extension_requested_at": now, "updated_at": now}},
     )
     record_domain_event("payment_requests", "extension_requested")
+    record_audit_event(
+        db,
+        action="payment_request.extension_requested",
+        resource_type="payment_request",
+        resource_id=payment_request_id,
+        actor_user_id=actor_user_id,
+    )
     return _payment_request_to_api(_get_payment_request_or_404(db, payment_request_id))
 
 
@@ -452,4 +501,47 @@ def dispute_payment_request(db: Database, payment_request_id: str, actor_user_id
         {"$set": {"status": "disputed", "disputed_at": now, "updated_at": now}},
     )
     record_domain_event("payment_requests", "disputed")
+    record_audit_event(
+        db,
+        action="payment_request.disputed",
+        resource_type="payment_request",
+        resource_id=payment_request_id,
+        actor_user_id=actor_user_id,
+    )
     return _payment_request_to_api(_get_payment_request_or_404(db, payment_request_id))
+
+
+def get_payment_confirm_confirmation_summary(
+    db: Database, payment_id: str, actor_user_id: str
+) -> dict:
+    payment = get_payment_or_404(db, payment_id)
+    assert_event_access(db, payment["event_id"], actor_user_id)
+    return {
+        "resource_type": "payment",
+        "resource_id": payment_id,
+        "action": "confirm",
+        "title": "Payment",
+        "amount_kopecks": stored_money_to_kopecks(payment, "amount_kopecks", "amount"),
+        "status": payment.get("status", "confirmed" if payment.get("confirmed") else "pending"),
+        "actor_user_id": actor_user_id,
+        "requires_explicit_confirmation": True,
+        "warnings": ["Confirmed payments reduce outstanding balances."],
+    }
+
+
+def get_payment_reject_confirmation_summary(
+    db: Database, payment_id: str, actor_user_id: str
+) -> dict:
+    payment = get_payment_or_404(db, payment_id)
+    assert_event_access(db, payment["event_id"], actor_user_id)
+    return {
+        "resource_type": "payment",
+        "resource_id": payment_id,
+        "action": "reject",
+        "title": "Payment",
+        "amount_kopecks": stored_money_to_kopecks(payment, "amount_kopecks", "amount"),
+        "status": payment.get("status", "confirmed" if payment.get("confirmed") else "pending"),
+        "actor_user_id": actor_user_id,
+        "requires_explicit_confirmation": True,
+        "warnings": ["Rejected payments do not reduce outstanding balances."],
+    }

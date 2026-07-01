@@ -81,6 +81,59 @@ def confirm_receipt(
     return services.confirm_receipt(db, str(id), current_user_id)
 
 
+@router.get(
+    "/api/receipts/{id}/confirm/confirmation-summary",
+    response_model=schemas.ConfirmationSummary,
+)
+def get_receipt_confirm_confirmation_summary(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.get_receipt_confirm_confirmation_summary(db, str(id), current_user_id)
+
+
+@router.post("/api/receipts/{id}/validate", response_model=schemas.Receipt)
+def validate_receipt(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.validate_receipt(db, str(id), current_user_id)
+
+
+@router.get("/api/receipts/{id}/share-reviews", response_model=schemas.ReceiptShareReviewPage)
+def list_receipt_share_reviews(
+    id: UUID,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.list_receipt_share_reviews(
+        db, str(id), current_user_id, limit=limit, offset=offset
+    )
+
+
+@router.post("/api/receipts/{id}/share-reviews/me/accept", response_model=schemas.ReceiptShareReview)
+def accept_receipt_share_review(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.accept_receipt_share_review(db, str(id), current_user_id)
+
+
+@router.post("/api/receipts/{id}/share-reviews/me/dispute", response_model=schemas.ReceiptShareReview)
+def dispute_receipt_share_review(
+    id: UUID,
+    payload: schemas.ReceiptShareReviewDispute,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.dispute_receipt_share_review(db, str(id), payload, current_user_id)
+
+
 @router.post("/api/receipts/{id}/void", response_model=schemas.Receipt)
 def void_receipt(
     id: UUID,
@@ -88,6 +141,18 @@ def void_receipt(
     current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
     return services.void_receipt(db, str(id), current_user_id)
+
+
+@router.get(
+    "/api/receipts/{id}/void/confirmation-summary",
+    response_model=schemas.ConfirmationSummary,
+)
+def get_receipt_void_confirmation_summary(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.get_receipt_void_confirmation_summary(db, str(id), current_user_id)
 
 
 @router.post("/api/receipts/{id}/corrections", response_model=schemas.Receipt)

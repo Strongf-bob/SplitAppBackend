@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from fastapi import HTTPException
 from pymongo.database import Database
 
@@ -148,6 +150,64 @@ def _receipt_to_api(receipt: dict, *, include_internal_shares: bool = False) -> 
     return cleaned
 
 
+def _review_to_api(review: dict) -> dict:
+    return strip_mongo_id(review)
+
+
+def _receipt_share_user_ids(receipt: dict) -> list[str]:
+    user_ids = {
+        share["user_id"]
+        for share in receipt.get("share_items", [])
+        if share.get("user_id")
+    }
+    return sorted(user_ids)
+
+
+def _ensure_receipt_share_reviews(db: Database, receipt: dict, event: dict) -> None:
+    now = utc_now()
+    for user_id in _receipt_share_user_ids(receipt):
+        db.receipt_share_reviews.update_one(
+            {"receipt_id": receipt["id"], "user_id": user_id},
+            {
+                "$set": {
+                    "event_id": receipt["event_id"],
+                    "updated_at": now,
+                },
+                "$setOnInsert": {
+                    "id": new_uuid(),
+                    "receipt_id": receipt["id"],
+                    "user_id": user_id,
+                    "status": "pending",
+                    "reason": "",
+                    "created_at": now,
+                },
+                "$unset": {"deleted_at": ""},
+            },
+            upsert=True,
+        )
+
+
+def _receipt_reviews(db: Database, receipt_id: str) -> list[dict]:
+    return list(
+        db.receipt_share_reviews.find(active_filter({"receipt_id": receipt_id})).sort(
+            "created_at", 1
+        )
+    )
+
+
+def _assert_receipt_reviews_all_accepted(db: Database, receipt: dict) -> None:
+    required_user_ids = set(_receipt_share_user_ids(receipt))
+    reviews = _receipt_reviews(db, receipt["id"])
+    accepted_user_ids = {
+        review["user_id"] for review in reviews if review.get("status") == "accepted"
+    }
+    disputed = [review for review in reviews if review.get("status") == "disputed"]
+    if disputed:
+        raise HTTPException(status_code=409, detail="Receipt has disputed share reviews.")
+    if accepted_user_ids != required_user_ids:
+        raise HTTPException(status_code=409, detail="All receipt share reviews must be accepted.")
+
+
 @track_service_operation("receipts.create")
 def create_receipt(
     db: Database,
@@ -210,9 +270,161 @@ def _create_receipt(
         "share_items": stored_share_items,
     }
     db.receipts.insert_one(receipt)
+    record_audit_event(
+        db,
+        action="receipt.created",
+        resource_type="receipt",
+        resource_id=receipt_id,
+        actor_user_id=actor_user_id,
+    )
     record_domain_event("receipts", "created")
     observe_money_amount("receipt_total", payload.total_amount_kopecks / 100)
     return _receipt_to_api(receipt)
+
+
+@track_service_operation("receipts.validate")
+def validate_receipt(db: Database, receipt_id: str, actor_user_id: str) -> dict:
+    receipt = get_receipt_or_404(db, receipt_id)
+    event = assert_event_access(db, receipt["event_id"], actor_user_id)
+    assert_event_open(event)
+    if actor_user_id not in {event["creator_id"], receipt["payer_id"]}:
+        raise HTTPException(status_code=403, detail="Only creator or payer can validate receipt.")
+    status = receipt.get("status", "confirmed")
+    if status == "confirmed":
+        raise HTTPException(status_code=409, detail="Confirmed receipts cannot be validated.")
+    if status in {"voided", "corrected"}:
+        raise HTTPException(status_code=409, detail="Receipt cannot be validated in its current status.")
+
+    _ensure_receipt_share_reviews(db, receipt, event)
+    now = utc_now()
+    review_window_seconds = int(event.get("review_window_seconds", 60 * 60 * 24))
+    db.receipts.update_one(
+        {"id": receipt_id},
+        {
+            "$set": {
+                "status": "pending_confirmation",
+                "review_window_expires_at": now + timedelta(seconds=review_window_seconds),
+                "updated_at": now,
+                "version": int(receipt.get("version", 1)) + 1,
+            }
+        },
+    )
+    record_domain_event("receipts", "validated")
+    record_audit_event(
+        db,
+        action="receipt.validated",
+        resource_type="receipt",
+        resource_id=receipt_id,
+        actor_user_id=actor_user_id,
+    )
+    return _receipt_to_api(get_receipt_or_404(db, receipt_id))
+
+
+@track_service_operation("receipt_share_reviews.list")
+def list_receipt_share_reviews(
+    db: Database, receipt_id: str, actor_user_id: str, *, limit: int, offset: int
+) -> dict:
+    receipt = get_receipt_or_404(db, receipt_id)
+    assert_event_access(db, receipt["event_id"], actor_user_id)
+    query = active_filter({"receipt_id": receipt_id})
+    total = db.receipt_share_reviews.count_documents(query)
+    cursor = db.receipt_share_reviews.find(query).sort("created_at", 1).skip(offset).limit(limit)
+    return {
+        "items": [_review_to_api(review) for review in cursor],
+        "limit": limit,
+        "offset": offset,
+        "total": total,
+    }
+
+
+def _get_actor_review_or_404(db: Database, receipt_id: str, actor_user_id: str) -> dict:
+    review = db.receipt_share_reviews.find_one(
+        active_filter({"receipt_id": receipt_id, "user_id": actor_user_id})
+    )
+    if not review:
+        raise HTTPException(status_code=404, detail="Receipt share review not found.")
+    return review
+
+
+@track_service_operation("receipt_share_reviews.accept")
+def accept_receipt_share_review(db: Database, receipt_id: str, actor_user_id: str) -> dict:
+    receipt = get_receipt_or_404(db, receipt_id)
+    assert_event_access(db, receipt["event_id"], actor_user_id)
+    assert_event_open(assert_event_access(db, receipt["event_id"], actor_user_id))
+    if receipt.get("status") not in {"pending_confirmation", "disputed"}:
+        raise HTTPException(status_code=409, detail="Receipt is not awaiting share review.")
+    review = _get_actor_review_or_404(db, receipt_id, actor_user_id)
+    now = utc_now()
+    db.receipt_share_reviews.update_one(
+        {"id": review["id"]},
+        {
+            "$set": {
+                "status": "accepted",
+                "reason": "",
+                "decided_at": now,
+                "updated_at": now,
+            }
+        },
+    )
+    if not db.receipt_share_reviews.find_one(
+        active_filter({"receipt_id": receipt_id, "status": "disputed"})
+    ):
+        db.receipts.update_one(
+            {"id": receipt_id},
+            {"$set": {"status": "pending_confirmation", "updated_at": now}},
+        )
+    record_domain_event("receipt_share_reviews", "accepted")
+    record_audit_event(
+        db,
+        action="receipt_share_review.accepted",
+        resource_type="receipt_share_review",
+        resource_id=review["id"],
+        actor_user_id=actor_user_id,
+    )
+    return _review_to_api(_get_actor_review_or_404(db, receipt_id, actor_user_id))
+
+
+@track_service_operation("receipt_share_reviews.dispute")
+def dispute_receipt_share_review(
+    db: Database,
+    receipt_id: str,
+    payload: schemas.ReceiptShareReviewDispute,
+    actor_user_id: str,
+) -> dict:
+    receipt = get_receipt_or_404(db, receipt_id)
+    assert_event_access(db, receipt["event_id"], actor_user_id)
+    assert_event_open(assert_event_access(db, receipt["event_id"], actor_user_id))
+    if receipt.get("status") != "pending_confirmation":
+        raise HTTPException(status_code=409, detail="Receipt is not awaiting share review.")
+    review = _get_actor_review_or_404(db, receipt_id, actor_user_id)
+    reason = payload.reason.strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="reason must be set.")
+    now = utc_now()
+    db.receipt_share_reviews.update_one(
+        {"id": review["id"]},
+        {
+            "$set": {
+                "status": "disputed",
+                "reason": reason,
+                "decided_at": now,
+                "updated_at": now,
+            }
+        },
+    )
+    db.receipts.update_one(
+        {"id": receipt_id},
+        {"$set": {"status": "disputed", "updated_at": now}},
+    )
+    record_domain_event("receipt_share_reviews", "disputed")
+    record_audit_event(
+        db,
+        action="receipt_share_review.disputed",
+        resource_type="receipt_share_review",
+        resource_id=review["id"],
+        actor_user_id=actor_user_id,
+    )
+    return _review_to_api(_get_actor_review_or_404(db, receipt_id, actor_user_id))
 
 
 @track_service_operation("receipts.update")
@@ -336,10 +548,11 @@ def confirm_receipt(db: Database, receipt_id: str, actor_user_id: str) -> dict:
     status = receipt.get("status", "confirmed")
     if status == "confirmed":
         return _receipt_to_api(receipt)
-    if status not in {"draft", "ready_for_review"}:
+    if status != "pending_confirmation":
         raise HTTPException(
-            status_code=409, detail="Only draft or ready_for_review receipts can be confirmed."
+            status_code=409, detail="Only pending_confirmation receipts can be confirmed."
         )
+    _assert_receipt_reviews_all_accepted(db, receipt)
 
     now = utc_now()
     current_version = int(receipt.get("version", 1))
@@ -363,6 +576,42 @@ def confirm_receipt(db: Database, receipt_id: str, actor_user_id: str) -> dict:
         actor_user_id=actor_user_id,
     )
     return _receipt_to_api(get_receipt_or_404(db, receipt_id))
+
+
+def get_receipt_confirm_confirmation_summary(
+    db: Database, receipt_id: str, actor_user_id: str
+) -> dict:
+    receipt = get_receipt_or_404(db, receipt_id)
+    assert_event_access(db, receipt["event_id"], actor_user_id)
+    return {
+        "resource_type": "receipt",
+        "resource_id": receipt_id,
+        "action": "confirm",
+        "title": receipt.get("title") or "Receipt",
+        "amount_kopecks": stored_money_to_kopecks(receipt, "total_amount_kopecks", "total_amount"),
+        "status": receipt.get("status", "confirmed"),
+        "actor_user_id": actor_user_id,
+        "requires_explicit_confirmation": True,
+        "warnings": ["Confirmed receipts affect participant balances."],
+    }
+
+
+def get_receipt_void_confirmation_summary(
+    db: Database, receipt_id: str, actor_user_id: str
+) -> dict:
+    receipt = get_receipt_or_404(db, receipt_id)
+    assert_event_access(db, receipt["event_id"], actor_user_id)
+    return {
+        "resource_type": "receipt",
+        "resource_id": receipt_id,
+        "action": "void",
+        "title": receipt.get("title") or "Receipt",
+        "amount_kopecks": stored_money_to_kopecks(receipt, "total_amount_kopecks", "total_amount"),
+        "status": receipt.get("status", "confirmed"),
+        "actor_user_id": actor_user_id,
+        "requires_explicit_confirmation": True,
+        "warnings": ["Voiding removes this receipt from confirmed balances."],
+    }
 
 
 @track_service_operation("receipts.void")

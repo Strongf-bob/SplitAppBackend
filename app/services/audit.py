@@ -10,7 +10,16 @@ def _audit_event_to_api(audit_event: dict) -> dict:
 
 def _event_activity_resource_ids(db: Database, event_id: str) -> set[str]:
     resource_ids = {event_id}
-    for collection_name in ("receipts", "payments", "payment_requests", "disputes"):
+    for collection_name in (
+        "receipts",
+        "receipt_share_reviews",
+        "payments",
+        "payment_requests",
+        "disputes",
+        "event_invites",
+        "nearby_invite_codes",
+        "invite_decisions",
+    ):
         collection = getattr(db, collection_name)
         for item in collection.find({"event_id": event_id}):
             resource_ids.add(item["id"])

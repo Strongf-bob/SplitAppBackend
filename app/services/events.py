@@ -50,6 +50,7 @@ _EVENT_POLICY_OPTIONS = {
         "soft_deadline",
         "strict_deadline_with_reliability_score",
     },
+    "safety_policy": {"explicit_review"},
 }
 
 _EVENT_POLICY_DEFAULTS = {
@@ -59,6 +60,9 @@ _EVENT_POLICY_DEFAULTS = {
     "participants_invite_policy": "creator_only",
     "debt_display_mode": "simplified_default",
     "settlement_deadline_policy": "disabled",
+    "review_window_seconds": 60 * 60 * 24,
+    "safety_policy": "explicit_review",
+    "auto_confirm_on_timeout": False,
 }
 
 
@@ -92,6 +96,53 @@ def _event_to_api(db: Database, event: dict) -> dict:
         for membership in active_event_memberships(db, cleaned["id"])
     ]
     return cleaned
+
+
+def _invite_decision(db: Database, *, invite_type: str, invite_id: str, actor_user_id: str) -> str | None:
+    decision = db.invite_decisions.find_one(
+        {
+            "invite_type": invite_type,
+            "invite_id": invite_id,
+            "user_id": actor_user_id,
+            "deleted_at": {"$exists": False},
+        }
+    )
+    return decision["decision"] if decision else None
+
+
+def _record_invite_decision(
+    db: Database,
+    *,
+    invite_type: str,
+    invite_id: str,
+    event_id: str,
+    actor_user_id: str,
+    decision: str,
+) -> None:
+    now = utc_now()
+    db.invite_decisions.update_one(
+        {
+            "invite_type": invite_type,
+            "invite_id": invite_id,
+            "user_id": actor_user_id,
+        },
+        {
+            "$set": {
+                "decision": decision,
+                "event_id": event_id,
+                "updated_at": now,
+            },
+            "$setOnInsert": {
+                "id": new_uuid(),
+                "invite_type": invite_type,
+                "invite_id": invite_id,
+                "user_id": actor_user_id,
+                "created_at": now,
+            },
+            "$unset": {"deleted_at": ""},
+        },
+        upsert=True,
+    )
 
 
 def _invite_to_api(invite: dict) -> dict:
@@ -207,14 +258,26 @@ def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str)
         "settlement_deadline_policy": _validate_event_policy(
             "settlement_deadline_policy", payload.settlement_deadline_policy
         ),
+        "review_window_seconds": payload.review_window_seconds,
+        "safety_policy": _validate_event_policy("safety_policy", payload.safety_policy),
+        "auto_confirm_on_timeout": False,
         "created_at": now,
         "updated_at": now,
     }
+    if payload.auto_confirm_on_timeout:
+        raise HTTPException(status_code=400, detail="auto_confirm_on_timeout is not allowed.")
     if not event["name"]:
         raise HTTPException(status_code=400, detail="name must be set.")
 
     db.events.insert_one(event)
     _upsert_membership(db, event_id=event["id"], user_id=creator_id, role="creator", now=now)
+    record_audit_event(
+        db,
+        action="event.created",
+        resource_type="event",
+        resource_id=event["id"],
+        actor_user_id=actor_user_id,
+    )
     record_domain_event("events", "created")
     observe_event_participants(1)
     return _event_to_api(db, event)
@@ -314,7 +377,14 @@ def update_event(
     for field in _EVENT_POLICY_DEFAULTS:
         value = getattr(payload, field)
         if value is not None:
-            update_fields[field] = _validate_event_policy(field, value)
+            if field == "review_window_seconds":
+                update_fields[field] = value
+            elif field == "auto_confirm_on_timeout":
+                if value:
+                    raise HTTPException(status_code=400, detail="auto_confirm_on_timeout is not allowed.")
+                update_fields[field] = False
+            else:
+                update_fields[field] = _validate_event_policy(field, value)
 
     if not update_fields:
         raise HTTPException(status_code=400, detail="At least one field must be provided.")
@@ -325,7 +395,30 @@ def update_event(
     if "is_closed" in update_fields:
         action = "closed" if update_fields["is_closed"] else "reopened"
         record_domain_event("events", action)
+        record_audit_event(
+            db,
+            action=f"event.{action}",
+            resource_type="event",
+            resource_id=event_id,
+            actor_user_id=actor_user_id,
+        )
     return _event_to_api(db, get_event_or_404(db, event_id))
+
+
+def get_event_close_confirmation_summary(db: Database, event_id: str, actor_user_id: str) -> dict:
+    event = assert_event_access(db, event_id, actor_user_id)
+    assert_event_creator(event, actor_user_id)
+    return {
+        "resource_type": "event",
+        "resource_id": event_id,
+        "action": "close",
+        "title": event["name"],
+        "amount_kopecks": None,
+        "status": "open" if not event.get("is_closed") else "closed",
+        "actor_user_id": actor_user_id,
+        "requires_explicit_confirmation": True,
+        "warnings": ["Closing an event blocks further financial changes."],
+    }
 
 
 @track_service_operation("events.add_participants")
@@ -422,6 +515,9 @@ def preview_event_invite(db: Database, token: str, actor_user_id: str) -> dict:
         "creator_id": event["creator_id"],
         "expires_at": invite["expires_at"],
         "participant_count": len(active_event_user_ids(db, event["id"])),
+        "actor_decision": _invite_decision(
+            db, invite_type="link", invite_id=invite["id"], actor_user_id=actor_user_id
+        ),
     }
 
 
@@ -451,10 +547,57 @@ def accept_event_invite(db: Database, token: str, actor_user_id: str) -> dict:
             }
         },
     )
+    _record_invite_decision(
+        db,
+        invite_type="link",
+        invite_id=invite["id"],
+        event_id=event["id"],
+        actor_user_id=actor_user_id,
+        decision="accepted",
+    )
     db.events.update_one({"id": event["id"]}, {"$set": {"updated_at": now}})
+    record_audit_event(
+        db,
+        action="invite.accepted",
+        resource_type="event_invite",
+        resource_id=invite["id"],
+        actor_user_id=actor_user_id,
+    )
     record_domain_event("events", "invite_accepted")
     observe_event_participants(len(active_event_user_ids(db, event["id"])))
     return _event_to_api(db, get_event_or_404(db, event["id"]))
+
+
+@track_service_operation("events.invites.decline")
+def decline_event_invite(db: Database, token: str, actor_user_id: str) -> dict:
+    check_rate_limit("events.invites.decline", actor_user_id)
+    get_user_or_404(db, actor_user_id)
+    invite = _get_active_invite_or_error(db, token)
+    event = get_event_or_404(db, invite["event_id"])
+    _record_invite_decision(
+        db,
+        invite_type="link",
+        invite_id=invite["id"],
+        event_id=event["id"],
+        actor_user_id=actor_user_id,
+        decision="declined",
+    )
+    record_audit_event(
+        db,
+        action="invite.declined",
+        resource_type="event_invite",
+        resource_id=invite["id"],
+        actor_user_id=actor_user_id,
+    )
+    record_domain_event("events", "invite_declined")
+    return {
+        "event_id": event["id"],
+        "event_name": event["name"],
+        "creator_id": event["creator_id"],
+        "expires_at": invite["expires_at"],
+        "participant_count": len(active_event_user_ids(db, event["id"])),
+        "actor_decision": "declined",
+    }
 
 
 @track_service_operation("events.invites.revoke")
@@ -525,6 +668,12 @@ def preview_nearby_invite_code(db: Database, code: str, actor_user_id: str) -> d
         "creator_id": event["creator_id"],
         "expires_at": invite_code["expires_at"],
         "participant_count": len(active_event_user_ids(db, event["id"])),
+        "actor_decision": _invite_decision(
+            db,
+            invite_type="nearby_code",
+            invite_id=invite_code["id"],
+            actor_user_id=actor_user_id,
+        ),
     }
 
 
@@ -548,7 +697,54 @@ def accept_nearby_invite_code(db: Database, code: str, actor_user_id: str) -> di
         {"id": invite_code["id"]},
         {"$set": {"accepted_by": actor_user_id, "accepted_at": now, "updated_at": now}},
     )
+    _record_invite_decision(
+        db,
+        invite_type="nearby_code",
+        invite_id=invite_code["id"],
+        event_id=event["id"],
+        actor_user_id=actor_user_id,
+        decision="accepted",
+    )
     db.events.update_one({"id": event["id"]}, {"$set": {"updated_at": now}})
+    record_audit_event(
+        db,
+        action="invite.accepted",
+        resource_type="nearby_invite_code",
+        resource_id=invite_code["id"],
+        actor_user_id=actor_user_id,
+    )
     record_domain_event("events", "nearby_code_accepted")
     observe_event_participants(len(active_event_user_ids(db, event["id"])))
     return _event_to_api(db, get_event_or_404(db, event["id"]))
+
+
+@track_service_operation("events.nearby_codes.decline")
+def decline_nearby_invite_code(db: Database, code: str, actor_user_id: str) -> dict:
+    check_rate_limit("events.nearby_codes.decline", actor_user_id)
+    get_user_or_404(db, actor_user_id)
+    invite_code = _get_active_nearby_code_or_error(db, code)
+    event = get_event_or_404(db, invite_code["event_id"])
+    _record_invite_decision(
+        db,
+        invite_type="nearby_code",
+        invite_id=invite_code["id"],
+        event_id=event["id"],
+        actor_user_id=actor_user_id,
+        decision="declined",
+    )
+    record_audit_event(
+        db,
+        action="invite.declined",
+        resource_type="nearby_invite_code",
+        resource_id=invite_code["id"],
+        actor_user_id=actor_user_id,
+    )
+    record_domain_event("events", "nearby_code_declined")
+    return {
+        "event_id": event["id"],
+        "event_name": event["name"],
+        "creator_id": event["creator_id"],
+        "expires_at": invite_code["expires_at"],
+        "participant_count": len(active_event_user_ids(db, event["id"])),
+        "actor_decision": "declined",
+    }

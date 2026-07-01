@@ -126,6 +126,18 @@ def confirm_payment(
     return services.confirm_payment(db, str(id), current_user_id)
 
 
+@router.get(
+    "/api/payments/{id}/confirm/confirmation-summary",
+    response_model=schemas.ConfirmationSummary,
+)
+def get_payment_confirm_confirmation_summary(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.get_payment_confirm_confirmation_summary(db, str(id), current_user_id)
+
+
 @router.post("/api/payments/{id}/reject", response_model=schemas.Payment)
 def reject_payment(
     id: UUID,
@@ -133,6 +145,18 @@ def reject_payment(
     current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
     return services.reject_payment(db, str(id), current_user_id)
+
+
+@router.get(
+    "/api/payments/{id}/reject/confirmation-summary",
+    response_model=schemas.ConfirmationSummary,
+)
+def get_payment_reject_confirmation_summary(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.get_payment_reject_confirmation_summary(db, str(id), current_user_id)
 
 
 @router.patch("/api/payments/{id}", response_model=schemas.Payment)

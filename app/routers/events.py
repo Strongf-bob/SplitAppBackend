@@ -47,6 +47,15 @@ def update_event(
     return services.update_event(db, str(id), payload, current_user_id)
 
 
+@router.get("/api/events/{id}/close/confirmation-summary", response_model=schemas.ConfirmationSummary)
+def get_event_close_confirmation_summary(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.get_event_close_confirmation_summary(db, str(id), current_user_id)
+
+
 @router.delete("/api/events/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_event(
     id: UUID,
@@ -114,6 +123,15 @@ def accept_event_invite(
     return services.accept_event_invite(db, token, current_user_id)
 
 
+@router.post("/api/invites/{token}/decline", response_model=schemas.EventInvitePreview)
+def decline_event_invite(
+    token: str,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.decline_event_invite(db, token, current_user_id)
+
+
 @router.delete(
     "/api/events/{id}/invites/{invite_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -158,6 +176,15 @@ def accept_nearby_invite_code(
     current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
     return services.accept_nearby_invite_code(db, code, current_user_id)
+
+
+@router.post("/api/nearby-invites/{code}/decline", response_model=schemas.EventInvitePreview)
+def decline_nearby_invite_code(
+    code: str,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.decline_nearby_invite_code(db, code, current_user_id)
 
 
 @router.get("/api/events/{id}/balances", response_model=list[schemas.EventBalance])

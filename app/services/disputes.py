@@ -4,7 +4,7 @@ from pymongo.database import Database
 from app import schemas
 from app.core.monitoring import record_domain_event, track_service_operation
 from app.services.access import assert_event_access, get_event_or_404
-from app.services.common import active_filter, new_uuid, strip_mongo_id, utc_now
+from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
 
 _RESOURCE_TYPES = {"receipt", "payment", "payment_request"}
 
@@ -59,6 +59,13 @@ def create_dispute(db: Database, payload: schemas.DisputeCreate, actor_user_id: 
         raise HTTPException(status_code=400, detail="reason must be set.")
     db.disputes.insert_one(dispute)
     record_domain_event("disputes", "created")
+    record_audit_event(
+        db,
+        action="dispute.created",
+        resource_type="dispute",
+        resource_id=dispute["id"],
+        actor_user_id=actor_user_id,
+    )
     return _dispute_to_api(dispute)
 
 
@@ -104,4 +111,11 @@ def resolve_dispute(
         },
     )
     record_domain_event("disputes", "resolved")
+    record_audit_event(
+        db,
+        action="dispute.resolved",
+        resource_type="dispute",
+        resource_id=dispute_id,
+        actor_user_id=actor_user_id,
+    )
     return _dispute_to_api(_get_dispute_or_404(db, dispute_id))

@@ -32,6 +32,17 @@ class UserFinancialStats(BaseModel):
     outstanding_receivable_kopecks: int
 
 
+class HomeMoneyBucket(BaseModel):
+    owed_kopecks: int
+    receivable_kopecks: int
+
+
+class HomeSummary(BaseModel):
+    confirmed: HomeMoneyBucket
+    pending: HomeMoneyBucket
+    disputed: HomeMoneyBucket
+
+
 class FriendRequestCreate(BaseModel):
     user_id: UUID
 
@@ -93,6 +104,9 @@ class EventCreate(BaseModel):
     participants_invite_policy: str = "creator_only"
     debt_display_mode: str = "simplified_default"
     settlement_deadline_policy: str = "disabled"
+    review_window_seconds: int = Field(default=60 * 60 * 24, ge=300, le=60 * 60 * 24 * 30)
+    safety_policy: str = "explicit_review"
+    auto_confirm_on_timeout: bool = False
 
 
 class EventUpdate(BaseModel):
@@ -104,6 +118,9 @@ class EventUpdate(BaseModel):
     participants_invite_policy: str | None = None
     debt_display_mode: str | None = None
     settlement_deadline_policy: str | None = None
+    review_window_seconds: int | None = Field(default=None, ge=300, le=60 * 60 * 24 * 30)
+    safety_policy: str | None = None
+    auto_confirm_on_timeout: bool | None = None
 
 
 class EventMembership(BaseModel):
@@ -127,6 +144,9 @@ class Event(BaseModel):
     participants_invite_policy: str = "creator_only"
     debt_display_mode: str = "simplified_default"
     settlement_deadline_policy: str = "disabled"
+    review_window_seconds: int = 60 * 60 * 24
+    safety_policy: str = "explicit_review"
+    auto_confirm_on_timeout: bool = False
     participants: list[EventMembership]
     created_at: datetime
     updated_at: datetime
@@ -167,6 +187,7 @@ class EventInvitePreview(BaseModel):
     creator_id: UUID
     expires_at: datetime
     participant_count: int
+    actor_decision: str | None = None
 
 
 class CreateNearbyInviteCodeRequest(BaseModel):
@@ -292,6 +313,7 @@ class Receipt(BaseModel):
     items: list[ReceiptItem]
     image_url: str | None = None
     corrected_from_receipt_id: UUID | None = None
+    review_window_expires_at: datetime | None = None
 
 
 class ReceiptPage(BaseModel):
@@ -299,6 +321,41 @@ class ReceiptPage(BaseModel):
     limit: int
     offset: int
     total: int
+
+
+class ReceiptShareReview(BaseModel):
+    id: UUID
+    event_id: UUID
+    receipt_id: UUID
+    user_id: UUID
+    status: str
+    reason: str = ""
+    created_at: datetime
+    updated_at: datetime
+    decided_at: datetime | None = None
+
+
+class ReceiptShareReviewPage(BaseModel):
+    items: list[ReceiptShareReview]
+    limit: int
+    offset: int
+    total: int
+
+
+class ReceiptShareReviewDispute(BaseModel):
+    reason: str = Field(min_length=1)
+
+
+class ConfirmationSummary(BaseModel):
+    resource_type: str
+    resource_id: UUID
+    action: str
+    title: str
+    amount_kopecks: int | None = None
+    status: str
+    actor_user_id: UUID
+    requires_explicit_confirmation: bool = True
+    warnings: list[str] = []
 
 
 class AllocationSession(BaseModel):

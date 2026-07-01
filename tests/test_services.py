@@ -14,6 +14,7 @@ from app.services import (
     receipt_image,
     receipts,
     reports,
+    home,
     users,
 )
 
@@ -22,6 +23,7 @@ from tests.conftest import (
     USER_A,
     USER_B,
     USER_C,
+    confirm_receipt_for_all,
     payment_payload,
     receipt_payload,
     seed_event,
@@ -74,7 +76,7 @@ def test_event_policies_are_validated_and_enforced(db):
         raise AssertionError("Expected creator-only receipt creation to fail for member")
 
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
-    confirmed = receipts.confirm_receipt(db, receipt["id"], USER_A)
+    confirmed, _ = confirm_receipt_for_all(db, receipt["id"])
     invite = events.create_event_invite(
         db, EVENT_ID, schemas.CreateEventInviteRequest(expires_in_seconds=3600), USER_B
     )
@@ -201,7 +203,7 @@ def test_payment_phone_visibility_respects_event_membership(db):
 def test_current_user_financial_stats_counts_events_and_balances(db):
     seed_event(db)
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
-    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
     db.events.update_one({"id": EVENT_ID}, {"$set": {"is_closed": True}})
 
     stats_a = users.get_current_user_financial_stats(db, USER_A)
@@ -486,7 +488,7 @@ def test_event_csv_export_includes_debts_receipts_and_payments(db):
     payload = receipt_payload()
     payload.category = "restaurant"
     receipt = receipts.create_receipt(db, EVENT_ID, payload, USER_A)
-    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
     payment = payments.create_payment(
         db,
         EVENT_ID,
@@ -507,7 +509,7 @@ def test_event_csv_export_includes_debts_receipts_and_payments(db):
 def test_confirmed_receipt_fiscal_metadata_cannot_be_changed(db):
     seed_event(db)
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
-    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
 
     try:
         receipts.update_receipt(
@@ -690,7 +692,7 @@ def test_balances_use_kopeck_money_math(db):
     receipt = receipts.create_receipt(db, EVENT_ID, payload, USER_A)
 
     assert balances.get_event_balances(db, EVENT_ID, USER_A) == []
-    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
 
     rows = balances.get_event_balances(db, EVENT_ID, USER_A)
 
@@ -704,10 +706,90 @@ def test_balances_use_kopeck_money_math(db):
     ]
 
 
+def test_receipt_validation_creates_reviews_and_blocks_silent_confirmation(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+
+    try:
+        receipts.confirm_receipt(db, receipt["id"], USER_A)
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected direct receipt confirmation to fail")
+
+    validated = receipts.validate_receipt(db, receipt["id"], USER_A)
+    reviews = receipts.list_receipt_share_reviews(
+        db, receipt["id"], USER_A, limit=50, offset=0
+    )["items"]
+
+    assert validated["status"] == "pending_confirmation"
+    assert validated["review_window_expires_at"] is not None
+    assert {review["user_id"] for review in reviews} == {USER_A, USER_B}
+    assert {review["status"] for review in reviews} == {"pending"}
+    assert balances.get_event_balances(db, EVENT_ID, USER_A) == []
+
+    receipts.accept_receipt_share_review(db, receipt["id"], USER_A)
+    try:
+        receipts.confirm_receipt(db, receipt["id"], USER_A)
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected missing participant review to block confirmation")
+
+
+def test_receipt_review_dispute_blocks_until_accepted(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    receipts.validate_receipt(db, receipt["id"], USER_A)
+
+    disputed = receipts.dispute_receipt_share_review(
+        db,
+        receipt["id"],
+        schemas.ReceiptShareReviewDispute(reason="Wrong participant"),
+        USER_B,
+    )
+
+    assert disputed["status"] == "disputed"
+    assert receipts.get_receipt(db, receipt["id"], USER_A)["status"] == "disputed"
+    try:
+        receipts.confirm_receipt(db, receipt["id"], USER_A)
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected disputed review to block confirmation")
+
+    receipts.accept_receipt_share_review(db, receipt["id"], USER_A)
+    receipts.accept_receipt_share_review(db, receipt["id"], USER_B)
+    confirmed = receipts.confirm_receipt(db, receipt["id"], USER_A)
+
+    assert confirmed["status"] == "confirmed"
+
+
+def test_event_review_timeout_never_auto_confirms_receipt(db):
+    seed_event(db)
+    events.update_event(db, EVENT_ID, schemas.EventUpdate(review_window_seconds=300), USER_A)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    validated = receipts.validate_receipt(db, receipt["id"], USER_A)
+    db.receipts.update_one(
+        {"id": receipt["id"]},
+        {"$set": {"review_window_expires_at": datetime(2025, 1, 1, tzinfo=UTC)}},
+    )
+
+    try:
+        receipts.confirm_receipt(db, receipt["id"], USER_A)
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected expired pending reviews to avoid auto-confirmation")
+
+    assert validated["status"] == "pending_confirmation"
+    assert balances.get_event_balances(db, EVENT_ID, USER_A) == []
+
+
 def test_balance_explanations_include_receipts_and_confirmed_payments(db):
     seed_event(db)
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
-    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
     payment = payments.create_payment(
         db,
         EVENT_ID,
@@ -730,7 +812,7 @@ def test_balance_explanations_include_receipts_and_confirmed_payments(db):
 def test_confirmed_receipt_financial_fields_cannot_be_changed(db):
     seed_event(db)
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
-    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
 
     try:
         receipts.update_receipt(
@@ -783,7 +865,7 @@ def test_receipt_update_rejects_stale_version(db):
 def test_voided_receipt_no_longer_affects_balances(db):
     seed_event(db)
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
-    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
 
     assert balances.get_event_balances(db, EVENT_ID, USER_A)
 
@@ -796,7 +878,7 @@ def test_voided_receipt_no_longer_affects_balances(db):
 def test_receipt_correction_marks_original_and_creates_draft(db):
     seed_event(db)
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
-    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
 
     correction = receipts.create_receipt_correction(db, receipt["id"], USER_A)
 
@@ -847,7 +929,7 @@ def test_allocation_session_claim_finalize_and_confirm(db):
     assert finalized["items"][0]["split_mode"] == "selected_equal"
     assert balances.get_event_balances(db, EVENT_ID, USER_A) == []
 
-    confirmed = receipts.confirm_receipt(db, receipt["id"], USER_A)
+    confirmed, _ = confirm_receipt_for_all(db, receipt["id"])
     rows = balances.get_event_balances(db, EVENT_ID, USER_A)
 
     assert confirmed["status"] == "confirmed"
@@ -1027,7 +1109,7 @@ def test_payment_create_rejects_idempotency_key_reuse_with_different_payload(db)
 def test_payment_request_mark_paid_confirm_and_balance_impact(db):
     seed_event(db)
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
-    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
     request = payments.create_payment_request(
         db,
         EVENT_ID,
@@ -1078,7 +1160,7 @@ def test_payment_request_mark_paid_confirm_and_balance_impact(db):
 def test_payment_request_reject_flow_does_not_reduce_balance(db):
     seed_event(db)
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
-    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
     request = payments.create_payment_request(
         db,
         EVENT_ID,
@@ -1154,6 +1236,38 @@ def test_payment_request_deadline_acknowledge_extension_cancel_and_dispute(db):
     cancelled = payments.cancel_payment_request(db, request["id"], USER_A)
     assert cancelled["status"] == "cancelled"
     assert cancelled["cancelled_at"] is not None
+
+
+def test_home_summary_separates_confirmed_pending_and_disputed_money(db):
+    seed_event(db)
+    confirmed_receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    confirm_receipt_for_all(db, confirmed_receipt["id"])
+    pending_receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    receipts.validate_receipt(db, pending_receipt["id"], USER_A)
+    disputed_receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    receipts.validate_receipt(db, disputed_receipt["id"], USER_A)
+    receipts.dispute_receipt_share_review(
+        db,
+        disputed_receipt["id"],
+        schemas.ReceiptShareReviewDispute(reason="Not mine"),
+        USER_B,
+    )
+    payments.create_payment_request(
+        db,
+        EVENT_ID,
+        schemas.PaymentRequestCreate(debtor_id=USER_B, creditor_id=USER_A, amount_kopecks=1000),
+        USER_A,
+    )
+
+    summary_a = home.get_home_summary(db, USER_A)
+    summary_b = home.get_home_summary(db, USER_B)
+
+    assert summary_a["confirmed"]["receivable_kopecks"] == 5000
+    assert summary_b["confirmed"]["owed_kopecks"] == 5000
+    assert summary_a["pending"]["receivable_kopecks"] == 6000
+    assert summary_b["pending"]["owed_kopecks"] == 6000
+    assert summary_a["disputed"]["receivable_kopecks"] == 5000
+    assert summary_b["disputed"]["owed_kopecks"] == 5000
 
 
 def test_payment_request_deadline_must_be_at_least_30_minutes(db):
@@ -1273,7 +1387,7 @@ def test_dispute_requires_event_membership_and_valid_resource(db):
 def test_event_activity_feed_lists_related_audit_events_for_members(db):
     seed_event(db)
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
-    receipts.confirm_receipt(db, receipt["id"], USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
     payment = payments.create_payment(db, EVENT_ID, payment_payload(), USER_A)
     payments.confirm_payment(db, payment["id"], USER_B)
 
@@ -1461,6 +1575,24 @@ def test_event_invite_preview_accept_and_duplicate_accept(db):
     assert any(item["user_id"] == USER_C for item in accepted_again["participants"])
 
 
+def test_event_invite_decline_records_decision_without_membership(db):
+    seed_event(db)
+    invite = events.create_event_invite(
+        db,
+        EVENT_ID,
+        schemas.CreateEventInviteRequest(expires_in_seconds=3600),
+        USER_A,
+    )
+
+    declined = events.decline_event_invite(db, invite["token"], USER_C)
+    preview = events.preview_event_invite(db, invite["token"], USER_C)
+
+    assert declined["actor_decision"] == "declined"
+    assert preview["actor_decision"] == "declined"
+    assert db.event_memberships.count_documents({"event_id": EVENT_ID, "user_id": USER_C}) == 0
+    assert db.audit_events.find_one({"action": "invite.declined", "resource_id": invite["id"]})
+
+
 def test_event_invite_revoke_blocks_accept(db):
     seed_event(db)
     invite = events.create_event_invite(
@@ -1549,6 +1681,23 @@ def test_nearby_invite_code_preview_accept_and_duplicate_accept(db):
     assert any(item["user_id"] == USER_C for item in accepted["participants"])
     assert any(item["user_id"] == USER_C for item in accepted_again["participants"])
     assert db.event_memberships.count_documents({"event_id": EVENT_ID, "user_id": USER_C}) == 1
+
+
+def test_nearby_invite_code_decline_records_decision_without_membership(db):
+    seed_event(db)
+    code = events.create_nearby_invite_code(
+        db,
+        EVENT_ID,
+        schemas.CreateNearbyInviteCodeRequest(expires_in_seconds=180),
+        USER_A,
+    )
+
+    declined = events.decline_nearby_invite_code(db, code["code"], USER_C)
+    preview = events.preview_nearby_invite_code(db, code["code"], USER_C)
+
+    assert declined["actor_decision"] == "declined"
+    assert preview["actor_decision"] == "declined"
+    assert db.event_memberships.count_documents({"event_id": EVENT_ID, "user_id": USER_C}) == 0
 
 
 def test_nearby_invite_code_expiry_blocks_accept(db):
