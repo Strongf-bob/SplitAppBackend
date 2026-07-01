@@ -444,7 +444,8 @@ PWA должна использовать текущие backend endpoints:
 
 - Auth: `POST /api/login`, `POST /api/refresh`.
 - Users/profile: `GET /api/users`, `GET /api/users/search`,
-  `GET /api/users/me/financial-stats`, `PATCH /api/users/me`.
+  `GET /api/users/me/financial-stats`, `POST /api/users/me/contacts/import`,
+  `GET /api/users/me/contacts`, `PATCH /api/users/me`.
 - Friends: `POST /api/friends`, `GET /api/friends`,
   `POST /api/friends/{id}/accept`, `POST /api/friends/{id}/reject`,
   `DELETE /api/friends/{id}`, `POST /api/friends/{id}/block`.
@@ -492,6 +493,9 @@ PWA должна использовать текущие backend endpoints:
 - AI receipt drafts: `POST /api/events/{id}/receipt-drafts/ai` for backend-owned
   primary/verification/escalation model cross-check. The response is a
   human-review draft payload and never changes balances by itself.
+- Contact import: PWA can submit only contacts explicitly selected by the user.
+  Backend matches those phone numbers privately for the current account, never
+  bulk-reads a device address book, and never auto-creates friend requests.
 - Current PWA stop point: show the AI receipt draft as an interactive review
   card with editable fields, model disagreement status, and a user confirmation
   button. Confirmation in this step marks the draft as reviewed in the PWA only;

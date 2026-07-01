@@ -7,6 +7,7 @@ from app.services import (
     audit,
     auth,
     balances,
+    contacts,
     disputes,
     events,
     friends,
@@ -119,6 +120,38 @@ def test_update_current_user_profile(db):
     assert db.audit_events.find_one({"action": "user.profile_updated", "resource_id": USER_A})
 
 
+def test_yandex_login_stores_extended_profile_fields_and_allows_missing_phone(db, monkeypatch):
+    profile = {
+        "id": "yandex-1",
+        "login": "alice_login",
+        "first_name": "Alice",
+        "last_name": "Ivanova",
+        "sex": "female",
+        "birthday": "1990-01-02",
+        "default_email": "alice@example.com",
+        "default_avatar_id": "avatar-1",
+    }
+    monkeypatch.setattr(auth, "_fetch_yandex_profile", lambda _: profile)
+
+    result = auth.login_with_yandex_oauth(db, "token")
+    stored = db.users.find_one({"yandex_id": "yandex-1"})
+
+    assert result["user"]["name"] == "Alice Ivanova"
+    assert result["user"]["phone_number"] == "yandex:yandex-1"
+    assert result["user"]["first_name"] == "Alice"
+    assert result["user"]["last_name"] == "Ivanova"
+    assert result["user"]["sex"] == "female"
+    assert result["user"]["birthday"] == "1990-01-02"
+    assert stored["default_avatar_id"] == "avatar-1"
+
+    profile["default_phone"] = {"number": "8 (999) 000-00-01"}
+    second = auth.login_with_yandex_oauth(db, "token")
+
+    assert db.users.count_documents({"yandex_id": "yandex-1"}) == 1
+    assert second["user"]["phone_number"] == "+79990000001"
+    assert db.users.find_one({"yandex_id": "yandex-1"})["phone_number"] == "+79990000001"
+
+
 def test_update_current_user_discovery_and_payment_hints(db):
     from tests.conftest import seed_users
 
@@ -162,6 +195,74 @@ def test_user_search_is_opt_in_and_does_not_search_phone(db):
 
     assert [user["id"] for user in by_handle["items"]] == [USER_B]
     assert by_phone["items"] == []
+
+
+def test_import_contacts_upserts_and_matches_by_normalized_phone(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+
+    first = contacts.import_user_contacts(
+        db,
+        USER_A,
+        schemas.ContactImportRequest(
+            contacts=[
+                schemas.ContactImportItem(
+                    display_name=" Боб из контактов ",
+                    phone_numbers=["+1 (000) 000-0002"],
+                ),
+                schemas.ContactImportItem(
+                    display_name="No Phone",
+                    phone_numbers=["not a phone"],
+                ),
+            ]
+        ),
+    )
+    second = contacts.import_user_contacts(
+        db,
+        USER_A,
+        schemas.ContactImportRequest(
+            contacts=[
+                schemas.ContactImportItem(
+                    display_name="Bob Local",
+                    phone_numbers=["+10000000002"],
+                )
+            ]
+        ),
+    )
+    page = contacts.list_user_contacts(db, USER_A, limit=20, offset=0)
+
+    assert first["imported"] == 1
+    assert first["matched"] == 1
+    assert first["skipped"] == 1
+    assert first["items"][0]["display_name"] == "Боб из контактов"
+    assert first["items"][0]["matched_user_id"] == USER_B
+    assert first["items"][0]["matched_user"]["name"] == "Bob"
+    assert first["items"][0]["matched_user"]["display_name"] == "Боб из контактов"
+    assert second["items"][0]["display_name"] == "Bob Local"
+    assert db.user_contacts.count_documents({"owner_user_id": USER_A}) == 1
+    assert page["total"] == 1
+
+
+def test_contacts_are_private_to_owner(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    contacts.import_user_contacts(
+        db,
+        USER_A,
+        schemas.ContactImportRequest(
+            contacts=[
+                schemas.ContactImportItem(
+                    display_name="Bob Local",
+                    phone_numbers=["+10000000002"],
+                )
+            ]
+        ),
+    )
+
+    assert contacts.list_user_contacts(db, USER_A, limit=20, offset=0)["total"] == 1
+    assert contacts.list_user_contacts(db, USER_C, limit=20, offset=0)["items"] == []
 
 
 def test_sensitive_user_search_is_rate_limited(db, monkeypatch):

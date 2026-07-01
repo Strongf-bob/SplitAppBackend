@@ -1,6 +1,7 @@
 from app.services.auth import login_with_yandex_oauth, rotate_refresh_token
 from app.services.audit import list_event_activity
 from app.services.balances import get_event_balance_explanations, get_event_balances
+from app.services.contacts import import_user_contacts, list_user_contacts
 from app.services.disputes import create_dispute, list_event_disputes, resolve_dispute
 from app.services.events import (
     accept_event_invite,
@@ -108,10 +109,12 @@ __all__ = [
     "get_payment_reject_confirmation_summary",
     "get_receipt_confirm_confirmation_summary",
     "get_receipt_void_confirmation_summary",
+    "import_user_contacts",
     "list_events",
     "list_event_disputes",
     "list_event_activity",
     "list_friendships",
+    "list_user_contacts",
     "list_payment_requests_by_event",
     "list_payments_by_event",
     "list_receipt_share_reviews",

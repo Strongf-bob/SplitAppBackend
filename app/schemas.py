@@ -10,6 +10,10 @@ class User(BaseModel):
     name: str
     phone_number: str
     email: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    sex: str | None = None
+    birthday: str | None = None
     avatar_url: str | None = None
     public_handle: str | None = None
     discovery_enabled: bool = False
@@ -75,6 +79,45 @@ class UserUpdate(BaseModel):
 
 class LoginYandexRequest(BaseModel):
     yandex_token: str = Field(min_length=1)
+
+
+class ContactImportItem(BaseModel):
+    display_name: str = Field(min_length=1, max_length=120)
+    phone_numbers: list[str] = Field(min_length=1, max_length=10)
+
+
+class ContactImportRequest(BaseModel):
+    contacts: list[ContactImportItem] = Field(min_length=1, max_length=1000)
+
+
+class UserContactMatchedUser(User):
+    display_name: str
+
+
+class UserContact(BaseModel):
+    id: UUID
+    owner_user_id: UUID
+    display_name: str
+    phone_number: str
+    phone_hash: str
+    matched_user_id: UUID | None = None
+    matched_user: UserContactMatchedUser | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserContactPage(BaseModel):
+    items: list[UserContact]
+    limit: int
+    offset: int
+    total: int
+
+
+class ContactImportResponse(BaseModel):
+    imported: int
+    matched: int
+    skipped: int
+    items: list[UserContact]
 
 
 class LoginResponse(BaseModel):
