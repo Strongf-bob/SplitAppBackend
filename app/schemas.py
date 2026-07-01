@@ -120,6 +120,52 @@ class ContactImportResponse(BaseModel):
     items: list[UserContact]
 
 
+class NotificationDeviceRegister(BaseModel):
+    platform: str = Field(pattern="^ios$")
+    provider: str = Field(default="apns", pattern="^apns$")
+    token: str = Field(min_length=16, max_length=4096)
+    environment: str = Field(default="sandbox", pattern="^(sandbox|production)$")
+
+
+class NotificationDevice(BaseModel):
+    id: UUID
+    user_id: UUID
+    platform: str
+    provider: str
+    environment: str
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+    last_seen_at: datetime
+
+
+class NotificationDevicePage(BaseModel):
+    items: list[NotificationDevice]
+    limit: int
+    offset: int
+    total: int
+
+
+class NotificationTestRequest(BaseModel):
+    title: str = Field(default="SplitApp", min_length=1, max_length=120)
+    body: str = Field(default="Тестовое уведомление", min_length=1, max_length=240)
+    data: dict[str, str] = Field(default_factory=dict)
+
+
+class NotificationDeliveryResult(BaseModel):
+    device_id: UUID
+    provider: str
+    status: str
+    error: str | None = None
+
+
+class NotificationSendResponse(BaseModel):
+    attempted: int
+    sent: int
+    failed: int
+    results: list[NotificationDeliveryResult]
+
+
 class LoginResponse(BaseModel):
     user: User
     access_token: str

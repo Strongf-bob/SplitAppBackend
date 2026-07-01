@@ -15,6 +15,11 @@ def ensure_indexes(db: Database) -> None:
     db.user_contacts.create_index([("owner_user_id", 1), ("phone_hash", 1)], unique=True)
     db.user_contacts.create_index([("owner_user_id", 1), ("display_name", 1)])
     db.user_contacts.create_index([("owner_user_id", 1), ("matched_user_id", 1)])
+    db.notification_devices.create_index("id", unique=True)
+    db.notification_devices.create_index([("user_id", 1), ("enabled", 1)])
+    db.notification_devices.create_index(
+        [("provider", 1), ("environment", 1), ("token", 1)], unique=True
+    )
     db.refresh_tokens.create_index("token_hash", unique=True)
     db.refresh_tokens.create_index("expires_at", expireAfterSeconds=0)
     db.events.create_index("id", unique=True)

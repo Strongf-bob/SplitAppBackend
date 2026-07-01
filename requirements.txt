@@ -3,6 +3,8 @@ uvicorn
 pymongo
 PyJWT
 httpx
+cryptography
+h2
 python-multipart
 boto3
 mongomock

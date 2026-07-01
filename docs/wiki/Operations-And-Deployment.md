@@ -133,6 +133,11 @@ Security и app behavior:
 - JWT/access token settings, которые используют token helpers.
 - `CORS_ALLOWED_ORIGINS`
 - Optional Sentry/error reporting configuration.
+- APNs push notifications:
+  - `APNS_TEAM_ID`
+  - `APNS_KEY_ID`
+  - `APNS_BUNDLE_ID`
+  - `APNS_PRIVATE_KEY` или `APNS_PRIVATE_KEY_PATH`
 - Splitik LLM:
   - `SPLITIK_LLM_BASE_URL`
   - `SPLITIK_LLM_API_KEY`
