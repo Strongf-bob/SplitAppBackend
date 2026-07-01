@@ -9,6 +9,7 @@ from app.core import tokens
 from app.core.monitoring import track_service_operation
 
 from app.services.common import new_uuid, utc_now, user_to_api_dict
+from app.services.contacts import normalize_phone_number
 
 YANDEX_INFO_URL = "https://login.yandex.ru/info"
 logger = logging.getLogger("splitapp")
@@ -59,21 +60,39 @@ def _fetch_yandex_profile(oauth_token: str) -> dict:
 
 def _yandex_profile_to_fields(profile: dict) -> dict:
     yandex_id = str(profile["id"])
-    display = (profile.get("display_name") or profile.get("login") or "").strip()
+    first_name = (
+        str(profile.get("first_name")).strip() if profile.get("first_name") else ""
+    ) or None
+    last_name = (str(profile.get("last_name")).strip() if profile.get("last_name") else "") or None
+    full_name = " ".join(part for part in [first_name, last_name] if part)
+    display = (profile.get("display_name") or "").strip()
     real_name = (profile.get("real_name") or "").strip()
-    name = display or real_name or yandex_id
+    login = (profile.get("login") or "").strip()
+    name = display or real_name or full_name or login or yandex_id
     phone_obj = profile.get("default_phone") or {}
     phone = phone_obj.get("number") if isinstance(phone_obj, dict) else None
-    phone_number = (phone or "").strip() or f"yandex:{yandex_id}"
+    phone_raw = (str(phone).strip() if phone else "") or None
+    try:
+        phone_number = normalize_phone_number(phone_raw) if phone_raw else f"yandex:{yandex_id}"
+    except ValueError:
+        phone_number = phone_raw or f"yandex:{yandex_id}"
     email_raw = profile.get("default_email")
     email = (str(email_raw).strip() if email_raw else "") or None
     avatar_raw = profile.get("default_avatar_id")
     default_avatar_id = (str(avatar_raw).strip() if avatar_raw else "") or None
+    sex_raw = profile.get("sex")
+    sex = (str(sex_raw).strip() if sex_raw else "") or None
+    birthday_raw = profile.get("birthday")
+    birthday = (str(birthday_raw).strip() if birthday_raw else "") or None
     return {
         "yandex_id": yandex_id,
         "name": name,
         "phone_number": phone_number,
         "email": email,
+        "first_name": first_name,
+        "last_name": last_name,
+        "sex": sex,
+        "birthday": birthday,
         "default_avatar_id": default_avatar_id,
     }
 
@@ -126,6 +145,10 @@ def login_with_yandex_oauth(db: Database, oauth_token: str) -> dict:
                     "name": fields["name"],
                     "phone_number": fields["phone_number"],
                     "email": fields["email"],
+                    "first_name": fields["first_name"],
+                    "last_name": fields["last_name"],
+                    "sex": fields["sex"],
+                    "birthday": fields["birthday"],
                     "default_avatar_id": fields["default_avatar_id"],
                     "updated_at": now,
                 }
@@ -144,6 +167,10 @@ def login_with_yandex_oauth(db: Database, oauth_token: str) -> dict:
             "name": fields["name"],
             "phone_number": fields["phone_number"],
             "email": fields["email"],
+            "first_name": fields["first_name"],
+            "last_name": fields["last_name"],
+            "sex": fields["sex"],
+            "birthday": fields["birthday"],
             "default_avatar_id": fields["default_avatar_id"],
             "created_at": now,
             "updated_at": now,

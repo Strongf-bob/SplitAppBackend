@@ -36,6 +36,25 @@ def get_current_user_financial_stats(
     return services.get_current_user_financial_stats(db, current_user_id)
 
 
+@router.post("/api/users/me/contacts/import", response_model=schemas.ContactImportResponse)
+def import_current_user_contacts(
+    payload: schemas.ContactImportRequest,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.import_user_contacts(db, current_user_id, payload)
+
+
+@router.get("/api/users/me/contacts", response_model=schemas.UserContactPage)
+def list_current_user_contacts(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.list_user_contacts(db, current_user_id, limit=limit, offset=offset)
+
+
 @router.patch("/api/users/me", response_model=schemas.User)
 def update_current_user(
     payload: schemas.UserUpdate,
