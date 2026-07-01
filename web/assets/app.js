@@ -1,5 +1,6 @@
 const tokenKey = "splitapp.tokens";
 const yandexOAuthStateKey = "splitapp.yandexOAuthState";
+const permissionsKey = "splitapp.permissions.v1";
 const yandexOAuthClientId = "6c5725f5868c4604adaea1e4b892c14d";
 
 const state = {
@@ -10,7 +11,8 @@ const state = {
   selectedReceiptId: null,
   currentView: "home",
   deferredInstallPrompt: null,
-  splitikSessionId: null
+  splitikSessionId: null,
+  permissions: loadPermissionState()
 };
 
 const viewRoot = document.querySelector("#viewRoot");
@@ -44,6 +46,28 @@ function clearTokens() {
   state.selectedEventId = null;
   state.splitikSessionId = null;
   localStorage.removeItem(tokenKey);
+}
+
+function loadPermissionState() {
+  try {
+    return JSON.parse(localStorage.getItem(permissionsKey) || "null") || {
+      completed: false,
+      updated_at: null,
+      items: {}
+    };
+  } catch {
+    return { completed: false, updated_at: null, items: {} };
+  }
+}
+
+function savePermissionState(nextState) {
+  state.permissions = {
+    ...state.permissions,
+    ...nextState,
+    items: { ...state.permissions.items, ...(nextState.items || {}) },
+    updated_at: new Date().toISOString()
+  };
+  localStorage.setItem(permissionsKey, JSON.stringify(state.permissions));
 }
 
 function showToast(message) {
@@ -321,6 +345,7 @@ function renderHome() {
   const stats = state.stats || {};
   viewRoot.append(
     header("Главная", "Быстрый обзор событий, долгов и pending-действий."),
+    renderPermissionOnboarding(),
     el("div", { class: "grid" }, [
       metricCard("Открытые события", stats.open_events_count ?? state.events.length),
       metricCard("Я должен", money(stats.outstanding_owed_kopecks || 0)),
@@ -336,6 +361,185 @@ function renderHome() {
     ]),
     eventsList("Последние события", state.events.slice(0, 5))
   );
+}
+
+function renderPermissionOnboarding() {
+  if (state.permissions.completed) return el("div", { hidden: true });
+
+  const items = [
+    {
+      id: "contacts",
+      title: "Контакты",
+      text: "Для быстрого выбора людей из адресной книги. Импорт на backend происходит только после явного выбора.",
+      request: requestContactsPermission
+    },
+    {
+      id: "camera",
+      title: "Камера",
+      text: "Для фото чека прямо из PWA.",
+      request: requestCameraPermission
+    },
+    {
+      id: "gallery",
+      title: "Галерея",
+      text: "Для выбора уже сделанного фото чека.",
+      request: requestGalleryPermission
+    },
+    {
+      id: "notifications",
+      title: "Уведомления",
+      text: "Для напоминаний по долгам, платежам и событиям.",
+      request: requestNotificationPermission
+    }
+  ];
+
+  const statusLabel = {
+    granted: "Разрешено",
+    denied: "Запрещено",
+    unsupported: "Недоступно",
+    skipped: "Позже",
+    pending: "Не запрошено"
+  };
+
+  const list = el(
+    "div",
+    { class: "permission-list" },
+    items.map((item) => {
+      const status = state.permissions.items[item.id]?.status || "pending";
+      return el("div", { class: `permission-item ${status}` }, [
+        el("div", {}, [
+          el("strong", { text: item.title }),
+          el("p", { class: "muted", text: item.text })
+        ]),
+        el("span", { class: "permission-status", text: statusLabel[status] || statusLabel.pending })
+      ]);
+    })
+  );
+
+  const requestOne = async (item) => {
+    const result = await item.request();
+    savePermissionState({
+      items: {
+        [item.id]: {
+          status: result.status,
+          detail: result.detail
+        }
+      }
+    });
+  };
+
+  return el("section", { class: "panel permission-panel" }, [
+    el("div", {}, [
+      el("span", { class: "eyebrow", text: "Первый вход" }),
+      el("h2", { text: "Разрешения для PWA" }),
+      el("p", {
+        class: "muted",
+        text: "Запросите доступы один раз. Если браузер не поддерживает отдельное разрешение, SplitApp покажет это и продолжит работать."
+      })
+    ]),
+    list,
+    el("div", { class: "row-actions" }, [
+      el("button", {
+        class: "primary-button",
+        type: "button",
+        text: "Запросить все",
+        onclick: async () => {
+          for (const item of items) await requestOne(item);
+          savePermissionState({ completed: true });
+          showToast("Проверка разрешений завершена.");
+          renderCurrentView();
+        }
+      }),
+      el("button", {
+        class: "ghost-button",
+        type: "button",
+        text: "Позже",
+        onclick: () => {
+          savePermissionState({ completed: true });
+          renderCurrentView();
+        }
+      })
+    ])
+  ]);
+}
+
+async function requestNotificationPermission() {
+  if (!("Notification" in window)) {
+    return { status: "unsupported", detail: "Notifications API is not available." };
+  }
+  if (Notification.permission === "granted") return { status: "granted" };
+  if (Notification.permission === "denied") return { status: "denied" };
+  try {
+    const permission = await Notification.requestPermission();
+    return { status: permission === "default" ? "skipped" : permission };
+  } catch (error) {
+    return { status: "skipped", detail: error.message };
+  }
+}
+
+async function requestCameraPermission() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return { status: "unsupported", detail: "getUserMedia is not available." };
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    stream.getTracks().forEach((track) => track.stop());
+    return { status: "granted" };
+  } catch (error) {
+    return { status: error.name === "NotAllowedError" ? "denied" : "skipped", detail: error.message };
+  }
+}
+
+async function requestGalleryPermission() {
+  try {
+    if ("showOpenFilePicker" in window) {
+      await window.showOpenFilePicker({
+        multiple: false,
+        types: [{ description: "Изображения", accept: { "image/*": [".jpg", ".jpeg", ".png", ".webp"] } }]
+      });
+      return { status: "granted" };
+    }
+    const selected = await chooseLocalImageFile();
+    return { status: selected ? "granted" : "skipped" };
+  } catch (error) {
+    return { status: error.name === "AbortError" ? "skipped" : "denied", detail: error.message };
+  }
+}
+
+function chooseLocalImageFile() {
+  return new Promise((resolve) => {
+    const input = el("input", { type: "file", accept: "image/*", hidden: true });
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener("focus", handleFocus);
+      input.remove();
+      resolve(value);
+    };
+    const handleFocus = () => {
+      window.setTimeout(() => finish(Boolean(input.files?.length)), 600);
+    };
+    input.addEventListener("change", () => {
+      finish(Boolean(input.files?.length));
+    });
+    input.addEventListener("cancel", () => finish(false), { once: true });
+    window.addEventListener("focus", handleFocus);
+    document.body.append(input);
+    input.click();
+  });
+}
+
+async function requestContactsPermission() {
+  if (!navigator.contacts?.select) {
+    return { status: "unsupported", detail: "Contact Picker API is not available." };
+  }
+  try {
+    const contacts = await navigator.contacts.select(["name", "tel"], { multiple: false });
+    return { status: contacts.length ? "granted" : "skipped" };
+  } catch (error) {
+    return { status: error.name === "AbortError" ? "skipped" : "denied", detail: error.message };
+  }
 }
 
 function metricCard(label, value) {

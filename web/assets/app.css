@@ -214,6 +214,67 @@ code {
   gap: 14px;
 }
 
+.permission-panel {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 18px;
+  border-color: #b9dfd9;
+  background: #fbfefd;
+}
+
+.permission-panel h2 {
+  margin-bottom: 8px;
+}
+
+.permission-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.permission-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  min-height: 112px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--surface);
+}
+
+.permission-item strong,
+.permission-item p {
+  margin: 0;
+}
+
+.permission-status {
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: #edf1e8;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.permission-item.granted .permission-status {
+  background: #e7f7f4;
+  color: #175f58;
+}
+
+.permission-item.denied .permission-status {
+  background: #f9e3df;
+  color: var(--danger);
+}
+
+.permission-item.unsupported .permission-status,
+.permission-item.skipped .permission-status {
+  background: #fff6d8;
+  color: #78621b;
+}
+
 .card {
   display: grid;
   gap: 12px;
@@ -578,6 +639,11 @@ textarea {
 
   .list-row {
     grid-template-columns: 1fr;
+  }
+
+  .permission-item {
+    grid-template-columns: 1fr;
+    min-height: auto;
   }
 
   .draft-summary,
