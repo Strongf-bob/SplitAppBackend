@@ -130,7 +130,9 @@ def test_receipt_ai_draft_escalates_when_models_disagree(db, monkeypatch):
         if model_role == "verification":
             return _receipt_ai_candidate(model_role, verification_payload)
         if model_role == "escalation":
-            return _receipt_ai_candidate(model_role, warnings=["Primary and verification disagreed."])
+            return _receipt_ai_candidate(
+                model_role, warnings=["Primary and verification disagreed."]
+            )
         return _receipt_ai_candidate(model_role)
 
     monkeypatch.setattr(splitik_llm, "generate_receipt_draft_candidate", fake_candidate)

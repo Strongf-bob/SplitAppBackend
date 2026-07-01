@@ -30,7 +30,9 @@ def check_rate_limit(scope: str, actor_key: str) -> None:
     key = (scope, actor_key)
 
     with _LOCK:
-        timestamps = [timestamp for timestamp in _REQUEST_TIMESTAMPS.get(key, []) if timestamp > cutoff]
+        timestamps = [
+            timestamp for timestamp in _REQUEST_TIMESTAMPS.get(key, []) if timestamp > cutoff
+        ]
         if len(timestamps) >= max_requests:
             _REQUEST_TIMESTAMPS[key] = timestamps
             raise HTTPException(

@@ -72,6 +72,7 @@ from app.services.receipts import (
 )
 from app.services.reports import build_event_csv_export, list_receipt_categories
 from app.services.users import get_current_user_financial_stats, list_users, search_users
+
 __all__ = [
     "add_participants",
     "accept_event_invite",

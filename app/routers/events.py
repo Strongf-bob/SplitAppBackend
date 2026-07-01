@@ -47,7 +47,9 @@ def update_event(
     return services.update_event(db, str(id), payload, current_user_id)
 
 
-@router.get("/api/events/{id}/close/confirmation-summary", response_model=schemas.ConfirmationSummary)
+@router.get(
+    "/api/events/{id}/close/confirmation-summary", response_model=schemas.ConfirmationSummary
+)
 def get_event_close_confirmation_summary(
     id: UUID,
     db: Database = Depends(get_db),

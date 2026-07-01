@@ -4,7 +4,12 @@ from pymongo.database import Database
 
 from app.core.monitoring import track_service_operation
 from app.services.access import assert_event_access
-from app.services.common import active_filter, decimal_from_value, stored_money_to_kopecks, strip_mongo_id
+from app.services.common import (
+    active_filter,
+    decimal_from_value,
+    stored_money_to_kopecks,
+    strip_mongo_id,
+)
 
 
 def _apply_transfer(
@@ -65,9 +70,9 @@ def _calculate_balance_rows(
                 "amount_kopecks": net,
             }
             if contributions is not None:
-                row["contributions"] = contributions.get((debtor, creditor), []) + contributions.get(
-                    (creditor, debtor), []
-                )
+                row["contributions"] = contributions.get(
+                    (debtor, creditor), []
+                ) + contributions.get((creditor, debtor), [])
             results.append(row)
         elif net < 0:
             row = {
@@ -77,9 +82,9 @@ def _calculate_balance_rows(
                 "amount_kopecks": -net,
             }
             if contributions is not None:
-                row["contributions"] = contributions.get((creditor, debtor), []) + contributions.get(
-                    (debtor, creditor), []
-                )
+                row["contributions"] = contributions.get(
+                    (creditor, debtor), []
+                ) + contributions.get((debtor, creditor), [])
             results.append(row)
 
         processed_pairs.add((debtor, creditor))
@@ -151,9 +156,7 @@ def get_event_balances(db: Database, event_id: str, actor_user_id: str) -> list[
 
 
 @track_service_operation("balances.explain_event")
-def get_event_balance_explanations(
-    db: Database, event_id: str, actor_user_id: str
-) -> list[dict]:
+def get_event_balance_explanations(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
     assert_event_access(db, event_id, actor_user_id)
     receipts, confirmed_payments = _balance_source_documents(db, event_id)
     ledger, contributions = _build_ledger(receipts, confirmed_payments)

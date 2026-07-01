@@ -43,10 +43,7 @@ Never create payments, never confirm receipts, and never claim that money was ch
 def _event_context(db: Database, event: dict, preferred_payer_id: str | None) -> dict:
     memberships = active_event_memberships(db, event["id"])
     member_ids = [membership["user_id"] for membership in memberships]
-    users = [
-        user_to_api_dict(user)
-        for user in db.users.find({"id": {"$in": member_ids}})
-    ]
+    users = [user_to_api_dict(user) for user in db.users.find({"id": {"$in": member_ids}})]
     return {
         "event": strip_mongo_id(event),
         "memberships": [strip_mongo_id(membership) for membership in memberships],
@@ -65,7 +62,9 @@ def _candidate_to_model_result(candidate: dict) -> dict:
     try:
         parsed_payload = schemas.CreateReceiptRequest.model_validate(payload)
     except ValidationError as exc:
-        raise HTTPException(status_code=502, detail="Splitik receipt draft response was invalid.") from exc
+        raise HTTPException(
+            status_code=502, detail="Splitik receipt draft response was invalid."
+        ) from exc
 
     if not isinstance(warnings, list):
         warnings = ["Model returned warnings in an invalid shape."]

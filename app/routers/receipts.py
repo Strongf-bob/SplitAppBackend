@@ -1,6 +1,16 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from pymongo.database import Database
 
 from app import schemas, services
@@ -34,9 +44,7 @@ def list_receipts_by_event(
     db: Database = Depends(get_db),
     current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
-    return services.list_receipts_by_event(
-        db, str(id), current_user_id, limit=limit, offset=offset
-    )
+    return services.list_receipts_by_event(db, str(id), current_user_id, limit=limit, offset=offset)
 
 
 @router.post(
@@ -115,7 +123,9 @@ def list_receipt_share_reviews(
     )
 
 
-@router.post("/api/receipts/{id}/share-reviews/me/accept", response_model=schemas.ReceiptShareReview)
+@router.post(
+    "/api/receipts/{id}/share-reviews/me/accept", response_model=schemas.ReceiptShareReview
+)
 def accept_receipt_share_review(
     id: UUID,
     db: Database = Depends(get_db),
@@ -124,7 +134,9 @@ def accept_receipt_share_review(
     return services.accept_receipt_share_review(db, str(id), current_user_id)
 
 
-@router.post("/api/receipts/{id}/share-reviews/me/dispute", response_model=schemas.ReceiptShareReview)
+@router.post(
+    "/api/receipts/{id}/share-reviews/me/dispute", response_model=schemas.ReceiptShareReview
+)
 def dispute_receipt_share_review(
     id: UUID,
     payload: schemas.ReceiptShareReviewDispute,

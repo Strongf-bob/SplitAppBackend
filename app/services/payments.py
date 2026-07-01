@@ -16,7 +16,9 @@ _MIN_PAYMENT_REQUEST_DEADLINE = timedelta(minutes=30)
 def _payment_to_api(payment: dict) -> dict:
     cleaned = strip_mongo_id(payment)
     cleaned["amount_kopecks"] = stored_money_to_kopecks(cleaned, "amount_kopecks", "amount")
-    cleaned["status"] = cleaned.get("status", "confirmed" if cleaned.get("confirmed") else "pending")
+    cleaned["status"] = cleaned.get(
+        "status", "confirmed" if cleaned.get("confirmed") else "pending"
+    )
     cleaned.pop("amount", None)
     return cleaned
 
@@ -279,7 +281,9 @@ def _create_payment_request(
     creditor_id = str(payload.creditor_id)
 
     if creditor_id != actor_user_id:
-        raise HTTPException(status_code=403, detail="creditor_id must match the authenticated user.")
+        raise HTTPException(
+            status_code=403, detail="creditor_id must match the authenticated user."
+        )
     if debtor_id == creditor_id:
         raise HTTPException(status_code=400, detail="debtor_id and creditor_id must differ.")
     if debtor_id not in event["users"] or creditor_id not in event["users"]:
@@ -294,7 +298,9 @@ def _create_payment_request(
         if deadline_at.tzinfo is None:
             raise HTTPException(status_code=400, detail="deadline_at must include timezone.")
         if deadline_at < now + _MIN_PAYMENT_REQUEST_DEADLINE:
-            raise HTTPException(status_code=400, detail="deadline_at must be at least 30 minutes out.")
+            raise HTTPException(
+                status_code=400, detail="deadline_at must be at least 30 minutes out."
+            )
     else:
         deadline_at = None
 
@@ -358,9 +364,7 @@ def mark_payment_request_paid(
     )
 
 
-def _mark_payment_request_paid(
-    db: Database, payment_request_id: str, actor_user_id: str
-) -> dict:
+def _mark_payment_request_paid(db: Database, payment_request_id: str, actor_user_id: str) -> dict:
     payment_request = _get_payment_request_or_404(db, payment_request_id)
     event = assert_event_access(db, payment_request["event_id"], actor_user_id)
     assert_event_open(event)
@@ -407,9 +411,7 @@ def _mark_payment_request_paid(
 
 
 @track_service_operation("payment_requests.acknowledge")
-def acknowledge_payment_request(
-    db: Database, payment_request_id: str, actor_user_id: str
-) -> dict:
+def acknowledge_payment_request(db: Database, payment_request_id: str, actor_user_id: str) -> dict:
     payment_request = _get_payment_request_or_404(db, payment_request_id)
     event = assert_event_access(db, payment_request["event_id"], actor_user_id)
     assert_event_open(event)
@@ -461,9 +463,7 @@ def cancel_payment_request(db: Database, payment_request_id: str, actor_user_id:
 
 
 @track_service_operation("payment_requests.extension_requested")
-def request_payment_extension(
-    db: Database, payment_request_id: str, actor_user_id: str
-) -> dict:
+def request_payment_extension(db: Database, payment_request_id: str, actor_user_id: str) -> dict:
     payment_request = _get_payment_request_or_404(db, payment_request_id)
     event = assert_event_access(db, payment_request["event_id"], actor_user_id)
     assert_event_open(event)

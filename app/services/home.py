@@ -10,7 +10,9 @@ def _empty_bucket() -> dict:
     return {"owed_kopecks": 0, "receivable_kopecks": 0}
 
 
-def _add_amount(bucket: dict, *, user_id: str, debtor_id: str, creditor_id: str, amount: int) -> None:
+def _add_amount(
+    bucket: dict, *, user_id: str, debtor_id: str, creditor_id: str, amount: int
+) -> None:
     if amount <= 0 or debtor_id == creditor_id:
         return
     if user_id == debtor_id:

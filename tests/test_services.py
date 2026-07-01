@@ -45,9 +45,9 @@ def test_event_create_and_list_for_actor(db):
     assert created["creator_id"] == USER_A
     assert created["receipt_creation_policy"] == "participants_can_add"
     assert created["participants_invite_policy"] == "creator_only"
-    assert [(item["user_id"], item["role"], item["status"]) for item in created["participants"]] == [
-        (USER_A, "creator", "active")
-    ]
+    assert [
+        (item["user_id"], item["role"], item["status"]) for item in created["participants"]
+    ] == [(USER_A, "creator", "active")]
     page = events.list_events(db, USER_A, limit=50, offset=0)
 
     assert [event["id"] for event in page["items"]] == [created["id"]]
@@ -229,9 +229,7 @@ def test_friend_request_accept_remove_and_block(db):
 
     seed_users(db)
 
-    request = friends.create_friend_request(
-        db, schemas.FriendRequestCreate(user_id=USER_B), USER_A
-    )
+    request = friends.create_friend_request(db, schemas.FriendRequestCreate(user_id=USER_B), USER_A)
     accepted = friends.accept_friend_request(db, request["id"], USER_B)
     page = friends.list_friendships(db, USER_A, status_filter="accepted", limit=50, offset=0)
 
@@ -243,9 +241,7 @@ def test_friend_request_accept_remove_and_block(db):
     removed = db.friends.find_one({"id": request["id"]})
     assert removed["status"] == "removed"
 
-    second = friends.create_friend_request(
-        db, schemas.FriendRequestCreate(user_id=USER_B), USER_A
-    )
+    second = friends.create_friend_request(db, schemas.FriendRequestCreate(user_id=USER_B), USER_A)
     blocked = friends.block_friendship(db, second["id"], USER_B)
     assert blocked["status"] == "blocked"
     assert blocked["blocked_by"] == USER_B
@@ -255,9 +251,7 @@ def test_friend_request_reject_and_authorization(db):
     from tests.conftest import seed_users
 
     seed_users(db)
-    request = friends.create_friend_request(
-        db, schemas.FriendRequestCreate(user_id=USER_B), USER_A
-    )
+    request = friends.create_friend_request(db, schemas.FriendRequestCreate(user_id=USER_B), USER_A)
 
     try:
         friends.accept_friend_request(db, request["id"], USER_A)
@@ -275,9 +269,7 @@ def test_payment_phone_visibility_respects_friendship(db):
     from tests.conftest import seed_users
 
     seed_users(db)
-    request = friends.create_friend_request(
-        db, schemas.FriendRequestCreate(user_id=USER_B), USER_A
-    )
+    request = friends.create_friend_request(db, schemas.FriendRequestCreate(user_id=USER_B), USER_A)
     friends.accept_friend_request(db, request["id"], USER_B)
     users.update_current_user(
         db,
@@ -500,7 +492,10 @@ def test_event_csv_export_includes_debts_receipts_and_payments(db):
 
     csv_body = reports.build_event_csv_export(db, EVENT_ID, USER_A)
 
-    assert "section,id,status,debtor_id,creditor_id,sender_id,receiver_id,amount_kopecks,title,category" in csv_body
+    assert (
+        "section,id,status,debtor_id,creditor_id,sender_id,receiver_id,amount_kopecks,title,category"
+        in csv_body
+    )
     assert f"receipt,{receipt['id']},confirmed,,,,,10000,Dinner,restaurant" in csv_body
     assert f"payment,{payment['id']},confirmed,,,{USER_B},{USER_A},1000,," in csv_body
     assert f"debt,,,{USER_B},{USER_A},,,4000,," in csv_body
@@ -587,9 +582,7 @@ def test_receipt_create_rejects_non_member_payer(db):
 def test_receipt_create_rejects_non_member_share_user(db):
     seed_event(db)
     payload = receipt_payload()
-    payload.items[0].share_items = [
-        schemas.CreateShareItemRequest(user_id=USER_C, share_value="1")
-    ]
+    payload.items[0].share_items = [schemas.CreateShareItemRequest(user_id=USER_C, share_value="1")]
 
     try:
         receipts.create_receipt(db, EVENT_ID, payload, USER_A)
@@ -719,9 +712,9 @@ def test_receipt_validation_creates_reviews_and_blocks_silent_confirmation(db):
         raise AssertionError("Expected direct receipt confirmation to fail")
 
     validated = receipts.validate_receipt(db, receipt["id"], USER_A)
-    reviews = receipts.list_receipt_share_reviews(
-        db, receipt["id"], USER_A, limit=50, offset=0
-    )["items"]
+    reviews = receipts.list_receipt_share_reviews(db, receipt["id"], USER_A, limit=50, offset=0)[
+        "items"
+    ]
 
     assert validated["status"] == "pending_confirmation"
     assert validated["review_window_expires_at"] is not None
@@ -1667,13 +1660,20 @@ def test_event_invite_preview_accept_and_duplicate_accept(db):
     assert preview["creator_id"] == USER_A
     assert preview["participant_count"] == 2
     assert preview["expires_at"].date() == invite["expires_at"].date()
-    assert any(item["user_id"] == USER_C and item["role"] == "member" for item in accepted["participants"])
-    assert len(
-        [
-            membership
-            for membership in db.event_memberships.find({"event_id": EVENT_ID, "user_id": USER_C})
-        ]
-    ) == 1
+    assert any(
+        item["user_id"] == USER_C and item["role"] == "member" for item in accepted["participants"]
+    )
+    assert (
+        len(
+            [
+                membership
+                for membership in db.event_memberships.find(
+                    {"event_id": EVENT_ID, "user_id": USER_C}
+                )
+            ]
+        )
+        == 1
+    )
     assert any(item["user_id"] == USER_C for item in accepted_again["participants"])
 
 
@@ -1944,7 +1944,10 @@ def test_refresh_token_can_retry_within_grace(db):
     first = auth.rotate_refresh_token(db, raw)
     second = auth.rotate_refresh_token(db, raw)
 
-    assert first["access_token"] != second["access_token"] or first["refresh_token"] != second["refresh_token"]
+    assert (
+        first["access_token"] != second["access_token"]
+        or first["refresh_token"] != second["refresh_token"]
+    )
 
 
 def test_refresh_token_retry_after_grace_fails(db):

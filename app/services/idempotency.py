@@ -68,7 +68,9 @@ def run_idempotent_create(
     try:
         response = create()
     except Exception:
-        db.idempotency_keys.delete_one({**query, "request_hash": request_hash, "status": "in_progress"})
+        db.idempotency_keys.delete_one(
+            {**query, "request_hash": request_hash, "status": "in_progress"}
+        )
         raise
 
     db.idempotency_keys.update_one(

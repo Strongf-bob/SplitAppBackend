@@ -70,8 +70,7 @@ def _event_summary(db: Database, event_id: str, actor_user_id: str) -> dict:
     memberships = active_event_memberships(db, event_id)
     member_ids = [membership["user_id"] for membership in memberships]
     users = {
-        user["id"]: user_to_api_dict(user)
-        for user in db.users.find({"id": {"$in": member_ids}})
+        user["id"]: user_to_api_dict(user) for user in db.users.find({"id": {"$in": member_ids}})
     }
     return {
         "event": _clean(event),
@@ -127,7 +126,12 @@ def _build_event_context(
     balances = get_event_balances(db, event_id, actor_user_id)
     explanations = get_event_balance_explanations(db, event_id, actor_user_id)
     return (
-        {**summary, "receipts": receipts, "balances": balances, "balance_explanations": explanations},
+        {
+            **summary,
+            "receipts": receipts,
+            "balances": balances,
+            "balance_explanations": explanations,
+        },
         [_context_chip("event", "Событие", summary["event"]["name"])],
     )
 
@@ -185,7 +189,12 @@ def _build_member_context(
         if target_user_id in {row["debitor_id"], row["creditor_id"]}
     ]
     return (
-        {**summary, "target_user": user_to_api_dict(target), "target_paid_receipts": receipts, "balances": balances},
+        {
+            **summary,
+            "target_user": user_to_api_dict(target),
+            "target_paid_receipts": receipts,
+            "balances": balances,
+        },
         [
             _context_chip("event", "Событие", summary["event"]["name"]),
             _context_chip("member", "Участник", target["name"]),

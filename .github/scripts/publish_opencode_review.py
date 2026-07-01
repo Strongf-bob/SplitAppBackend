@@ -171,8 +171,8 @@ def finding_from_dict(item: dict[str, Any]) -> Finding | None:
     if not message:
         return None
 
-    has_location = bool(path) or (line is not None and line > 0) or (
-        start_line is not None and start_line > 0
+    has_location = (
+        bool(path) or (line is not None and line > 0) or (start_line is not None and start_line > 0)
     )
     has_explicit_finding_signal = any(
         has_non_empty_value(item, key)
@@ -284,7 +284,9 @@ def github_request(method: str, url: str, token: str, payload: dict[str, Any] | 
         raise RuntimeError(f"GitHub API {method} {url} failed: {exc.code} {error_body}") from exc
 
 
-def collect_changed_lines(api_url: str, repo: str, pr_number: str, token: str) -> set[tuple[str, int]]:
+def collect_changed_lines(
+    api_url: str, repo: str, pr_number: str, token: str
+) -> set[tuple[str, int]]:
     changed: set[tuple[str, int]] = set()
     page = 1
     while True:

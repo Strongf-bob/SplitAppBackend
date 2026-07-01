@@ -112,7 +112,9 @@ def _assert_can_confirm_receipt(event: dict, receipt: dict, actor_user_id: str) 
     if policy == "creator_finalizes" and actor_user_id != event["creator_id"]:
         raise HTTPException(status_code=403, detail="Only the event creator can confirm receipts.")
     if policy == "payer_finalizes" and actor_user_id != receipt["payer_id"]:
-        raise HTTPException(status_code=403, detail="Only the receipt payer can confirm this receipt.")
+        raise HTTPException(
+            status_code=403, detail="Only the receipt payer can confirm this receipt."
+        )
     if policy == "all_involved_confirm" and actor_user_id != event["creator_id"]:
         raise HTTPException(
             status_code=403,
@@ -156,9 +158,7 @@ def _review_to_api(review: dict) -> dict:
 
 def _receipt_share_user_ids(receipt: dict) -> list[str]:
     user_ids = {
-        share["user_id"]
-        for share in receipt.get("share_items", [])
-        if share.get("user_id")
+        share["user_id"] for share in receipt.get("share_items", []) if share.get("user_id")
     }
     return sorted(user_ids)
 
@@ -293,7 +293,9 @@ def validate_receipt(db: Database, receipt_id: str, actor_user_id: str) -> dict:
     if status == "confirmed":
         raise HTTPException(status_code=409, detail="Confirmed receipts cannot be validated.")
     if status in {"voided", "corrected"}:
-        raise HTTPException(status_code=409, detail="Receipt cannot be validated in its current status.")
+        raise HTTPException(
+            status_code=409, detail="Receipt cannot be validated in its current status."
+        )
 
     _ensure_receipt_share_reviews(db, receipt, event)
     now = utc_now()
@@ -462,7 +464,10 @@ def update_receipt(
         _validate_share_sum(payload.items)
 
         calculated_total = sum(item.cost_kopecks for item in payload.items)
-        if payload.total_amount_kopecks is not None and calculated_total != payload.total_amount_kopecks:
+        if (
+            payload.total_amount_kopecks is not None
+            and calculated_total != payload.total_amount_kopecks
+        ):
             raise HTTPException(
                 status_code=400,
                 detail="total_amount_kopecks must be equal to the sum of all item costs.",
@@ -682,7 +687,9 @@ def create_receipt_correction(db: Database, receipt_id: str, actor_user_id: str)
         share_id_map[old_share_id] = new_share["id"]
         share_items.append(new_share)
     for item in items:
-        item["share_items"] = [share_id_map.get(share_id, share_id) for share_id in item["share_items"]]
+        item["share_items"] = [
+            share_id_map.get(share_id, share_id) for share_id in item["share_items"]
+        ]
 
     correction = {
         "id": correction_id,
@@ -911,14 +918,14 @@ def finalize_allocation_session(db: Database, session_id: str, actor_user_id: st
     assert_event_open(event)
     receipt = get_receipt_or_404(db, session["receipt_id"])
     if actor_user_id not in {event["creator_id"], receipt["payer_id"]}:
-        raise HTTPException(status_code=403, detail="Only creator or payer can finalize allocation.")
+        raise HTTPException(
+            status_code=403, detail="Only creator or payer can finalize allocation."
+        )
     if session["status"] not in {"collecting", "ready"}:
         raise HTTPException(status_code=409, detail="Allocation session cannot be finalized.")
 
     claims = list(
-        db.receipt_item_claims.find(
-            active_filter({"session_id": session_id, "status": "claimed"})
-        )
+        db.receipt_item_claims.find(active_filter({"session_id": session_id, "status": "claimed"}))
     )
     claims_by_item: dict[str, list[str]] = {}
     for claim in claims:
