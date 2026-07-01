@@ -67,8 +67,8 @@
 ### Security/Infra
 
 - [x] **Rate limiting** — lightweight per-actor/IP limiter добавлен для auth, search, invites и nearby codes.
-- [ ] **Docker** — Dockerfile и docker-compose для локальной разработки.
-- [ ] **Production monitoring hardening** — закрыть `/api/metrics` сетевой политикой или авторизацией.
+- [x] **Docker** — Dockerfile и docker-compose runtime добавлены.
+- [ ] **Production monitoring hardening** — `/api/metrics` защищен `METRICS_ACCESS_TOKEN`; осталось проверить, что endpoint не опубликован напрямую без reverse proxy/network policy.
 - [ ] **MongoDB transaction requirement** — задокументировать/проверить production topology для транзакций.
 - [ ] **Secrets audit** — проверить, что `JWT_SECRET`, OAuth, S3 и MongoDB credentials живут только в env/secrets.
 

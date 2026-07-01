@@ -63,8 +63,7 @@ Allowed origins должны быть явными. Default development и produ
 - Проверить, что `openapi.yaml` совпадает с route behavior.
 - Проверить, что в git нет secrets или user data.
 - Проверить, что production CORS origins заданы явно.
-- Проверить, что metrics защищены deployment или network policy.
+- Проверить, что `/api/metrics` имеет `METRICS_ACCESS_TOKEN` и не опубликован наружу без reverse proxy/network policy.
 - Проверить encryption at rest для MongoDB и object storage.
 - Проверить, что receipt images private и читаются через presigned URLs.
 - Пересмотреть [docs/security-baseline.md](https://github.com/Strongf-bob/SplitAppBackend/blob/main/docs/security-baseline.md).
-
