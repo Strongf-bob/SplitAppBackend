@@ -384,7 +384,7 @@ function renderEventPicker() {
 }
 
 function renderEvents() {
-  viewRoot.append(header("События", "Создание, участники, invite link и nearby code."));
+  viewRoot.append(header("События", "Создание, участники и invite link."));
   const createForm = el("form", { class: "panel form-grid two" }, [
     el("label", {}, ["Название события", el("input", { name: "name", required: true, placeholder: "Поездка в Казань" })]),
     el("button", { class: "primary-button", type: "submit", text: "Создать" })
@@ -412,7 +412,7 @@ function renderEventTools() {
   const panel = el("section", { class: "panel" }, [
     el("h2", { text: "Участники и приглашения" }),
     renderEventPicker(),
-    el("p", { class: "muted", text: "Добавляйте видимых пользователей или делитесь invite/nearby code." })
+    el("p", { class: "muted", text: "Добавляйте видимых пользователей или делитесь invite link." })
   ]);
   const userForm = el("form", { class: "form-grid two" }, [
     el("label", {}, ["User UUID", el("input", { name: "user_id", required: true })]),
@@ -443,21 +443,6 @@ function renderEventTools() {
           });
           await navigator.clipboard?.writeText(invite.invite_url);
           showToast(`Invite создан: ${invite.invite_url}`);
-        } catch (error) {
-          showToast(error.message);
-        }
-      }
-    }),
-    el("button", {
-      class: "ghost-button",
-      text: "Nearby code",
-      onclick: async () => {
-        try {
-          const code = await api(`/api/events/${event.id}/nearby-code`, {
-            method: "POST",
-            body: JSON.stringify({ expires_in_seconds: 180 })
-          });
-          showToast(`Код: ${code.code}`);
         } catch (error) {
           showToast(error.message);
         }
@@ -809,7 +794,7 @@ function renderRows(rows, title, meta, emptyText) {
 }
 
 function renderFriends() {
-  viewRoot.append(header("Люди", "Видимые пользователи, друзья, invite preview и nearby accept."));
+  viewRoot.append(header("Люди", "Видимые пользователи, друзья и invite preview."));
   const friendForm = el("form", { class: "panel form-grid two" }, [
     el("label", {}, ["User UUID", el("input", { name: "user_id", required: true })]),
     el("button", { class: "primary-button", text: "Отправить friend request" })
