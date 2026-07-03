@@ -98,6 +98,10 @@ function qs(params) {
   return search.toString();
 }
 
+function isAppRoute() {
+  return window.location.pathname.startsWith("/app");
+}
+
 function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {
@@ -175,7 +179,6 @@ function setupInstall() {
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     state.deferredInstallPrompt = event;
-    installButton.hidden = false;
   });
   const runInstall = async () => {
     if (!state.deferredInstallPrompt) {
@@ -185,18 +188,14 @@ function setupInstall() {
     state.deferredInstallPrompt.prompt();
     await state.deferredInstallPrompt.userChoice;
     state.deferredInstallPrompt = null;
-    installButton.hidden = true;
   };
   installButton.addEventListener("click", runInstall);
-  welcomeInstallButton.addEventListener("click", runInstall);
+  welcomeInstallButton?.addEventListener("click", runInstall);
 }
 
 function setupNavigation() {
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => navigate(button.dataset.view));
-  });
-  document.querySelector("[data-scroll-login]").addEventListener("click", () => {
-    authPanel.scrollIntoView({ behavior: "smooth", block: "center" });
   });
   window.addEventListener("online", updateOnlineStatus);
   window.addEventListener("offline", updateOnlineStatus);
@@ -282,12 +281,15 @@ function updateOnlineStatus() {
 }
 
 function renderAuthState() {
+  const appRoute = isAppRoute();
   const loggedIn = Boolean(state.tokens);
-  workspace.hidden = !loggedIn;
-  authPanel.hidden = loggedIn;
-  welcomePanel.hidden = loggedIn;
-  logoutButton.hidden = !loggedIn;
-  if (loggedIn) renderCurrentView();
+  document.body.classList.toggle("is-app-route", appRoute);
+  document.body.classList.toggle("is-authenticated", appRoute && loggedIn);
+  welcomePanel.hidden = appRoute;
+  authPanel.hidden = !appRoute || loggedIn;
+  workspace.hidden = !appRoute || !loggedIn;
+  logoutButton.hidden = !appRoute || !loggedIn;
+  if (appRoute && loggedIn) renderCurrentView();
 }
 
 async function safeLoadInitialData() {
