@@ -100,6 +100,49 @@ General spending questions such as "кто мне должен" or "скольк
 backend-computed balance facts. LLM receives `user_balance_summary` and formats
 the answer; it is not the source of financial calculations.
 
+## Model context and backend tools
+
+Сплитик не отдает модели всю историю пользователя и не дает ей прямой доступ к
+MongoDB. Перед каждым LLM-вызовом backend собирает bounded context:
+
+- scope по `mode`: `general`, `event`, `receipt` или `member`;
+- `splitik` metadata: mode, locale, timezone;
+- `available_tools`: allowlist backend tools, допустимых в текущем mode;
+- `tool_results`: результаты уже исполненных backend-owned reads;
+- `conversation_state`: состояние только текущей `session_id`;
+- `drafts`, если текущий запрос создал или обновил draft;
+- `user_balance_summary`, если запрос похож на вопрос о тратах/долгах.
+
+MVP tools:
+
+- `splitik.get_active_draft` - последний pending draft текущего пользователя в
+  текущей `session_id`;
+- `splitik.get_recent_session_messages` - короткая история сообщений только
+  этой Splitik session;
+- `splitik.get_event_history` - последние receipts конкретного события после
+  membership check;
+- `splitik.get_user_spending_summary` - личная сводка долгов и ожидаемых
+  поступлений текущего пользователя.
+
+Если клиент передает старую `session_id`, backend может добавить в
+`conversation_state.active_draft` текущий pending draft и последние сообщения
+этой сессии. Если `session_id` не передан, создается новая сессия, старый draft
+автоматически не подмешивается, и фразы вроде "поменяй сумму" не применяются к
+прошлым черновикам.
+
+System prompt runtime:
+
+```text
+Ты Сплитик, ассистент SplitApp. Отвечай на языке пользователя.
+Используй только контекст и инструменты, которые передал backend.
+Не утверждай, что изменил данные, если backend не вернул подтвержденный ресурс.
+Для любых изменений объясняй шаг draft/подтверждения: сначала создается или
+редактируется черновик, а реальные деньги меняются только после явного commit.
+Не проси секреты, платежные данные, пароли, токены или приватные данные вне
+контекста SplitApp. Не раскрывай личные траты другого пользователя вне общего
+события и разрешенного backend-контекста.
+```
+
 ## Examples
 
 ### Create event draft
@@ -137,11 +180,11 @@ The LLM receives only backend-approved context:
   "messages": [
     {
       "role": "system",
-      "content": "You are Splitik, a SplitApp assistant..."
+      "content": "Ты Сплитик, ассистент SplitApp..."
     },
     {
       "role": "user",
-      "content": "User message:\nСоздай событие: Ужин в Duo\n\nAllowed backend context JSON:\n{current_user, events, friendships, splitik, drafts}"
+      "content": "Сообщение пользователя:\nСоздай событие: Ужин в Duo\n\nРазрешенный backend context JSON:\n{current_user, events, friendships, splitik, available_tools, tool_results, conversation_state, drafts}"
     }
   ],
   "temperature": 0.2
@@ -260,6 +303,50 @@ updates it:
 }
 ```
 
+The LLM context for that follow-up includes session-local state:
+
+```json
+{
+  "available_tools": [
+    "splitik.get_active_draft",
+    "splitik.get_recent_session_messages",
+    "splitik.get_event_history"
+  ],
+  "tool_results": {
+    "splitik.get_active_draft": {
+      "id": "draft-id",
+      "type": "create_receipt",
+      "status": "pending",
+      "version": 2
+    },
+    "splitik.get_recent_session_messages": [
+      {
+        "user_message": "Добавь чек: кофе 1200 рублей",
+        "assistant_message": "Сплитик: готово."
+      }
+    ]
+  },
+  "conversation_state": {
+    "session_id": "same-session-id",
+    "mode": "event",
+    "active_draft": {
+      "id": "draft-id",
+      "type": "create_receipt"
+    },
+    "recent_messages": [
+      {
+        "user_message": "Добавь чек: кофе 1200 рублей"
+      }
+    ]
+  }
+}
+```
+
+If the same text is sent without `session_id`, backend creates a new Splitik
+session and `conversation_state.active_draft` is absent. The old pending draft
+is still available through its draft API, but it is not treated as the active
+chat target.
+
 ### Create receipt draft from image
 
 First upload an image:
@@ -304,11 +391,11 @@ private storage URL:
   "messages": [
     {
       "role": "system",
-      "content": "You create SplitApp receipt drafts from receipt image metadata and OCR/vision input. Return only JSON in the receipt draft shape."
+      "content": "Ты создаешь черновики чеков SplitApp по metadata фото чека и OCR/vision input. Верни только JSON в форме черновика чека."
     },
     {
       "role": "user",
-      "content": "Receipt image attachment metadata:\n{id, filename, content_type, size_bytes, created_at}\n\nAllowed backend context JSON:\n{event_id, attachment_ids, human_review_required: true}\n\nReturn only JSON."
+      "content": "Источник чека пользователя:\nMetadata фото чека:\n{id, filename, content_type, size_bytes, created_at}\n\nРазрешенный backend context JSON:\n{event_id, attachment_ids, human_review_required: true}\n\nВерни только JSON."
     }
   ],
   "temperature": 0.1,

@@ -188,7 +188,8 @@ def generate_splitik_reply(*, system_prompt: str, user_message: str, context: di
             {
                 "role": "user",
                 "content": (
-                    f"User message:\n{user_message}\n\nAllowed backend context JSON:\n{context}"
+                    f"Сообщение пользователя:\n{user_message}\n\n"
+                    f"Разрешенный backend context JSON:\n{context}"
                 ),
             },
         ],
@@ -240,9 +241,9 @@ def generate_receipt_draft_candidate(
             {
                 "role": "user",
                 "content": (
-                    f"User receipt source:\n{user_message}\n\n"
-                    f"Allowed backend context JSON:\n{context}\n\n"
-                    "Return only JSON."
+                    f"Источник чека пользователя:\n{user_message}\n\n"
+                    f"Разрешенный backend context JSON:\n{context}\n\n"
+                    "Верни только JSON."
                 ),
             },
         ],
@@ -289,9 +290,9 @@ def generate_receipt_image_candidate(
     return generate_receipt_draft_candidate(
         model_role=model_role,
         system_prompt=(
-            "You create SplitApp receipt drafts from receipt image metadata and "
-            "OCR/vision input. Return only JSON in the receipt draft shape."
+            "Ты создаешь черновики чеков SplitApp по metadata фото чека и "
+            "OCR/vision input. Верни только JSON в форме черновика чека."
         ),
-        user_message=f"Receipt image attachment metadata:\n{attachment_metadata}",
+        user_message=f"Metadata фото чека:\n{attachment_metadata}",
         context=context,
     )
