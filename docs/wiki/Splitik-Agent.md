@@ -99,6 +99,11 @@ metadata и event context, после чего backend валидирует ре
 "Я не изменил данные напрямую...". Response получает `intent: "guardrail"` и
 `guardrail_decision.reason: "unsafe_model_state_change_claim"`.
 
+Этот же post-response слой блокирует private-spending leakage: если модель
+начинает рассказывать, на что другой пользователь тратит деньги вне общего
+события, backend заменяет ответ privacy refusal и пишет
+`guardrail_decision.reason: "unsafe_model_private_spending_claim"`.
+
 Every Splitik message writes `splitik_interactions` with actor, session,
 message id, sanitized message, intent, guardrail decision, draft ids and model
 metadata. Logs redact accidental tokens and must not include auth tokens,

@@ -39,6 +39,12 @@ _UNSAFE_MODEL_STATE_CHANGE_MARKERS = (
     "подтвердила чек",
     "деньги изменены",
 )
+_UNSAFE_MODEL_PRIVATE_SPENDING_MARKERS = (
+    "тратит деньги на",
+    "тратит на",
+    "траты друга",
+    "вне ваших общих событий",
+)
 
 
 def _contains_any(message: str, markers: tuple[str, ...]) -> bool:
@@ -98,6 +104,12 @@ def evaluate_assistant_message(message: str, *, committed_resource: bool = False
                 "Я не изменил данные напрямую. В SplitApp изменения проходят через "
                 "черновик и явное подтверждение."
             ),
+        )
+    if _contains_any(message, _UNSAFE_MODEL_PRIVATE_SPENDING_MARKERS):
+        return _decision(
+            False,
+            "unsafe_model_private_spending_claim",
+            "Я не могу раскрывать личные траты другого пользователя вне общего события.",
         )
     return _decision(True, "allowed")
 

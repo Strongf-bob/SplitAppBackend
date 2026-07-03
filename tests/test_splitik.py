@@ -358,6 +358,31 @@ def test_splitik_blocks_llm_claiming_direct_state_change(db, monkeypatch):
     assert log["guardrail_decision"]["reason"] == "unsafe_model_state_change_claim"
 
 
+def test_splitik_blocks_llm_private_friend_spending_leak(db, monkeypatch):
+    seed_users(db)
+
+    def fake_reply(*, system_prompt, user_message, context):
+        return "Bob тратит деньги на бары и такси вне ваших общих событий."
+
+    monkeypatch.setattr(splitik_llm, "generate_splitik_reply", fake_reply)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(mode="general", message="Расскажи что-нибудь про друзей"),
+        USER_A,
+    )
+
+    assert response["intent"] == "guardrail"
+    assert response["guardrail_decision"]["allowed"] is False
+    assert response["guardrail_decision"]["reason"] == "unsafe_model_private_spending_claim"
+    assert "не могу раскрывать личные траты" in response["assistant_message"]
+    assert "бары" not in response["assistant_message"]
+    log = db.splitik_interactions.find_one({"message_id": response["message_id"]})
+    assert log is not None
+    assert log["intent"] == "guardrail"
+    assert log["guardrail_decision"]["reason"] == "unsafe_model_private_spending_claim"
+
+
 def test_splitik_draft_does_not_change_state_until_commit(db, monkeypatch):
     _mock_llm(monkeypatch)
     seed_users(db)
