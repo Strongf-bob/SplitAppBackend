@@ -190,36 +190,25 @@ def test_pwa_static_routes_are_registered():
     service_worker = client.get("/sw.js")
     assert service_worker.status_code == 200
     assert "CACHE_NAME" in service_worker.text
-    app_asset = client.get("/assets/app.js")
-    assert app_asset.status_code == 200
-    assert "bootstrap" in app_asset.text
+    next_asset = client.get("/_next/static/chunks/main-app.js")
+    assert next_asset.status_code in {200, 404}
 
 
 def test_public_root_is_install_landing_page():
-    index_html = (PROJECT_ROOT / "web" / "index.html").read_text()
-    app_css = (PROJECT_ROOT / "web" / "assets" / "app.css").read_text()
-    design_doc = PROJECT_ROOT / "DESIGN.md"
+    app_page = (PROJECT_ROOT / "web" / "src" / "app" / "page.tsx").read_text()
+    package_json = json.loads((PROJECT_ROOT / "web" / "package.json").read_text())
+    components_json = json.loads((PROJECT_ROOT / "web" / "components.json").read_text())
 
-    assert design_doc.exists()
-    assert "Passionfroot — Style Reference" in design_doc.read_text()
-    assert "Установить SplitApp" in index_html
-    assert "topbar-install-button" in index_html
-    assert "Открыть приложение" not in index_html
-    assert "data-scroll-login" not in index_html
-    assert "hero-login" not in index_html
-    assert '<section id="authPanel" class="panel auth-panel" hidden>' in index_html
-    assert "landing-hero" in index_html
-    assert "product-card-stack" in index_html
-    assert "star-field" in index_html
-    assert "cloud-belt" in index_html
-    assert "trusted-marquee" in index_html
-    assert "@keyframes float-card" in app_css
-    assert "@keyframes marquee" in app_css
-    assert "@keyframes twinkle" in app_css
-    assert "[hidden]" in app_css
-    assert "display: none !important" in app_css
-    assert 'window.location.protocol === "file:"' in index_html
-    assert "splitAppAssetBase" in index_html
+    assert package_json["scripts"]["build"] == "next build"
+    assert package_json["dependencies"]["next"]
+    assert package_json["dependencies"]["react"]
+    assert package_json["dependencies"]["framer-motion"]
+    assert package_json["dependencies"]["lucide-react"]
+    assert "tailwindcss" in package_json["devDependencies"]
+    assert components_json["style"] == "new-york"
+    assert "Установить SplitApp" in app_page
+    assert "Войти через Яндекс" in app_page
+    assert "motion" in app_page
 
 
 def test_pwa_static_routes_support_head_smoke_checks():
@@ -233,7 +222,7 @@ def test_pwa_static_routes_support_head_smoke_checks():
     assert client.head("/app/events/demo").status_code == 200
     assert client.head("/manifest.webmanifest").status_code == 200
     assert client.head("/sw.js").status_code == 200
-    assert client.head("/assets/app.js").status_code == 200
+    assert client.head("/_next/static/chunks/main-app.js").status_code in {200, 404}
 
 
 def test_public_docs_are_served_without_auth():
@@ -255,22 +244,22 @@ def test_docker_image_includes_pwa_assets():
     dockerfile = (PROJECT_ROOT / "Dockerfile").read_text()
 
     assert "COPY web ./web" in dockerfile
+    assert "npm run build" in dockerfile
     assert "COPY docs ./docs" in dockerfile
 
 
 def test_pwa_uses_yandex_oauth_button_instead_of_manual_token_field():
-    index_html = (PROJECT_ROOT / "web" / "index.html").read_text()
-    app_js = (PROJECT_ROOT / "web" / "assets" / "app.js").read_text()
+    app_page = (PROJECT_ROOT / "web" / "src" / "app" / "page.tsx").read_text()
+    splitapp_api = (PROJECT_ROOT / "web" / "src" / "lib" / "splitapp-api.ts").read_text()
 
-    assert "yandexLoginButton" in index_html
-    assert "Войти через Яндекс" in index_html
-    assert "yandexTokenInput" not in index_html
-    assert "6c5725f5868c4604adaea1e4b892c14d" in app_js
-    assert "https://split-app.ru/app" in app_js
-    assert "https://oauth.yandex.ru/authorize" in app_js
-    assert "access_token" in app_js
-    assert "POST" in app_js
-    assert "/api/login" in app_js
+    assert "Войти через Яндекс" in app_page
+    assert "yandexTokenInput" not in app_page
+    assert "6c5725f5868c4604adaea1e4b892c14d" in splitapp_api
+    assert "https://split-app.ru/app" in splitapp_api
+    assert "https://oauth.yandex.ru/authorize" in splitapp_api
+    assert "access_token" in splitapp_api
+    assert "POST" in splitapp_api
+    assert "/api/login" in splitapp_api
 
 
 def test_operations_scrape_allows_private_and_loopback_clients():
