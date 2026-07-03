@@ -11,9 +11,9 @@ from app.services.access import (
 )
 from app.services.balances import get_event_balance_explanations, get_event_balances
 from app.services.common import new_uuid, strip_mongo_id, utc_now, user_to_api_dict
-from app.services.events import create_event
 from app.services.splitik_guardrails import evaluate_user_message
 from app.services.splitik_interactions import log_interaction
+from app.services import splitik_tools
 
 _MODES = {"general", "event", "receipt", "member"}
 
@@ -38,9 +38,7 @@ def _clean(document: dict) -> dict:
 
 
 def _draft_to_api(draft: dict) -> dict:
-    cleaned = _clean(draft)
-    cleaned.pop("owner_user_id", None)
-    return cleaned
+    return splitik_tools.draft_to_api(draft)
 
 
 def _session_to_api(session: dict) -> dict:
@@ -250,25 +248,75 @@ def _extract_event_name(message: str) -> str | None:
 
 
 def _maybe_create_draft(
-    db: Database, payload: schemas.SplitikMessageRequest, actor_user_id: str
+    db: Database,
+    payload: schemas.SplitikMessageRequest,
+    actor_user_id: str,
+    session_id: str,
 ) -> list[dict]:
-    if payload.mode.strip().lower() != "general":
+    mode = payload.mode.strip().lower()
+    lowered = payload.message.casefold()
+    if mode == "general":
+        event_name = _extract_event_name(payload.message)
+        if not event_name:
+            return []
+        return [
+            splitik_tools.create_event_draft(
+                db,
+                actor_user_id=actor_user_id,
+                session_id=session_id,
+                payload={"name": event_name},
+            )
+        ]
+
+    if mode != "event" or not payload.entry_point or not payload.entry_point.event_id:
         return []
-    event_name = _extract_event_name(payload.message)
-    if not event_name:
+
+    event_id = str(payload.entry_point.event_id)
+    amount_kopecks = splitik_tools.amount_kopecks_from_text(payload.message)
+    latest_receipt_draft = splitik_tools.latest_pending_draft(
+        db,
+        actor_user_id=actor_user_id,
+        session_id=session_id,
+        draft_type="create_receipt",
+    )
+    if (
+        latest_receipt_draft
+        and amount_kopecks
+        and any(marker in lowered for marker in ("поменяй", "измени", "исправь", "сумм"))
+    ):
+        payload_patch = dict(latest_receipt_draft["payload"])
+        payload_patch["total_amount_kopecks"] = amount_kopecks
+        if payload_patch.get("items"):
+            payload_patch["items"][0]["cost_kopecks"] = amount_kopecks
+        return [
+            splitik_tools.update_draft(
+                db,
+                actor_user_id=actor_user_id,
+                draft_id=latest_receipt_draft["id"],
+                patch={"payload": payload_patch},
+            )
+        ]
+
+    if not any(marker in lowered for marker in ("чек", "счет", "счёт", "заплатил")):
         return []
-    now = utc_now()
-    draft = {
-        "id": new_uuid(),
-        "owner_user_id": actor_user_id,
-        "type": "create_event",
-        "status": "pending",
-        "payload": {"name": event_name},
-        "created_at": now,
-        "updated_at": now,
-    }
-    db.splitik_drafts.insert_one(draft)
-    return [_draft_to_api(draft)]
+
+    receipt_payload = splitik_tools.build_simple_receipt_payload(
+        db,
+        event_id=event_id,
+        actor_user_id=actor_user_id,
+        message=payload.message,
+    )
+    if not receipt_payload:
+        return []
+    return [
+        splitik_tools.create_receipt_draft(
+            db,
+            actor_user_id=actor_user_id,
+            session_id=session_id,
+            event_id=event_id,
+            payload=receipt_payload,
+        )
+    ]
 
 
 def _get_or_create_session(
@@ -349,7 +397,8 @@ def send_splitik_message(
         }
 
     context, chips, capabilities = _build_context(db, payload, actor_user_id)
-    drafts = _maybe_create_draft(db, payload, actor_user_id)
+    session = _get_or_create_session(db, payload, actor_user_id)
+    drafts = _maybe_create_draft(db, payload, actor_user_id, session["id"])
     if drafts:
         context["drafts"] = drafts
 
@@ -358,7 +407,6 @@ def send_splitik_message(
         user_message=payload.message,
         context=context,
     )
-    session = _get_or_create_session(db, payload, actor_user_id)
     now = utc_now()
     message_id = new_uuid()
     intent = "draft" if drafts else "chat"
@@ -412,26 +460,4 @@ def get_splitik_session(db: Database, session_id: str, actor_user_id: str) -> di
 
 
 def commit_splitik_draft(db: Database, draft_id: str, actor_user_id: str) -> dict:
-    draft = db.splitik_drafts.find_one({"id": draft_id, "owner_user_id": actor_user_id})
-    if not draft:
-        raise HTTPException(status_code=404, detail="Splitik draft not found.")
-    if draft["status"] != "pending":
-        raise HTTPException(status_code=409, detail="Splitik draft is not pending.")
-    if draft["type"] != "create_event":
-        raise HTTPException(status_code=400, detail="Unsupported Splitik draft type.")
-
-    resource = create_event(db, schemas.EventCreate(name=draft["payload"]["name"]), actor_user_id)
-    now = utc_now()
-    db.splitik_drafts.update_one(
-        {"id": draft_id},
-        {
-            "$set": {
-                "status": "committed",
-                "committed_at": now,
-                "committed_resource_id": resource["id"],
-                "updated_at": now,
-            }
-        },
-    )
-    committed = db.splitik_drafts.find_one({"id": draft_id})
-    return {"draft": _draft_to_api(committed), "resource": resource}
+    return splitik_tools.commit_draft(db, actor_user_id=actor_user_id, draft_id=draft_id)
