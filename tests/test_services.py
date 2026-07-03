@@ -1,6 +1,9 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import pytest
+from pydantic import ValidationError
+
 from app import schemas
 from app.core import tokens
 from app.services import (
@@ -90,12 +93,8 @@ def test_event_policies_are_validated_and_enforced(db):
 def test_event_policy_rejects_invalid_values(db):
     seed_event(db)
 
-    try:
-        events.update_event(db, EVENT_ID, schemas.EventUpdate(debt_display_mode="bad"), USER_A)
-    except Exception as exc:
-        assert_status(exc, 400)
-    else:
-        raise AssertionError("Expected invalid event policy to fail")
+    with pytest.raises(ValidationError):
+        schemas.EventUpdate(debt_display_mode="bad")
 
 
 def test_update_current_user_profile(db):
@@ -1144,7 +1143,9 @@ def test_receipt_image_upload_presign_and_delete(db, fake_s3, monkeypatch):
     receipt_image.delete_receipt_image(db, fake_s3, receipt["id"], USER_A)
     after_delete = db.receipts.find_one({"id": receipt["id"]})
 
-    assert upload["image_url"].endswith(stored["image_key"])
+    assert "image_url" not in stored
+    assert upload["image_url"].startswith("https://signed.example/")
+    assert stored["image_key"] in upload["image_url"]
     assert "ACL" not in uploaded_object
     assert presigned["image_url"].startswith("https://signed.example/")
     assert fake_s3.deleted == [("split-bucket", stored["image_key"])]
@@ -1551,20 +1552,12 @@ def test_dispute_requires_event_membership_and_valid_resource(db):
     else:
         raise AssertionError("Expected non-member dispute creation to fail")
 
-    try:
-        disputes.create_dispute(
-            db,
-            schemas.DisputeCreate(
-                resource_type="unknown",
-                resource_id=receipt["id"],
-                reason="Wrong split",
-            ),
-            USER_A,
+    with pytest.raises(ValidationError):
+        schemas.DisputeCreate(
+            resource_type="unknown",
+            resource_id=receipt["id"],
+            reason="Wrong split",
         )
-    except Exception as exc:
-        assert_status(exc, 400)
-    else:
-        raise AssertionError("Expected invalid dispute resource type to fail")
 
 
 def test_event_activity_feed_lists_related_audit_events_for_members(db):

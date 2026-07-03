@@ -29,6 +29,7 @@ Backend services должны проверять authenticated actor рядом 
 
 - Receipt image objects должны оставаться private.
 - Clients должны использовать presigned URLs для временного чтения.
+- Upload response может вернуть временный presigned URL, но backend не должен сохранять permanent public URL для нового image state.
 - Replacements и deletes должны чистить старое storage state.
 - Secrets хранятся только в environment variables или managed secret stores.
 - Нельзя коммитить `.env`, access keys, private keys, production credentials, database dumps или user data.
@@ -66,4 +67,5 @@ Allowed origins должны быть явными. Default development и produ
 - Проверить, что `/api/metrics` имеет `METRICS_ACCESS_TOKEN` и не опубликован наружу без reverse proxy/network policy.
 - Проверить encryption at rest для MongoDB и object storage.
 - Проверить, что receipt images private и читаются через presigned URLs.
+- Запустить dependency audit (`make security-audit`) и secret scan перед production release.
 - Пересмотреть [docs/security-baseline.md](https://github.com/Strongf-bob/SplitAppBackend/blob/main/docs/security-baseline.md).

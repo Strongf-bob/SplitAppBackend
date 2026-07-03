@@ -125,7 +125,7 @@ Event settings include settlement policies: `split_strategy`, `receipt_creation_
 | `POST` | `/api/allocation-sessions/{id}/ready` | Отметить session ready for review. | Creator/payer. |
 | `POST` | `/api/allocation-sessions/{id}/finalize` | Пересобрать shares по claims. | Receipt становится `ready_for_review`, но balances меняются только после confirm. |
 | `DELETE` | `/api/receipts/{id}` | Удалить чек. | Требуется authorization; delete behavior реализован в service layer. |
-| `POST` | `/api/receipts/{id}/image` | Загрузить JPEG изображения чека. | Multipart field: `file` или `image`. |
+| `POST` | `/api/receipts/{id}/image` | Загрузить JPEG изображения чека. | Multipart field: `file` или `image`; response `image_url` является временным presigned URL. |
 | `DELETE` | `/api/receipts/{id}/image` | Удалить изображение чека. | Storage state должен быть очищен. |
 | `GET` | `/api/receipts/{id}/image/presigned-url` | Получить временный private image URL. | Использовать вместо permanent public URLs. |
 

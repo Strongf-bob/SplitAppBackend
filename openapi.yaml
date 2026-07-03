@@ -5051,6 +5051,11 @@
         "properties": {
           "resource_type": {
             "type": "string",
+            "enum": [
+              "receipt",
+              "payment",
+              "payment_request"
+            ],
             "title": "Resource Type"
           },
           "resource_id": {
@@ -5136,31 +5141,61 @@
           },
           "split_strategy": {
             "type": "string",
+            "enum": [
+              "equal_default",
+              "itemized_creator",
+              "itemized_self_select",
+              "agent_assisted"
+            ],
             "title": "Split Strategy",
             "default": "equal_default"
           },
           "receipt_creation_policy": {
             "type": "string",
+            "enum": [
+              "creator_only",
+              "participants_can_add"
+            ],
             "title": "Receipt Creation Policy",
             "default": "participants_can_add"
           },
           "receipt_finalization_policy": {
             "type": "string",
+            "enum": [
+              "creator_finalizes",
+              "payer_finalizes",
+              "all_involved_confirm"
+            ],
             "title": "Receipt Finalization Policy",
             "default": "payer_finalizes"
           },
           "participants_invite_policy": {
             "type": "string",
+            "enum": [
+              "creator_only",
+              "participants_can_invite_with_approval",
+              "participants_can_invite_directly"
+            ],
             "title": "Participants Invite Policy",
             "default": "creator_only"
           },
           "debt_display_mode": {
             "type": "string",
+            "enum": [
+              "simplified_default",
+              "raw_default",
+              "show_both"
+            ],
             "title": "Debt Display Mode",
             "default": "simplified_default"
           },
           "settlement_deadline_policy": {
             "type": "string",
+            "enum": [
+              "disabled",
+              "soft_deadline",
+              "strict_deadline_with_reliability_score"
+            ],
             "title": "Settlement Deadline Policy",
             "default": "disabled"
           },
@@ -5171,6 +5206,7 @@
           },
           "safety_policy": {
             "type": "string",
+            "const": "explicit_review",
             "title": "Safety Policy",
             "default": "explicit_review"
           },
@@ -5287,31 +5323,61 @@
           },
           "split_strategy": {
             "type": "string",
+            "enum": [
+              "equal_default",
+              "itemized_creator",
+              "itemized_self_select",
+              "agent_assisted"
+            ],
             "title": "Split Strategy",
             "default": "equal_default"
           },
           "receipt_creation_policy": {
             "type": "string",
+            "enum": [
+              "creator_only",
+              "participants_can_add"
+            ],
             "title": "Receipt Creation Policy",
             "default": "participants_can_add"
           },
           "receipt_finalization_policy": {
             "type": "string",
+            "enum": [
+              "creator_finalizes",
+              "payer_finalizes",
+              "all_involved_confirm"
+            ],
             "title": "Receipt Finalization Policy",
             "default": "payer_finalizes"
           },
           "participants_invite_policy": {
             "type": "string",
+            "enum": [
+              "creator_only",
+              "participants_can_invite_with_approval",
+              "participants_can_invite_directly"
+            ],
             "title": "Participants Invite Policy",
             "default": "creator_only"
           },
           "debt_display_mode": {
             "type": "string",
+            "enum": [
+              "simplified_default",
+              "raw_default",
+              "show_both"
+            ],
             "title": "Debt Display Mode",
             "default": "simplified_default"
           },
           "settlement_deadline_policy": {
             "type": "string",
+            "enum": [
+              "disabled",
+              "soft_deadline",
+              "strict_deadline_with_reliability_score"
+            ],
             "title": "Settlement Deadline Policy",
             "default": "disabled"
           },
@@ -5324,6 +5390,7 @@
           },
           "safety_policy": {
             "type": "string",
+            "const": "explicit_review",
             "title": "Safety Policy",
             "default": "explicit_review"
           },
@@ -5587,7 +5654,13 @@
           "split_strategy": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "equal_default",
+                  "itemized_creator",
+                  "itemized_self_select",
+                  "agent_assisted"
+                ]
               },
               {
                 "type": "null"
@@ -5598,7 +5671,11 @@
           "receipt_creation_policy": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "creator_only",
+                  "participants_can_add"
+                ]
               },
               {
                 "type": "null"
@@ -5609,7 +5686,12 @@
           "receipt_finalization_policy": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "creator_finalizes",
+                  "payer_finalizes",
+                  "all_involved_confirm"
+                ]
               },
               {
                 "type": "null"
@@ -5620,7 +5702,12 @@
           "participants_invite_policy": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "creator_only",
+                  "participants_can_invite_with_approval",
+                  "participants_can_invite_directly"
+                ]
               },
               {
                 "type": "null"
@@ -5631,7 +5718,12 @@
           "debt_display_mode": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "simplified_default",
+                  "raw_default",
+                  "show_both"
+                ]
               },
               {
                 "type": "null"
@@ -5642,7 +5734,12 @@
           "settlement_deadline_policy": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "disabled",
+                  "soft_deadline",
+                  "strict_deadline_with_reliability_score"
+                ]
               },
               {
                 "type": "null"
@@ -5666,7 +5763,8 @@
           "safety_policy": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "const": "explicit_review"
               },
               {
                 "type": "null"
@@ -7084,6 +7182,12 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "general",
+              "event",
+              "receipt",
+              "member"
+            ],
             "title": "Type",
             "default": "general"
           },
@@ -7166,6 +7270,12 @@
           },
           "mode": {
             "type": "string",
+            "enum": [
+              "general",
+              "event",
+              "receipt",
+              "member"
+            ],
             "title": "Mode",
             "default": "general"
           },
@@ -7654,6 +7764,11 @@
           },
           "payment_phone_visibility": {
             "type": "string",
+            "enum": [
+              "nobody",
+              "event_members",
+              "friends"
+            ],
             "title": "Payment Phone Visibility",
             "default": "nobody"
           }
@@ -7850,6 +7965,11 @@
           },
           "payment_phone_visibility": {
             "type": "string",
+            "enum": [
+              "nobody",
+              "event_members",
+              "friends"
+            ],
             "title": "Payment Phone Visibility",
             "default": "nobody"
           },
@@ -8028,7 +8148,12 @@
           "payment_phone_visibility": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "nobody",
+                  "event_members",
+                  "friends"
+                ]
               },
               {
                 "type": "null"

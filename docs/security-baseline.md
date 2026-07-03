@@ -33,6 +33,7 @@
 - Перед launch нужно проверить git history на committed `.env` files и secrets.
 - Object storage должен поддерживать deletion/replacement и избегать permanent public URLs, когда достаточно presigned URL.
 - Нужно подтвердить encryption at rest для managed database и object storage.
+- Dependencies должны устанавливаться воспроизводимо: pinned direct dependencies, dependency audit в CI и регулярный update процесс.
 
 ## Operations
 
@@ -40,4 +41,5 @@
 - Monitoring и alerting нужны до того, как пользователи станут главным источником ошибок.
 - Для deploy предпочтительны supervised runtime: systemd или containers, не `nohup`.
 - Перед release запускаются lint, tests и security scan.
+- Перед release запускаются format check, dependency audit и secret scan.
 - Backend fixes и frontend follow-up work отслеживаются отдельно.

@@ -1,8 +1,37 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+PaymentPhoneVisibility = Literal["nobody", "event_members", "friends"]
+SplitStrategy = Literal[
+    "equal_default",
+    "itemized_creator",
+    "itemized_self_select",
+    "agent_assisted",
+]
+ReceiptCreationPolicy = Literal["creator_only", "participants_can_add"]
+ReceiptFinalizationPolicy = Literal[
+    "creator_finalizes",
+    "payer_finalizes",
+    "all_involved_confirm",
+]
+ParticipantsInvitePolicy = Literal[
+    "creator_only",
+    "participants_can_invite_with_approval",
+    "participants_can_invite_directly",
+]
+DebtDisplayMode = Literal["simplified_default", "raw_default", "show_both"]
+SettlementDeadlinePolicy = Literal[
+    "disabled",
+    "soft_deadline",
+    "strict_deadline_with_reliability_score",
+]
+SafetyPolicy = Literal["explicit_review"]
+DisputeResourceType = Literal["receipt", "payment", "payment_request"]
+SplitikMode = Literal["general", "event", "receipt", "member"]
 
 
 class User(BaseModel):
@@ -19,7 +48,7 @@ class User(BaseModel):
     discovery_enabled: bool = False
     payment_phone: str | None = None
     phone_verified: bool = False
-    payment_phone_visibility: str = "nobody"
+    payment_phone_visibility: PaymentPhoneVisibility = "nobody"
 
 
 class UserPage(BaseModel):
@@ -74,7 +103,7 @@ class UserUpdate(BaseModel):
     public_handle: str | None = None
     discovery_enabled: bool | None = None
     payment_phone: str | None = None
-    payment_phone_visibility: str | None = None
+    payment_phone_visibility: PaymentPhoneVisibility | None = None
 
 
 class LoginYandexRequest(BaseModel):
@@ -141,28 +170,28 @@ class RefreshResponse(BaseModel):
 
 class EventCreate(BaseModel):
     name: str
-    split_strategy: str = "equal_default"
-    receipt_creation_policy: str = "participants_can_add"
-    receipt_finalization_policy: str = "payer_finalizes"
-    participants_invite_policy: str = "creator_only"
-    debt_display_mode: str = "simplified_default"
-    settlement_deadline_policy: str = "disabled"
+    split_strategy: SplitStrategy = "equal_default"
+    receipt_creation_policy: ReceiptCreationPolicy = "participants_can_add"
+    receipt_finalization_policy: ReceiptFinalizationPolicy = "payer_finalizes"
+    participants_invite_policy: ParticipantsInvitePolicy = "creator_only"
+    debt_display_mode: DebtDisplayMode = "simplified_default"
+    settlement_deadline_policy: SettlementDeadlinePolicy = "disabled"
     review_window_seconds: int = Field(default=60 * 60 * 24, ge=300, le=60 * 60 * 24 * 30)
-    safety_policy: str = "explicit_review"
+    safety_policy: SafetyPolicy = "explicit_review"
     auto_confirm_on_timeout: bool = False
 
 
 class EventUpdate(BaseModel):
     name: str | None = None
     is_closed: bool | None = None
-    split_strategy: str | None = None
-    receipt_creation_policy: str | None = None
-    receipt_finalization_policy: str | None = None
-    participants_invite_policy: str | None = None
-    debt_display_mode: str | None = None
-    settlement_deadline_policy: str | None = None
+    split_strategy: SplitStrategy | None = None
+    receipt_creation_policy: ReceiptCreationPolicy | None = None
+    receipt_finalization_policy: ReceiptFinalizationPolicy | None = None
+    participants_invite_policy: ParticipantsInvitePolicy | None = None
+    debt_display_mode: DebtDisplayMode | None = None
+    settlement_deadline_policy: SettlementDeadlinePolicy | None = None
     review_window_seconds: int | None = Field(default=None, ge=300, le=60 * 60 * 24 * 30)
-    safety_policy: str | None = None
+    safety_policy: SafetyPolicy | None = None
     auto_confirm_on_timeout: bool | None = None
 
 
@@ -181,14 +210,14 @@ class Event(BaseModel):
     creator_id: UUID
     name: str
     is_closed: bool
-    split_strategy: str = "equal_default"
-    receipt_creation_policy: str = "participants_can_add"
-    receipt_finalization_policy: str = "payer_finalizes"
-    participants_invite_policy: str = "creator_only"
-    debt_display_mode: str = "simplified_default"
-    settlement_deadline_policy: str = "disabled"
+    split_strategy: SplitStrategy = "equal_default"
+    receipt_creation_policy: ReceiptCreationPolicy = "participants_can_add"
+    receipt_finalization_policy: ReceiptFinalizationPolicy = "payer_finalizes"
+    participants_invite_policy: ParticipantsInvitePolicy = "creator_only"
+    debt_display_mode: DebtDisplayMode = "simplified_default"
+    settlement_deadline_policy: SettlementDeadlinePolicy = "disabled"
     review_window_seconds: int = 60 * 60 * 24
-    safety_policy: str = "explicit_review"
+    safety_policy: SafetyPolicy = "explicit_review"
     auto_confirm_on_timeout: bool = False
     participants: list[EventMembership]
     created_at: datetime
@@ -489,7 +518,7 @@ class PaymentRequestPage(BaseModel):
 
 
 class DisputeCreate(BaseModel):
-    resource_type: str
+    resource_type: DisputeResourceType
     resource_id: UUID
     reason: str = Field(min_length=1)
 
@@ -557,7 +586,7 @@ class EventBalanceExplanation(EventBalance):
 
 
 class SplitikEntryPoint(BaseModel):
-    type: str = "general"
+    type: SplitikMode = "general"
     event_id: UUID | None = None
     receipt_id: UUID | None = None
     target_user_id: UUID | None = None
@@ -573,7 +602,7 @@ class SplitikAttachment(BaseModel):
 
 class SplitikMessageRequest(BaseModel):
     session_id: UUID | None = None
-    mode: str = "general"
+    mode: SplitikMode = "general"
     message: str = Field(min_length=1)
     entry_point: SplitikEntryPoint | None = None
     attachment_ids: list[UUID] = Field(default_factory=list)
