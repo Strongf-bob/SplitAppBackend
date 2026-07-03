@@ -352,6 +352,68 @@ def test_splitik_draft_does_not_change_state_until_commit(db, monkeypatch):
     assert db.events.count_documents({"name": "Ужин в Duo"}) == 1
 
 
+def test_splitik_creates_receipt_draft_from_event_text_without_changing_money(db, monkeypatch):
+    _mock_llm(monkeypatch)
+    seed_event(db)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Добавь чек: кофе 1200 рублей",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+
+    assert response["intent"] == "draft"
+    assert len(response["drafts"]) == 1
+    draft = response["drafts"][0]
+    assert draft["type"] == "create_receipt"
+    assert draft["status"] == "pending"
+    assert draft["event_id"] == EVENT_ID
+    assert draft["source"] == "text"
+    assert draft["version"] == 1
+    assert draft["payload"]["payer_id"] == USER_A
+    assert draft["payload"]["total_amount_kopecks"] == 120000
+    assert draft["payload"]["items"][0]["cost_kopecks"] == 120000
+    assert db.receipts.count_documents({"event_id": EVENT_ID}) == 0
+
+
+def test_splitik_updates_receipt_draft_from_chat(db, monkeypatch):
+    _mock_llm(monkeypatch)
+    seed_event(db)
+
+    created = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Добавь чек: кофе 1200 рублей",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+    draft_id = created["drafts"][0]["id"]
+
+    updated = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            session_id=created["session_id"],
+            mode="event",
+            message="Поменяй сумму на 1500 рублей",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+
+    assert updated["intent"] == "draft"
+    assert updated["drafts"][0]["id"] == draft_id
+    assert updated["drafts"][0]["version"] == 2
+    assert updated["drafts"][0]["payload"]["total_amount_kopecks"] == 150000
+    assert updated["drafts"][0]["payload"]["items"][0]["cost_kopecks"] == 150000
+    assert db.receipts.count_documents({"event_id": EVENT_ID}) == 0
+
+
 def test_splitik_rejects_foreign_draft_commit(db, monkeypatch):
     _mock_llm(monkeypatch)
     seed_users(db)
