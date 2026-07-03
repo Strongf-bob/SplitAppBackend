@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SplitApp Backend: API-карта</title>
+    <link rel="stylesheet" href="assets/decisions.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="nav" aria-label="Основная навигация">
+        <a class="brand" href="index.html"><span class="brand-mark">S</span><span>SplitApp Backend</span></a>
+        <div class="nav-links">
+          <a href="index.html">Обзор</a>
+          <a href="decisions.html">Почему так</a>
+          <a href="flows.html">Сценарии</a>
+          <a href="money.html">Деньги</a>
+          <a href="security.html">Права</a>
+          <a href="api-map.html" aria-current="page">API-карта</a>
+          <a href="splitik-agent.html">Сплитик</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Актуальный контракт backend</p>
+        <h1>API-карта SplitApp Backend</h1>
+        <p class="lead">
+          Эта страница синхронизирована с текущими routers: Auth, Home, Users, Friends, Events,
+          Receipts, Payments, Disputes, Audit, Reports, Splitik и Health. Для машинного контракта
+          источником остается <code>openapi.yaml</code>.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Runtime, PWA и health</h2>
+        <div class="grid three">
+          <article class="endpoint"><span class="method">GET</span><strong>/</strong><p class="muted">PWA shell, если папка <code>web/</code> присутствует.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/app</strong><p class="muted">PWA app shell для прямого открытия приложения.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/app/{path}</strong><p class="muted">Fallback для внутренних PWA routes.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/manifest.webmanifest</strong><p class="muted">Manifest установленного PWA.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/sw.js</strong><p class="muted">Service worker PWA.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/assets/*</strong><p class="muted">Статические assets PWA.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/ping</strong><p class="muted">Легкий liveness check.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/health/db</strong><p class="muted">Проверка MongoDB connection.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/metrics</strong><p class="muted">Prometheus metrics; в production должен быть защищен токеном/прокси.</p></article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Auth, профиль, контакты и home</h2>
+        <div class="grid three">
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/login</strong><p class="muted">Обмен Yandex token на app access/refresh tokens и backend user.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/refresh</strong><p class="muted">Ротация refresh token и выдача нового access token.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/home/summary</strong><p class="muted">Confirmed, pending и disputed money buckets для текущего пользователя.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/users</strong><p class="muted">Пагинированные visible users: actor и участники общих событий.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/users/search</strong><p class="muted">Opt-in поиск по handle/name для <code>discovery_enabled=true</code>.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/users/me/financial-stats</strong><p class="muted">Счетчики open/closed events и outstanding money buckets.</p></article>
+          <article class="endpoint"><span class="method write">PATCH</span><strong>/api/users/me</strong><p class="muted">Имя, email, avatar, public handle, discovery и visibility payment phone.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/users/me/contacts/import</strong><p class="muted">Owner-scoped import контактов после явного выбора пользователем.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/users/me/contacts</strong><p class="muted">Пагинированный список импортированных контактов и matched users.</p></article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Friends</h2>
+        <div class="grid three">
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/friends</strong><p class="muted">Создать friend request к пользователю.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/friends</strong><p class="muted">Пагинированные friendships; можно фильтровать по status.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/friends/{id}/accept</strong><p class="muted">Addressee принимает friendship.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/friends/{id}/reject</strong><p class="muted">Addressee отклоняет request.</p></article>
+          <article class="endpoint"><span class="method delete">DELETE</span><strong>/api/friends/{id}</strong><p class="muted">Удалить friendship/request для текущего пользователя.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/friends/{id}/block</strong><p class="muted">Заблокировать связь с пользователем.</p></article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Events, participants и invites</h2>
+        <div class="grid three">
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/events</strong><p class="muted">Создать событие, политики и creator membership.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/events</strong><p class="muted">Пагинированные события, где actor active member.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/events/{id}</strong><p class="muted">Детали события для active member.</p></article>
+          <article class="endpoint"><span class="method write">PATCH</span><strong>/api/events/{id}</strong><p class="muted">Creator-only update: name, is_closed, policies.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/events/{id}/close/confirmation-summary</strong><p class="muted">Предупреждения перед закрытием события.</p></article>
+          <article class="endpoint"><span class="method delete">DELETE</span><strong>/api/events/{id}</strong><p class="muted">Creator-only soft delete события и связанных данных.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/events/{id}/participants</strong><p class="muted">Добавить участников согласно invite policy.</p></article>
+          <article class="endpoint"><span class="method delete">DELETE</span><strong>/api/events/{id}/participants/{user_id}</strong><p class="muted">Creator-only remove participant.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/events/{id}/invites</strong><p class="muted">Создать deep-link invite с expiry.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/invites/{token}/preview</strong><p class="muted">Preview invite до accept/decline.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/invites/{token}/accept</strong><p class="muted">Принять invite и войти в событие.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/invites/{token}/decline</strong><p class="muted">Отклонить invite без membership.</p></article>
+          <article class="endpoint"><span class="method delete">DELETE</span><strong>/api/events/{id}/invites/{invite_id}</strong><p class="muted">Revoke invite создателем/authorized actor.</p></article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Receipts, AI drafts, review и images</h2>
+        <div class="grid three">
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/events/{id}/receipts</strong><p class="muted">Создать receipt; требует <code>Idempotency-Key</code>.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/events/{id}/receipts</strong><p class="muted">Пагинированные receipts события.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/events/{id}/receipt-drafts/ai</strong><p class="muted">LLM draft из текста: primary/verification/escalation metadata, без влияния на balances.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/receipts/{id}</strong><p class="muted">Один receipt по id после event access check.</p></article>
+          <article class="endpoint"><span class="method write">PATCH</span><strong>/api/receipts/{id}</strong><p class="muted">Обновление draft; version guard через expected_version.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/receipts/{id}/validate</strong><p class="muted">Переводит draft в pending_confirmation и создает share reviews.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/receipts/{id}/share-reviews</strong><p class="muted">Пагинированные review records по участникам.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/receipts/{id}/share-reviews/me/accept</strong><p class="muted">Текущий пользователь принимает свою долю.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/receipts/{id}/share-reviews/me/dispute</strong><p class="muted">Текущий пользователь спорит свою долю с reason.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/receipts/{id}/confirm/confirmation-summary</strong><p class="muted">Summary перед confirm receipt.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/receipts/{id}/confirm</strong><p class="muted">Confirm pending receipt, если нет disputed reviews.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/receipts/{id}/void/confirmation-summary</strong><p class="muted">Summary перед void confirmed receipt.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/receipts/{id}/void</strong><p class="muted">Creator или payer void confirmed receipt.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/receipts/{id}/corrections</strong><p class="muted">Создать correction draft и пометить исходный receipt corrected.</p></article>
+          <article class="endpoint"><span class="method delete">DELETE</span><strong>/api/receipts/{id}</strong><p class="muted">Soft delete receipt.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/receipts/{id}/image</strong><p class="muted">Upload/replace private JPEG через multipart <code>file</code> или <code>image</code>.</p></article>
+          <article class="endpoint"><span class="method delete">DELETE</span><strong>/api/receipts/{id}/image</strong><p class="muted">Delete private receipt image object/state.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/receipts/{id}/image/presigned-url</strong><p class="muted">Временный URL для чтения private image.</p></article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Allocation sessions</h2>
+        <div class="grid three">
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/receipts/{id}/allocation-session</strong><p class="muted">Начать self-select сбор claims по позициям draft receipt.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/allocation-sessions/{id}</strong><p class="muted">Текущее состояние session и claims.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/allocation-sessions/{id}/claims</strong><p class="muted">Actor claims receipt item.</p></article>
+          <article class="endpoint"><span class="method delete">DELETE</span><strong>/api/allocation-sessions/{id}/claims</strong><p class="muted">Actor снимает свой claim с item.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/allocation-sessions/{id}/ready</strong><p class="muted">Пометить session ready.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/allocation-sessions/{id}/finalize</strong><p class="muted">Превратить claims в share_items и ready_for_review receipt.</p></article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Balances, payments и payment requests</h2>
+        <div class="grid three">
+          <article class="endpoint"><span class="method">GET</span><strong>/api/events/{id}/balances</strong><p class="muted">Net debts по confirmed receipts/payments.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/events/{id}/balances/explain</strong><p class="muted">Balances с source contributions.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/events/{id}/payments</strong><p class="muted">Sender заявляет payment; требует <code>Idempotency-Key</code>.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/events/{id}/payments</strong><p class="muted">Пагинированные payments события.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/payments/{id}/confirm/confirmation-summary</strong><p class="muted">Summary перед receiver confirm.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/payments/{id}/confirm</strong><p class="muted">Receiver подтверждает получение денег.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/payments/{id}/reject/confirmation-summary</strong><p class="muted">Summary перед reject pending payment.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/payments/{id}/reject</strong><p class="muted">Receiver отклоняет pending payment.</p></article>
+          <article class="endpoint"><span class="method write">PATCH</span><strong>/api/payments/{id}</strong><p class="muted">Legacy update confirmed flag; confirmed нельзя откатить.</p></article>
+          <article class="endpoint"><span class="method delete">DELETE</span><strong>/api/payments/{id}</strong><p class="muted">Soft delete pending/unconfirmed payment.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/events/{id}/payment-requests</strong><p class="muted">Creditor requests debtor payment; требует <code>Idempotency-Key</code>.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/events/{id}/payment-requests</strong><p class="muted">Пагинированные payment requests события.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/payment-requests/{id}/acknowledge</strong><p class="muted">Debtor отмечает, что увидел request.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/payment-requests/{id}/mark-paid</strong><p class="muted">Debtor создает linked pending payment.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/payment-requests/{id}/cancel</strong><p class="muted">Creditor отменяет request.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/payment-requests/{id}/request-extension</strong><p class="muted">Debtor просит продлить срок.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/payment-requests/{id}/dispute</strong><p class="muted">Debtor или creditor переводит request в disputed.</p></article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Disputes, audit и reports</h2>
+        <div class="grid three">
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/disputes</strong><p class="muted">Создать спор по resource_type/resource_id внутри события.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/events/{id}/disputes</strong><p class="muted">Пагинированные disputes события.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/disputes/{id}/resolve</strong><p class="muted">Resolve dispute с resolution note.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/events/{id}/activity</strong><p class="muted">Пагинированный audit trail события.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/events/{id}/export.csv</strong><p class="muted">CSV export события.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/receipt-categories</strong><p class="muted">Справочник категорий чеков.</p></article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Splitik</h2>
+        <div class="grid three">
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/splitik/attachments</strong><p class="muted">Private upload attachment для Splitik, включая receipt image draft flow.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/splitik/messages</strong><p class="muted">Отправить сообщение агенту: context, guardrails, tools, drafts.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/splitik/sessions/{id}</strong><p class="muted">Получить session history и context chips владельца.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/splitik/drafts/{id}</strong><p class="muted">Получить pending/committed draft.</p></article>
+          <article class="endpoint"><span class="method write">PATCH</span><strong>/api/splitik/drafts/{id}</strong><p class="muted">Отредактировать draft payload/questions до commit.</p></article>
+          <article class="endpoint"><span class="method write">POST</span><strong>/api/splitik/drafts/{id}/commit</strong><p class="muted">Commit draft через обычную backend-доменную логику.</p></article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Пагинация и idempotency</h2>
+        <div class="grid two">
+          <article class="example-box">
+            <p>List endpoints возвращают общий envelope:</p>
+            <pre class="code">{
+  "items": [],
+  "limit": 50,
+  "offset": 0,
+  "total": 128
+}</pre>
+            <p class="muted">Формат используется для users, contacts, events, receipts, share reviews, payments, payment requests, disputes, audit events и friends.</p>
+          </article>
+          <article class="example-box">
+            <p>Money-changing create endpoints требуют <code>Idempotency-Key</code>:</p>
+            <pre class="code">POST /api/events/{id}/receipts
+POST /api/events/{id}/payments
+POST /api/events/{id}/payment-requests
+POST /api/payment-requests/{id}/mark-paid</pre>
+            <p class="muted">Повтор сетевого запроса не должен создавать второй финансовый документ.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      Источник: <code>app/routers/*.py</code>, <code>app/schemas.py</code>, <code>openapi.yaml</code>.
+    </footer>
+  </body>
+</html>

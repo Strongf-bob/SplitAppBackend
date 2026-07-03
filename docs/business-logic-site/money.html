@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SplitApp Backend: деньги</title>
+    <link rel="stylesheet" href="assets/decisions.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="nav" aria-label="Основная навигация">
+        <a class="brand" href="index.html"><span class="brand-mark">S</span><span>SplitApp Backend</span></a>
+        <div class="nav-links">
+          <a href="index.html">Обзор</a>
+          <a href="decisions.html">Почему так</a>
+          <a href="flows.html">Сценарии</a>
+          <a href="money.html" aria-current="page">Деньги</a>
+          <a href="security.html">Права</a>
+          <a href="api-map.html">API-карта</a>
+          <a href="splitik-agent.html">Сплитик</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Ledger и balances</p>
+        <h1>Как backend превращает чеки и платежи в долги</h1>
+        <p class="lead">
+          Денежная модель разделяет confirmed, pending и disputed. Confirmed receipt создает долг участников
+          перед payer, confirmed payment создает встречный перенос от receiver к sender, а pending/disputed
+          показываются отдельно и не смешиваются с итоговым долгом.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Формула на уровне позиции чека</h2>
+        <div class="example-box">
+          <p><strong>Позиция:</strong> пицца 1 200 руб. Платит Alice. Доли: Alice 25%, Bob 75%.</p>
+          <pre class="code">Alice -> Alice: 300 руб.  игнорируется, потому что debtor == creditor
+Bob   -> Alice: 900 руб.  попадает в ledger как долг Bob перед Alice</pre>
+          <p class="muted">Backend хранит деньги в копейках и округляет доли до целых копеек через Decimal с ROUND_HALF_UP.</p>
+        </div>
+      </section>
+
+      <section class="section band">
+        <h2>Что влияет на balance</h2>
+        <div class="grid three">
+          <article class="tile">
+            <strong>Confirmed receipts</strong>
+            <p class="muted">Только чеки со статусом <code>confirmed</code> участвуют в confirmed balances; backend также сохраняет совместимость с ранними legacy-документами без status.</p>
+            <span class="tag">увеличивает долг</span>
+          </article>
+          <article class="tile">
+            <strong>Confirmed payments</strong>
+            <p class="muted">Только платежи с <code>confirmed=true</code> уменьшают долг. Pending не считается оплатой.</p>
+            <span class="tag">уменьшает долг</span>
+          </article>
+          <article class="tile">
+            <strong>Pending reviews</strong>
+            <p class="muted">Receipt share reviews со статусом <code>pending</code> попадают в pending bucket home summary, но не в confirmed ledger.</p>
+            <span class="tag">ожидает review</span>
+          </article>
+          <article class="tile">
+            <strong>Disputed state</strong>
+            <p class="muted">Disputed receipt reviews и payment requests идут в disputed bucket, пока спор не решен.</p>
+            <span class="tag">спор</span>
+          </article>
+          <article class="tile">
+            <strong>Soft-deleted data</strong>
+            <p class="muted">Документы с <code>deleted_at</code> исключаются через active filter.</p>
+            <span class="tag danger">исключается</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Home summary: confirmed / pending / disputed</h2>
+        <div class="example-box">
+          <p><code>GET /api/home/summary</code> возвращает три money bucket вместо одной общей суммы:</p>
+          <pre class="code">{
+  "confirmed": { "owed_kopecks": 70000, "receivable_kopecks": 120000 },
+  "pending": { "owed_kopecks": 25000, "receivable_kopecks": 0 },
+  "disputed": { "owed_kopecks": 0, "receivable_kopecks": 40000 }
+}</pre>
+          <p class="muted">Это нужно, чтобы UI не показывал неподтвержденный или спорный долг как финальный.</p>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Алгоритм balances</h2>
+        <ol class="steps">
+          <li><strong>Загрузить source documents.</strong> Backend берет active confirmed receipts и active confirmed payments события.</li>
+          <li><strong>Построить ledger.</strong> Для каждой доли позиции добавляется transfer <code>debtor -> payer</code>.</li>
+          <li><strong>Учесть payments.</strong> Подтвержденный payment добавляет transfer <code>receiver -> sender</code>, то есть обратное направление долга.</li>
+          <li><strong>Схлопнуть пары.</strong> Если Bob должен Alice 900, а Alice должна Bob 200, итог: Bob должен Alice 700.</li>
+          <li><strong>Вернуть строки.</strong> API возвращает <code>event_id</code>, <code>debitor_id</code>, <code>creditor_id</code>, <code>amount_kopecks</code>.</li>
+        </ol>
+      </section>
+
+      <section class="section">
+        <h2>Пример end-to-end</h2>
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>Операция</th>
+              <th>Ledger effect</th>
+              <th>Итог</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Alice платит чек 2 000 руб., Bob должен 1 200 руб., Carol 800 руб.</td>
+              <td><code>Bob -> Alice: 120000</code><br><code>Carol -> Alice: 80000</code></td>
+              <td>Alice ожидает 2 000 руб.</td>
+            </tr>
+            <tr>
+              <td>Bob заявляет payment Alice на 500 руб.</td>
+              <td>Нет эффекта, пока payment pending.</td>
+              <td>Bob все еще должен 1 200 руб.</td>
+            </tr>
+            <tr>
+              <td>Alice подтверждает payment.</td>
+              <td><code>Alice -> Bob: 50000</code></td>
+              <td>Bob должен Alice 700 руб.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section">
+        <h2>Payment request flow</h2>
+        <div class="sequence">
+          <div class="node">
+            <h3>Request</h3>
+            <p class="muted">Creditor создает запрос к debtor. Creditor должен совпадать с authenticated actor.</p>
+          </div>
+          <div class="node">
+            <h3>Acknowledge</h3>
+            <p class="muted">Debtor может отметить, что запрос увиден. Это не меняет баланс.</p>
+          </div>
+          <div class="node">
+            <h3>Mark paid</h3>
+            <p class="muted">Debtor создает pending payment, связанный с payment request.</p>
+          </div>
+          <div class="node">
+            <h3>Confirm</h3>
+            <p class="muted">Receiver подтверждает payment, и только тогда он влияет на balances.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Void и correction</h2>
+        <div class="grid two">
+          <article class="rule">
+            <strong>Void confirmed receipt</strong>
+            <p class="muted">Creator или payer может void confirmed receipt. После этого receipt выходит из confirmed balances, а audit фиксирует действие.</p>
+          </article>
+          <article class="rule">
+            <strong>Correction draft</strong>
+            <p class="muted">Correction создает новый draft на основе confirmed receipt и помечает исходный receipt как corrected. Новый вариант снова проходит review/confirm.</p>
+          </article>
+          <article class="rule">
+            <strong>Confirmation summary</strong>
+            <p class="muted">Перед confirm/void receipt и confirm/reject payment backend отдает summary с warnings, amount и requires_explicit_confirmation.</p>
+          </article>
+          <article class="rule">
+            <strong>Balance explain</strong>
+            <p class="muted"><code>/api/events/{id}/balances/explain</code> возвращает contributions, чтобы показать, из каких receipt/payment строк собран долг.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      Реализация: <code>app/services/balances.py</code>, <code>app/services/receipts.py</code>, <code>app/services/payments.py</code>.
+    </footer>
+  </body>
+</html>

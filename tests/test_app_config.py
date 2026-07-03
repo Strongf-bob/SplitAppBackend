@@ -10,7 +10,7 @@ from app import main as app_main
 from app.core.monitoring import metrics_response, monitor_db_operation, monitor_service_operation
 from app.core.monitoring import record_domain_event, refresh_database_metrics
 from app.dependencies import _is_internal_client, require_auth_token
-from app.main import configure_cors, configure_pwa, cors_allowed_origins
+from app.main import configure_cors, configure_public_docs, configure_pwa, cors_allowed_origins
 from app.main import configure_exception_handlers, configure_request_logging
 from app.routers.health import router as health_router
 
@@ -236,10 +236,26 @@ def test_pwa_static_routes_support_head_smoke_checks():
     assert client.head("/assets/app.js").status_code == 200
 
 
+def test_public_docs_are_served_without_auth():
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+    configure_public_docs(api)
+
+    client = TestClient(api)
+
+    index = client.get("/business-logic/")
+    assert index.status_code == 200
+    assert "Как SplitApp управляет событиями, чеками, долгами и правами" in index.text
+    assert client.get("/business-logic/api-map.html").status_code == 200
+    stylesheet = client.get("/business-logic/assets/decisions.css")
+    assert stylesheet.status_code == 200
+    assert ":root" in stylesheet.text
+
+
 def test_docker_image_includes_pwa_assets():
     dockerfile = (PROJECT_ROOT / "Dockerfile").read_text()
 
     assert "COPY web ./web" in dockerfile
+    assert "COPY docs ./docs" in dockerfile
 
 
 def test_pwa_uses_yandex_oauth_button_instead_of_manual_token_field():
