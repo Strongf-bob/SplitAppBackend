@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SplitApp Backend: бизнес-логика</title>
+    <link rel="stylesheet" href="assets/decisions.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="nav" aria-label="Основная навигация">
+        <a class="brand" href="index.html">
+          <span class="brand-mark">S</span>
+          <span>SplitApp Backend</span>
+        </a>
+        <div class="nav-links">
+          <a href="index.html" aria-current="page">Обзор</a>
+          <a href="decisions.html">Почему так</a>
+          <a href="flows.html">Сценарии</a>
+          <a href="money.html">Деньги</a>
+          <a href="security.html">Права</a>
+          <a href="api-map.html">API-карта</a>
+          <a href="splitik-agent.html">Сплитик</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-grid">
+          <div>
+            <p class="eyebrow">Актуальное устройство backend</p>
+            <h1>Как SplitApp управляет событиями, чеками, долгами и правами</h1>
+            <p class="lead">
+              SplitApp - продукт для честного разделения общих расходов после поездок, встреч,
+              квартирных закупок и командных активностей. Backend хранит участников, чеки, доли,
+              подтверждения, споры и платежи так, чтобы итоговый долг был объяснимым, проверяемым
+              и не зависел от доверия к клиентскому интерфейсу.
+            </p>
+            <div class="hero-actions">
+              <a class="button primary" href="flows.html">Пройти основной сценарий</a>
+              <a class="button" href="decisions.html">Почему так устроено</a>
+              <a class="button" href="money.html">Разобрать расчет долгов</a>
+              <a class="button" href="https://github.com/Strongf-bob/SplitAppBackend">GitHub</a>
+            </div>
+          </div>
+          <div class="visual" aria-label="Схема основных доменных объектов">
+            <svg class="flow-svg" viewBox="0 0 680 420" role="img" aria-labelledby="overview-title">
+              <title id="overview-title">Событие объединяет участников, чеки, балансы и платежи</title>
+              <defs>
+                <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L9,3 z" fill="#0f766e"></path>
+                </marker>
+              </defs>
+              <rect x="242" y="38" width="196" height="72" rx="8" fill="#0f766e"></rect>
+              <text x="340" y="68" text-anchor="middle" fill="#fff" font-size="18" font-weight="700">Event</text>
+              <text x="340" y="92" text-anchor="middle" fill="#d9fffb" font-size="13">пространство расходов</text>
+
+              <rect x="44" y="166" width="154" height="74" rx="8" fill="#fff" stroke="#d7dee8"></rect>
+              <text x="121" y="197" text-anchor="middle" fill="#182029" font-size="16" font-weight="700">Users</text>
+              <text x="121" y="220" text-anchor="middle" fill="#5f6c7b" font-size="12">creator + members</text>
+
+              <rect x="264" y="166" width="154" height="74" rx="8" fill="#fff" stroke="#d7dee8"></rect>
+              <text x="341" y="197" text-anchor="middle" fill="#182029" font-size="16" font-weight="700">Receipts</text>
+              <text x="341" y="220" text-anchor="middle" fill="#5f6c7b" font-size="12">items + shares</text>
+
+              <rect x="484" y="166" width="154" height="74" rx="8" fill="#fff" stroke="#d7dee8"></rect>
+              <text x="561" y="197" text-anchor="middle" fill="#182029" font-size="16" font-weight="700">Payments</text>
+              <text x="561" y="220" text-anchor="middle" fill="#5f6c7b" font-size="12">pending/confirmed</text>
+
+              <rect x="154" y="304" width="154" height="74" rx="8" fill="#fff" stroke="#d7dee8"></rect>
+              <text x="231" y="335" text-anchor="middle" fill="#182029" font-size="16" font-weight="700">Balances</text>
+              <text x="231" y="358" text-anchor="middle" fill="#5f6c7b" font-size="12">net debts</text>
+
+              <rect x="374" y="304" width="154" height="74" rx="8" fill="#fff" stroke="#d7dee8"></rect>
+              <text x="451" y="335" text-anchor="middle" fill="#182029" font-size="16" font-weight="700">Audit</text>
+              <text x="451" y="358" text-anchor="middle" fill="#5f6c7b" font-size="12">security trail</text>
+
+              <path d="M302 110 L158 166" stroke="#0f766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
+              <path d="M340 110 L340 166" stroke="#0f766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
+              <path d="M378 110 L522 166" stroke="#0f766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
+              <path d="M300 240 L250 304" stroke="#0f766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
+              <path d="M510 240 L468 304" stroke="#0f766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Что это за продукт</h2>
+        <div class="grid two">
+          <article class="tile">
+            <strong>Проблема</strong>
+            <p class="muted">
+              В группе людей расходы быстро становятся непрозрачными: кто-то оплатил общий чек,
+              кто-то ел не все позиции, кто-то уже перевел деньги, а спорные суммы смешиваются с
+              финальными долгами. SplitApp разделяет эти состояния и делает каждый шаг проверяемым.
+            </p>
+          </article>
+          <article class="tile">
+            <strong>Решение</strong>
+            <p class="muted">
+              Пользователь создает событие, приглашает участников, добавляет чек вручную или через
+              AI draft, распределяет позиции, получает расчет долгов и закрывает их через payment
+              requests. Backend фиксирует права, статусы, audit trail и историю изменений.
+            </p>
+          </article>
+          <article class="tile">
+            <strong>Почему это не просто калькулятор</strong>
+            <p class="muted">
+              Система различает черновик, review, confirmed, disputed, voided и corrected. Поэтому
+              спорный чек не портит баланс, закрытое событие нельзя тихо переписать, а каждое
+              money-changing действие проходит server-side validation.
+            </p>
+          </article>
+          <article class="tile">
+            <strong>Что показывать на защите</strong>
+            <p class="muted">
+              Главная точка входа - эта страница. Из нее можно перейти в сценарии, права, API-карту,
+              решение по AI/модели, Splitik agent и исходники проекта на GitHub.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section band">
+        <h2>Главная идея</h2>
+        <div class="grid three">
+          <article class="tile">
+            <strong>Backend решает, кто что может</strong>
+            <p class="muted">Клиент отправляет намерение. Backend проверяет authenticated actor, event membership, creator/member роль, friendship/request parties и состояние события.</p>
+            <div class="tag-row"><span class="tag">auth</span><span class="tag">membership</span><span class="tag">actor-first</span></div>
+          </article>
+          <article class="tile">
+            <strong>Чек проходит через review</strong>
+            <p class="muted">Draft receipt валидируется, создает share reviews, может стать disputed, confirmed, voided или corrected.</p>
+            <div class="tag-row"><span class="tag">receipt</span><span class="tag">review</span><span class="tag">correction</span></div>
+          </article>
+          <article class="tile">
+            <strong>Деньги разделены по статусам</strong>
+            <p class="muted">Home summary и balances различают confirmed, pending и disputed, чтобы спорные суммы не выглядели финальным долгом.</p>
+            <div class="tag-row"><span class="tag">confirmed</span><span class="tag">pending</span><span class="tag">disputed</span></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Слои системы</h2>
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>Слой</th>
+              <th>Где находится</th>
+              <th>За что отвечает</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Routers</td>
+              <td><code>app/routers/*.py</code></td>
+              <td>HTTP paths для auth, home, users, friends, events, receipts, payments, disputes, audit, reports, Splitik и health.</td>
+            </tr>
+            <tr>
+              <td>Schemas</td>
+              <td><code>app/schemas.py</code></td>
+              <td>Pydantic-контракт: поля, типы, ограничения, пагинация.</td>
+            </tr>
+            <tr>
+              <td>Services</td>
+              <td><code>app/services/*.py</code></td>
+              <td>Бизнес-правила, actor/membership checks, money lifecycle, receipt reviews, idempotency, audit/domain events.</td>
+            </tr>
+            <tr>
+              <td>Core</td>
+              <td><code>app/core/*.py</code></td>
+              <td>MongoDB, JWT, private S3-compatible storage, request/domain metrics, Sentry/config runtime.</td>
+            </tr>
+            <tr>
+              <td>Web/PWA</td>
+              <td><code>web/</code></td>
+              <td>Backend-served PWA shell: <code>/</code>, <code>/app</code>, <code>/manifest.webmanifest</code>, <code>/sw.js</code>, <code>/assets/*</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section band">
+        <h2>Публичные ссылки</h2>
+        <div class="grid three">
+          <a class="tile" href="https://github.com/Strongf-bob/SplitAppBackend">
+            <strong>GitHub repository</strong>
+            <p class="muted">Исходный код backend, PWA shell, публичная документация, tests, deploy-конфигурация и OpenAPI.</p>
+          </a>
+          <a class="tile" href="https://github.com/Strongf-bob/SplitAppBackend/wiki">
+            <strong>GitHub Wiki</strong>
+            <p class="muted">Человекочитаемая wiki: overview, setup, API reference, security, operations, Splitik.</p>
+          </a>
+          <a class="tile" href="https://github.com/Strongf-bob/SplitAppBackend/blob/main/openapi.yaml">
+            <strong>OpenAPI contract</strong>
+            <p class="muted">Канонический API-контракт backend для клиентов, тестирования и интеграций.</p>
+          </a>
+          <a class="tile" href="https://github.com/Strongf-bob/SplitAppBackend/blob/main/README.md">
+            <strong>README</strong>
+            <p class="muted">Быстрый старт, production compose runtime, health checks и основные команды.</p>
+          </a>
+          <a class="tile" href="https://github.com/Strongf-bob/SplitAppBackend/tree/main/docs/wiki">
+            <strong>Wiki source</strong>
+            <p class="muted">Markdown-источник GitHub Wiki внутри репозитория, синхронизируемый workflow.</p>
+          </a>
+          <a class="tile" href="https://split-app.ru/app">
+            <strong>Production PWA</strong>
+            <p class="muted">Текущая browser-openable версия приложения, которая обслуживается тем же backend.</p>
+          </a>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Что читать дальше</h2>
+        <div class="grid two">
+          <a class="tile" href="flows.html">
+            <strong>Сценарии</strong>
+            <p class="muted">Логин, контакты, friends, событие, invite preview/accept/decline, receipt review, payment request, dispute, закрытие.</p>
+          </a>
+          <a class="tile" href="decisions.html">
+            <strong>Почему так</strong>
+            <p class="muted">Публичное объяснение устройства SplitApp: права, safe ledger-flow, AI draft, модель, PWA, MongoDB.</p>
+          </a>
+          <a class="tile" href="money.html">
+            <strong>Деньги</strong>
+            <p class="muted">Как из чеков и подтвержденных платежей строится ledger и итоговые balances.</p>
+          </a>
+          <a class="tile" href="security.html">
+            <strong>Права и безопасность</strong>
+            <p class="muted">Actor, event access, creator-only правила, closed events, soft delete, idempotency.</p>
+          </a>
+          <a class="tile" href="api-map.html">
+            <strong>API-карта</strong>
+            <p class="muted">Полная карта текущих endpoints из routers, включая Splitik, health, reports и receipt image flow.</p>
+          </a>
+          <a class="tile" href="splitik-agent.html">
+            <strong>Сплитик</strong>
+            <p class="muted">Контекстный агент с attachments, sessions, drafts, guardrails и commit-gated actions.</p>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      Актуализировано по текущим <code>app/routers</code>, <code>app/services</code>, <code>app/schemas.py</code>, <code>docs/wiki</code> и <code>openapi.yaml</code>.
+    </footer>
+  </body>
+</html>

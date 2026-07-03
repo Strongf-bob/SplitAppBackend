@@ -35,6 +35,7 @@ from app.services import splitik_llm
 logger = logging.getLogger("splitapp")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WEB_ROOT = PROJECT_ROOT / "web"
+PUBLIC_DOCS_ROOT = PROJECT_ROOT / "docs" / "business-logic-site"
 
 DEFAULT_CORS_ALLOWED_ORIGINS = (
     "http://localhost:3000",
@@ -158,6 +159,17 @@ def configure_pwa(api: FastAPI) -> None:
         return FileResponse(WEB_ROOT / "sw.js", media_type="application/javascript")
 
 
+def configure_public_docs(api: FastAPI) -> None:
+    if not PUBLIC_DOCS_ROOT.exists():
+        return
+
+    api.mount(
+        "/business-logic",
+        StaticFiles(directory=PUBLIC_DOCS_ROOT, html=True),
+        name="business-logic-docs",
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -196,6 +208,7 @@ def create_app() -> FastAPI:
     configure_exception_handlers(api)
     configure_request_logging(api)
     configure_cors(api)
+    configure_public_docs(api)
     configure_pwa(api)
     return api
 

@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SplitApp Backend: Сплитик агент</title>
+    <style>
+      :root {
+        --blue: #111111;
+        --blue-soft: #f5f5f5;
+        --amber-soft: #f5f5f5;
+        --green-soft: #f5f5f5;
+        --red-soft: #f5f5f5;
+      }
+
+      .splitik-hero {
+        padding-bottom: 18px;
+      }
+
+      .splitik-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 0.95fr) minmax(420px, 1.05fr);
+        gap: 28px;
+        align-items: center;
+      }
+
+      .hero-cardline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 26px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 0 11px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        color: #334155;
+        font-size: 14px;
+        font-weight: 720;
+      }
+
+      .agent-board {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .agent-board-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--line);
+        background: #f8fafc;
+      }
+
+      .status-dot {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ok);
+        font-size: 13px;
+        font-weight: 760;
+      }
+
+      .status-dot::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--ok);
+      }
+
+      .agent-stage {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1px;
+        background: var(--line);
+      }
+
+      .stage-cell {
+        min-height: 158px;
+        padding: 18px;
+        background: #fff;
+      }
+
+      .stage-cell strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .stage-index {
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        margin-bottom: 12px;
+        border-radius: 8px;
+        background: var(--brand);
+        color: #fff;
+        font-weight: 820;
+      }
+
+      .agent-visual {
+        padding: 18px;
+      }
+
+      .pipeline {
+        display: grid;
+        grid-template-columns: 1fr 36px 1fr 36px 1fr;
+        align-items: stretch;
+        gap: 10px;
+      }
+
+      .pipe-block {
+        min-height: 118px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .pipe-block.backend {
+        background: #fff;
+        border-color: var(--line);
+      }
+
+      .pipe-block.model {
+        background: #fff;
+        border-color: var(--line);
+      }
+
+      .pipe-block.draft {
+        background: #fff;
+        border-color: var(--line);
+      }
+
+      .pipe-arrow {
+        display: grid;
+        place-items: center;
+        color: var(--brand-dark);
+        font-size: 26px;
+        font-weight: 820;
+      }
+
+      .capability-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .capability {
+        min-height: 170px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .capability .symbol {
+        display: grid;
+        place-items: center;
+        width: 42px;
+        height: 42px;
+        margin-bottom: 14px;
+        border-radius: 8px;
+        color: #fff;
+        background: var(--brand);
+        font-size: 22px;
+        font-weight: 860;
+      }
+
+      .capability:nth-child(2) .symbol {
+        background: var(--blue);
+      }
+
+      .capability:nth-child(3) .symbol {
+        background: var(--accent);
+      }
+
+      .capability:nth-child(4) .symbol {
+        background: var(--danger);
+      }
+
+      .mode-map {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .mode {
+        min-height: 138px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .mode code {
+        display: inline-block;
+        margin-bottom: 8px;
+      }
+
+      .example-stack {
+        display: grid;
+        gap: 18px;
+      }
+
+      .scenario {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        overflow: hidden;
+      }
+
+      .scenario-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px;
+        border-bottom: 1px solid var(--line);
+        background: #f8fafc;
+      }
+
+      .scenario-header h3 {
+        margin-bottom: 6px;
+      }
+
+      .scenario-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1px;
+        background: var(--line);
+      }
+
+      .scenario-step {
+        padding: 18px;
+        background: #fff;
+      }
+
+      .scenario-step.input {
+        background: #fff;
+      }
+
+      .scenario-step.output {
+        background: #fff;
+      }
+
+      .scenario-step.draft {
+        background: #fff;
+      }
+
+      .label {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        margin-bottom: 12px;
+        padding: 0 9px;
+        border-radius: 8px;
+        background: #fff;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 820;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .terminal {
+        display: block;
+        width: 100%;
+        margin: 0;
+        padding: 14px;
+        border: 1px solid rgba(15, 23, 42, 0.1);
+        border-radius: 8px;
+        overflow-x: auto;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-size: 13px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+      }
+
+      .terminal.light {
+        background: #fff;
+        color: #1e293b;
+      }
+
+      .commit-bar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        gap: 14px;
+        align-items: center;
+        margin-top: 16px;
+      }
+
+      .commit-box {
+        min-height: 92px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .commit-arrow {
+        color: var(--brand-dark);
+        font-size: 26px;
+        font-weight: 860;
+      }
+
+      .guardrail-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .guardrail {
+        min-height: 168px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .guardrail.danger {
+        background: #fff;
+        border-color: var(--line);
+      }
+
+      .guardrail.safe {
+        background: #fff;
+        border-color: var(--line);
+      }
+
+      .source-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      @media (max-width: 980px) {
+        .splitik-shell,
+        .pipeline,
+        .capability-grid,
+        .mode-map,
+        .scenario-grid,
+        .guardrail-grid,
+        .source-list,
+        .commit-bar {
+          grid-template-columns: 1fr;
+        }
+
+        .pipe-arrow,
+        .commit-arrow {
+          transform: rotate(90deg);
+          min-height: 26px;
+        }
+
+        .agent-stage {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+    <link rel="stylesheet" href="assets/decisions.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="nav" aria-label="Основная навигация">
+        <a class="brand" href="index.html"><span class="brand-mark">S</span><span>SplitApp Backend</span></a>
+        <div class="nav-links">
+          <a href="index.html">Обзор</a>
+          <a href="decisions.html">Почему так</a>
+          <a href="flows.html">Сценарии</a>
+          <a href="money.html">Деньги</a>
+          <a href="security.html">Права</a>
+          <a href="api-map.html">API-карта</a>
+          <a href="splitik-agent.html" aria-current="page">Сплитик</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero splitik-hero">
+        <div class="splitik-shell">
+          <div>
+            <p class="eyebrow">ИИ-агент SplitApp</p>
+            <h1>Сплитик уже работает как контекстный агент с безопасными draft actions</h1>
+            <p class="lead">
+              Он читает только разрешенный backend-контекст, помогает с событиями, чеками и долгами,
+              создает черновики действий и не меняет реальные деньги без явного подтверждения.
+            </p>
+            <div class="hero-cardline" aria-label="Ключевые возможности">
+              <span class="chip">контекст по правам</span>
+              <span class="chip">draft first</span>
+              <span class="chip">commit отдельно</span>
+              <span class="chip">guardrails</span>
+              <span class="chip">receipt image draft</span>
+            </div>
+          </div>
+
+          <div class="agent-board" aria-label="Как Сплитик обрабатывает запрос">
+            <div class="agent-board-header">
+              <strong>Splitik runtime</strong>
+              <span class="status-dot">backend-owned</span>
+            </div>
+            <div class="agent-stage">
+              <div class="stage-cell">
+                <span class="stage-index">1</span>
+                <strong>Пользователь пишет</strong>
+                <p class="muted">Текст, режим и entry point: общий экран, событие, чек или участник.</p>
+              </div>
+              <div class="stage-cell">
+                <span class="stage-index">2</span>
+                <strong>Backend собирает факты</strong>
+                <p class="muted">Actor, membership, последние сообщения, active draft, balances и tool results.</p>
+              </div>
+              <div class="stage-cell">
+                <span class="stage-index">3</span>
+                <strong>Ответ плюс draft</strong>
+                <p class="muted">Модель формулирует ответ, а backend хранит и подтверждает только валидные действия.</p>
+              </div>
+            </div>
+            <div class="agent-visual">
+              <div class="pipeline">
+                <div class="pipe-block backend">
+                  <strong>Backend policy</strong>
+                  <p class="muted">Проверяет доступ, режим, session и допустимые capabilities.</p>
+                </div>
+                <div class="pipe-arrow" aria-hidden="true">→</div>
+                <div class="pipe-block model">
+                  <strong>LLM adapter</strong>
+                  <p class="muted">Получает только bounded context и системные правила Сплитика.</p>
+                </div>
+                <div class="pipe-arrow" aria-hidden="true">→</div>
+                <div class="pipe-block draft">
+                  <strong>Draft boundary</strong>
+                  <p class="muted">Создает или обновляет pending draft. Деньги не меняются.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section band">
+        <h2>Что Сплитик умеет сейчас</h2>
+        <div class="capability-grid">
+          <article class="capability">
+            <span class="symbol">?</span>
+            <strong>Объяснять события и долги</strong>
+            <p class="muted">Отвечает на вопросы вроде “кто мне должен” по backend-computed balances, а не по догадкам модели.</p>
+          </article>
+          <article class="capability">
+            <span class="symbol">+</span>
+            <strong>Создавать draft события</strong>
+            <p class="muted">В general mode может подготовить <code>create_event</code> draft из текста пользователя.</p>
+          </article>
+          <article class="capability">
+            <span class="symbol">₽</span>
+            <strong>Готовить draft чека</strong>
+            <p class="muted">В event mode создает <code>create_receipt</code> draft из текста или image attachment.</p>
+          </article>
+          <article class="capability">
+            <span class="symbol">!</span>
+            <strong>Блокировать опасные ответы</strong>
+            <p class="muted">Refusal для домашки, секретов, приватных трат и заявлений модели “я изменил баланс”.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Режимы контекста</h2>
+        <div class="mode-map">
+          <article class="mode">
+            <code>general</code>
+            <strong>Профиль и общий обзор</strong>
+            <p class="muted">Текущий пользователь, его события и accepted friends.</p>
+          </article>
+          <article class="mode">
+            <code>event</code>
+            <strong>Событие</strong>
+            <p class="muted">Участники, receipts, balances, explanations и история события после membership check.</p>
+          </article>
+          <article class="mode">
+            <code>receipt</code>
+            <strong>Чек</strong>
+            <p class="muted">Детали расхода, позиции, share items и связанное событие.</p>
+          </article>
+          <article class="mode">
+            <code>member</code>
+            <strong>Участник</strong>
+            <p class="muted">Контекст конкретного участника только внутри общего видимого события.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>A → B → draft: реальные сценарии</h2>
+        <div class="example-stack">
+          <article class="scenario">
+            <div class="scenario-header">
+              <div>
+                <h3>1. Создать событие из фразы</h3>
+                <p class="muted">Сплитик не создает событие сразу. Он готовит pending draft, который нужно подтвердить.</p>
+              </div>
+              <span class="tag">general mode</span>
+            </div>
+            <div class="scenario-grid">
+              <div class="scenario-step input">
+                <span class="label">A: ввели</span>
+                <pre class="terminal light">{
+  "mode": "general",
+  "message": "Создай событие: Ужин в Duo",
+  "locale": "ru-RU",
+  "timezone": "Europe/Moscow"
+}</pre>
+              </div>
+              <div class="scenario-step output">
+                <span class="label">B: backend ответил</span>
+                <pre class="terminal light">{
+  "intent": "draft",
+  "assistant_message": "Подготовил черновик события.",
+  "guardrail_decision": {
+    "allowed": true,
+    "reason": "allowed"
+  }
+}</pre>
+              </div>
+              <div class="scenario-step draft">
+                <span class="label">Draft</span>
+                <pre class="terminal light">{
+  "type": "create_event",
+  "status": "pending",
+  "payload": {
+    "name": "Ужин в Duo"
+  },
+  "version": 1,
+  "source": "text"
+}</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="scenario">
+            <div class="scenario-header">
+              <div>
+                <h3>2. Добавить чек из текста</h3>
+                <p class="muted">Backend проверяет доступ к событию, строит payload чека и возвращает вопросы для review.</p>
+              </div>
+              <span class="tag warn">event mode</span>
+            </div>
+            <div class="scenario-grid">
+              <div class="scenario-step input">
+                <span class="label">A: ввели</span>
+                <pre class="terminal light">{
+  "mode": "event",
+  "message": "Добавь чек: кофе 1200 рублей",
+  "entry_point": {
+    "type": "event",
+    "event_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+  }
+}</pre>
+              </div>
+              <div class="scenario-step output">
+                <span class="label">B: получили</span>
+                <pre class="terminal light">{
+  "intent": "draft",
+  "questions": [
+    "Кто платил за этот чек?",
+    "Кто участвовал?",
+    "Кто что ел или как делим сумму?"
+  ]
+}</pre>
+              </div>
+              <div class="scenario-step draft">
+                <span class="label">Draft</span>
+                <pre class="terminal light">{
+  "type": "create_receipt",
+  "status": "pending",
+  "source": "text",
+  "payload": {
+    "payer_id": "current-user-id",
+    "title": "Черновик чека",
+    "total_amount_kopecks": 120000,
+    "items": [
+      {
+        "name": "Позиция из сообщения",
+        "cost_kopecks": 120000,
+        "split_mode": "custom"
+      }
+    ]
+  }
+}</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="scenario">
+            <div class="scenario-header">
+              <div>
+                <h3>3. Ответить на вопросы и обновить draft</h3>
+                <p class="muted">Если session та же, Сплитик находит active pending draft и закрывает вопросы без commit.</p>
+              </div>
+              <span class="tag">same session</span>
+            </div>
+            <div class="scenario-grid">
+              <div class="scenario-step input">
+                <span class="label">A: follow-up</span>
+                <pre class="terminal light">{
+  "session_id": "same-session-id",
+  "mode": "event",
+  "message": "Я платил, были все участники, делим поровну"
+}</pre>
+              </div>
+              <div class="scenario-step output">
+                <span class="label">B: backend применил</span>
+                <pre class="terminal light">{
+  "intent": "draft",
+  "questions": [],
+  "drafts": [
+    {
+      "id": "draft-id",
+      "version": 2
+    }
+  ]
+}</pre>
+              </div>
+              <div class="scenario-step draft">
+                <span class="label">Metadata</span>
+                <pre class="terminal light">{
+  "model_metadata": {
+    "answered_question_ids": [
+      "payer",
+      "participants",
+      "split_details"
+    ]
+  }
+}</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="scenario">
+            <div class="scenario-header">
+              <div>
+                <h3>4. Исправить сумму в текущем draft</h3>
+                <p class="muted">Команда “поменяй” обновляет pending draft, если он привязан к этой session.</p>
+              </div>
+              <span class="tag">update draft</span>
+            </div>
+            <div class="scenario-grid">
+              <div class="scenario-step input">
+                <span class="label">A: ввели</span>
+                <pre class="terminal light">{
+  "session_id": "same-session-id",
+  "mode": "event",
+  "message": "Поменяй сумму на 1500 рублей"
+}</pre>
+              </div>
+              <div class="scenario-step output">
+                <span class="label">B: обновилось</span>
+                <pre class="terminal light">{
+  "intent": "draft",
+  "drafts": [
+    {
+      "id": "draft-id",
+      "version": 3,
+      "status": "pending"
+    }
+  ]
+}</pre>
+              </div>
+              <div class="scenario-step draft">
+                <span class="label">Draft patch</span>
+                <pre class="terminal light">{
+  "payload": {
+    "total_amount_kopecks": 150000,
+    "items": [
+      {
+        "cost_kopecks": 150000
+      }
+    ]
+  }
+}</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="scenario">
+            <div class="scenario-header">
+              <div>
+                <h3>5. Создать draft чека по фото</h3>
+                <p class="muted">Фото хранится приватно. Модель получает sanitized metadata, а backend валидирует результат как receipt request.</p>
+              </div>
+              <span class="tag warn">image</span>
+            </div>
+            <div class="scenario-grid">
+              <div class="scenario-step input">
+                <span class="label">A: отправили</span>
+                <pre class="terminal light">POST /api/splitik/attachments
+file=receipt.jpg
+
+POST /api/splitik/messages
+{
+  "mode": "event",
+  "message": "Создай черновик чека по фото",
+  "attachment_ids": ["attachment-id"]
+}</pre>
+              </div>
+              <div class="scenario-step output">
+                <span class="label">B: модель видит</span>
+                <pre class="terminal light">{
+  "attachment_metadata": {
+    "id": "attachment-id",
+    "filename": "receipt.jpg",
+    "content_type": "image/jpeg",
+    "size_bytes": 12345
+  },
+  "human_review_required": true
+}</pre>
+              </div>
+              <div class="scenario-step draft">
+                <span class="label">Draft</span>
+                <pre class="terminal light">{
+  "type": "create_receipt",
+  "source": "image",
+  "status": "pending",
+  "attachment_ids": ["attachment-id"],
+  "payload": {
+    "title": "Кофе",
+    "category": "Кафе",
+    "total_amount_kopecks": 1000
+  }
+}</pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="scenario">
+            <div class="scenario-header">
+              <div>
+                <h3>6. Спросить, кто мне должен</h3>
+                <p class="muted">Расчеты делает backend. LLM только переводит уже посчитанные balances в понятный ответ.</p>
+              </div>
+              <span class="tag">explain</span>
+            </div>
+            <div class="scenario-grid">
+              <div class="scenario-step input">
+                <span class="label">A: спросили</span>
+                <pre class="terminal light">{
+  "mode": "general",
+  "message": "Кто мне должен деньги?"
+}</pre>
+              </div>
+              <div class="scenario-step output">
+                <span class="label">B: backend context</span>
+                <pre class="terminal light">{
+  "user_balance_summary": {
+    "outstanding_owed_kopecks": 0,
+    "outstanding_receivable_kopecks": 5000,
+    "events": [
+      {
+        "event": { "name": "Trip" },
+        "balances": [
+          {
+            "debitor_id": "user-b",
+            "creditor_id": "user-a",
+            "amount_kopecks": 5000
+          }
+        ]
+      }
+    ]
+  }
+}</pre>
+              </div>
+              <div class="scenario-step draft">
+                <span class="label">Ответ</span>
+                <pre class="terminal light">Сплитик объясняет:
+"В Trip вам должны 50 рублей.
+Расчет взят из подтвержденных чеков
+и подтвержденных платежей."</pre>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section band">
+        <h2>Граница commit: где реально меняется состояние</h2>
+        <p class="lead">
+          Обычный ответ Сплитика не создает деньги, не подтверждает чек и не закрывает долг.
+          State-changing операция проходит через отдельный backend endpoint.
+        </p>
+        <div class="commit-bar">
+          <div class="commit-box">
+            <strong>До commit</strong>
+            <p class="muted">В базе есть <code>splitik_drafts</code> со статусом <code>pending</code>. Пользователь может проверить и отредактировать payload.</p>
+          </div>
+          <div class="commit-arrow" aria-hidden="true">→</div>
+          <div class="commit-box">
+            <strong>POST /api/splitik/drafts/{id}/commit</strong>
+            <p class="muted">Backend проверяет owner, pending status и тип draft, затем создает событие или receipt draft в обычной доменной логике.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Что Сплитик специально не может</h2>
+        <div class="guardrail-grid">
+          <article class="guardrail danger">
+            <strong>Не удаляет события по просьбе модели</strong>
+            <p class="muted">Запрещенные capabilities включают <code>forbidden:delete_event</code> и прямое изменение money state.</p>
+          </article>
+          <article class="guardrail danger">
+            <strong>Не раскрывает чужие приватные траты</strong>
+            <p class="muted">Вне общего события запросы про личные траты другого пользователя блокируются.</p>
+          </article>
+          <article class="guardrail safe">
+            <strong>Не верит клиентскому user id</strong>
+            <p class="muted">Actor берется из auth dependency, а доступ к событию, чеку и draft проверяется на backend.</p>
+          </article>
+        </div>
+
+        <div class="scenario" style="margin-top: 18px;">
+          <div class="scenario-header">
+            <div>
+              <h3>Пример refusal</h3>
+              <p class="muted">Если запрос не про SplitApp, backend отказывает до LLM-вызова.</p>
+            </div>
+            <span class="tag error">guardrail</span>
+          </div>
+          <div class="scenario-grid">
+            <div class="scenario-step input">
+              <span class="label">A: ввели</span>
+              <pre class="terminal light">{
+  "mode": "general",
+  "message": "Реши домашку по алгебре"
+}</pre>
+            </div>
+            <div class="scenario-step output">
+              <span class="label">B: получили</span>
+              <pre class="terminal light">{
+  "intent": "refusal",
+  "assistant_message": "Я могу помогать только со SplitApp: событиями, чеками, долгами и личными тратами.",
+  "guardrail_decision": {
+    "allowed": false,
+    "reason": "out_of_scope_homework"
+  }
+}</pre>
+            </div>
+            <div class="scenario-step draft">
+              <span class="label">Draft</span>
+              <pre class="terminal light">[]</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Источники правды в backend</h2>
+        <div class="source-list">
+          <article class="tile">
+            <strong><code>app/routers/splitik.py</code></strong>
+            <p class="muted">Endpoints: attachments, messages, sessions, drafts, update draft и commit draft.</p>
+          </article>
+          <article class="tile">
+            <strong><code>app/services/splitik.py</code></strong>
+            <p class="muted">Контекст, modes, session flow, draft detection, tool results и guardrail pass.</p>
+          </article>
+          <article class="tile">
+            <strong><code>app/services/splitik_tools.py</code></strong>
+            <p class="muted">Создание, обновление, чтение и commit draft, плюс backend balance summary.</p>
+          </article>
+          <article class="tile">
+            <strong><code>docs/wiki/Splitik-Agent.md</code></strong>
+            <p class="muted">Подробное описание runtime config, возможностей, ограничений и JSON-примеров.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      Сгенерировано как локальная визуализация текущего backend-состояния Сплитика. Деньги меняются только после подтвержденного backend commit.
+    </footer>
+  </body>
+</html>

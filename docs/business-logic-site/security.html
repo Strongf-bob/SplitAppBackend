@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SplitApp Backend: права и безопасность</title>
+    <link rel="stylesheet" href="assets/decisions.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="nav" aria-label="Основная навигация">
+        <a class="brand" href="index.html"><span class="brand-mark">S</span><span>SplitApp Backend</span></a>
+        <div class="nav-links">
+          <a href="index.html">Обзор</a>
+          <a href="decisions.html">Почему так</a>
+          <a href="flows.html">Сценарии</a>
+          <a href="money.html">Деньги</a>
+          <a href="security.html" aria-current="page">Права</a>
+          <a href="api-map.html">API-карта</a>
+          <a href="splitik-agent.html">Сплитик</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Auth, access, invariants</p>
+        <h1>Кто имеет право менять деньги и участников</h1>
+        <p class="lead">
+          Backend не доверяет user id из payload как доказательству прав. Каждая защищенная операция начинается
+          с authenticated actor, затем проверяет membership, роль, статус friendship/request/receipt/payment и состояние события.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Базовая матрица прав</h2>
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>Операция</th>
+              <th>Кто может</th>
+              <th>Ключевые проверки</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Создать событие</td>
+              <td>Authenticated user</td>
+              <td>Пользователь существует, name не пустой, политики валидны.</td>
+            </tr>
+            <tr>
+              <td>Читать событие, чеки, платежи, балансы</td>
+              <td>Active event member</td>
+              <td><code>assert_event_access</code> по actor и active membership.</td>
+            </tr>
+            <tr>
+              <td>Менять политики или закрывать событие</td>
+              <td>Creator</td>
+              <td><code>assert_event_creator</code>.</td>
+            </tr>
+            <tr>
+              <td>Добавлять участников или invites</td>
+              <td>Зависит от <code>participants_invite_policy</code></td>
+              <td>Creator-only по умолчанию; open event; preview/accept/decline/revoke для invite lifecycle.</td>
+            </tr>
+            <tr>
+              <td>Создать чек</td>
+              <td>Creator или participants, согласно policy</td>
+              <td>Open event, payer/share users внутри event, сумма items совпадает с total.</td>
+            </tr>
+            <tr>
+              <td>Подтвердить чек</td>
+              <td>Creator или payer, согласно policy</td>
+              <td>Receipt status должен быть draft или ready_for_review.</td>
+            </tr>
+            <tr>
+              <td>Validate receipt и share review</td>
+              <td>Authorized event member</td>
+              <td>Draft переводится в pending_confirmation; каждый участник принимает или спорит только свою долю.</td>
+            </tr>
+            <tr>
+              <td>Создать payment</td>
+              <td>Sender</td>
+              <td><code>sender_id == actor_user_id</code>, обе стороны участники event, sender != receiver.</td>
+            </tr>
+            <tr>
+              <td>Подтвердить или отклонить payment</td>
+              <td>Receiver</td>
+              <td><code>actor_user_id == receiver_id</code>, event open, confirmed payment нельзя reject/delete.</td>
+            </tr>
+            <tr>
+              <td>Создать payment request</td>
+              <td>Creditor</td>
+              <td><code>creditor_id == actor_user_id</code>, debtor и creditor разные active members события.</td>
+            </tr>
+            <tr>
+              <td>Acknowledge / mark-paid / extension</td>
+              <td>Debtor</td>
+              <td>Debtor управляет своей реакцией на request, но mark-paid создает только pending payment.</td>
+            </tr>
+            <tr>
+              <td>Cancel payment request</td>
+              <td>Creditor</td>
+              <td>Creditor может отменить request, пока lifecycle допускает cancel.</td>
+            </tr>
+            <tr>
+              <td>Dispute</td>
+              <td>Сторона ресурса или event member</td>
+              <td>Споры создаются только в рамках доступного события и ресурса.</td>
+            </tr>
+            <tr>
+              <td>Friend request lifecycle</td>
+              <td>Requester / addressee</td>
+              <td>Accept/reject делает addressee, remove/block доступны участникам friendship по сервисным правилам.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section band">
+        <h2>Инварианты безопасности</h2>
+        <div class="grid three">
+          <article class="tile">
+            <strong>Actor-first authorization</strong>
+            <p class="muted">Payload может содержать sender_id, payer_id, debtor_id, но эти поля всегда сверяются с actor или membership.</p>
+          </article>
+          <article class="tile">
+            <strong>Closed event lock</strong>
+            <p class="muted">После закрытия события финансовые mutations отклоняются, а чтение остается доступным участникам.</p>
+          </article>
+          <article class="tile">
+            <strong>Soft deletes</strong>
+            <p class="muted">События, чеки и платежи помечаются <code>deleted_at</code>, чтобы сохранить след и исключить их из active query.</p>
+          </article>
+          <article class="tile">
+            <strong>Idempotency</strong>
+            <p class="muted">Create receipt/payment/payment request/mark-paid используют Idempotency-Key для защиты от повторных POST.</p>
+          </article>
+          <article class="tile">
+            <strong>Confirmation summaries</strong>
+            <p class="muted">Опасные confirm/void/reject действия имеют отдельный summary endpoint перед mutation.</p>
+          </article>
+          <article class="tile">
+            <strong>Visibility-limited users</strong>
+            <p class="muted">Список users не является dump всей базы: видны actor и пользователи из общих событий, search работает opt-in.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Валидация данных</h2>
+        <div class="grid two">
+          <article class="rule">
+            <strong>Чеки</strong>
+            <p class="muted">Позиции обязательны, стоимость больше 0, сумма всех positions должна совпадать с total, share values каждой позиции должны суммироваться в 1.</p>
+          </article>
+          <article class="rule">
+            <strong>Пользователи</strong>
+            <p class="muted">Публичный handle нормализуется, проверяется регуляркой и уникальностью. Search opt-in через <code>discovery_enabled</code>.</p>
+          </article>
+          <article class="rule">
+            <strong>Payment requests</strong>
+            <p class="muted">Creditor должен быть actor, debtor и creditor должны быть разными участниками event, deadline с timezone и минимум 30 минут вперед.</p>
+          </article>
+          <article class="rule">
+            <strong>Receipt images</strong>
+            <p class="muted">Изображения чеков хранятся приватно. Чтение идет через presigned URL, replacement/delete должны убирать старое состояние storage.</p>
+          </article>
+          <article class="rule">
+            <strong>Контакты</strong>
+            <p class="muted">Импорт контактов owner-scoped: сохраняется display name, нормализованный phone/hash и optional matched user, но не глобальная адресная книга.</p>
+          </article>
+          <article class="rule">
+            <strong>Splitik</strong>
+            <p class="muted">Агент получает bounded context после membership checks; commit draft снова проходит обычную backend-доменную логику.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Операционная надежность</h2>
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>Механизм</th>
+              <th>Зачем нужен</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Idempotency key</td>
+              <td>Повторный POST после сетевого сбоя не должен создать второй чек, payment или payment request.</td>
+            </tr>
+            <tr>
+              <td>Audit events</td>
+              <td>Критичные действия вроде delete, confirm, profile update оставляют серверный след.</td>
+            </tr>
+            <tr>
+              <td>Metrics</td>
+              <td>Backend пишет service/domain metrics, request metrics и money observations.</td>
+            </tr>
+            <tr>
+              <td>Generic unexpected errors</td>
+              <td>Клиент не получает внутренние детали неожиданных failure, но сервер логирует request context.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <footer class="footer">
+      Реализация: <code>app/dependencies.py</code>, <code>app/services/access.py</code>, <code>app/services/idempotency.py</code>, <code>docs/security-baseline.md</code>.
+    </footer>
+  </body>
+</html>

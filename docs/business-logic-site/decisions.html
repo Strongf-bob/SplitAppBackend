@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Устройство SplitApp - логика, права и решения</title>
+    <link rel="stylesheet" href="assets/decisions.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="decisions.html" aria-label="SplitApp decision rationale">SplitApp</a>
+      <nav class="nav" aria-label="Разделы страницы">
+        <a href="#model">Модель</a>
+        <a href="#science">Методика</a>
+        <a href="#ledger">Ledger</a>
+        <a href="#permissions">Права</a>
+        <a href="#architecture">Архитектура</a>
+        <a href="#risks">Риски</a>
+      </nav>
+      <a class="link" href="index.html">Техдокументация</a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">System design</p>
+        <h1>Устройство SplitApp</h1>
+        <p class="lead">
+          Это публичное объяснение того, как устроен SplitApp: роли и права, safe ledger-flow,
+          AI-черновики чеков, выбор модели по benchmark, расчет долгов, платежи, хранение чеков
+          и backend как источник правды.
+        </p>
+        <div class="decision-grid" aria-label="Ключевые решения">
+          <article>
+            <span>01</span>
+            <strong>Backend решает права</strong>
+            <p>Frontend отправляет намерение, но сервер проверяет actor, membership, роль и состояние события.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <strong>Ledger только из confirmed</strong>
+            <p>Draft, pending и disputed не смешиваются с итоговым долгом, пока действие не подтверждено.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <strong>AI остается помощником</strong>
+            <p>Модель создает проверяемый receipt draft, но не может сама создать финансовое обязательство.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="model">
+        <div class="section-head">
+          <p class="eyebrow">Model choice</p>
+          <h2>Почему primary-выбор - MiniMax M3</h2>
+          <p>
+            По PDF-dashboard на 803 российских чеках выбор упирается не в вопрос “какая модель самая умная”,
+            а в вопрос “какая модель даст приемлемое качество в реальном пользовательском ожидании”.
+            Qwen 3.7 Plus качественнее, но MiniMax M3 примерно в 3.3 раза быстрее по медианной задержке.
+          </p>
+        </div>
+
+        <div class="verdict">
+          <div>
+            <span>Решение для продукта</span>
+            <strong>MiniMax M3 - primary receipt model</strong>
+            <p>
+              Используем как основной путь для массовой обработки чеков: он быстрее, стабильнее для
+              near-realtime UX и по balanced score выигрывает у Qwen за счет скорости.
+            </p>
+          </div>
+          <div>
+            <span>Решение для качества</span>
+            <strong>Qwen 3.7 Plus - escalation / quality check</strong>
+            <p>
+              Используем для сложных, длинных или спорных чеков, где качество позиций важнее скорости,
+              либо как вторую модель для cross-check.
+            </p>
+          </div>
+        </div>
+
+        <div class="table-wrap" aria-label="Сравнение моделей OCR">
+          <table>
+            <thead>
+              <tr>
+                <th>Модель</th>
+                <th>Quality</th>
+                <th>Speed</th>
+                <th>Balanced</th>
+                <th>Total match</th>
+                <th>Item name+price</th>
+                <th>p50</th>
+                <th>p95</th>
+                <th>Parse errors</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="winner">
+                <td><strong>minimax-m3</strong></td>
+                <td>83.0</td>
+                <td>100.0</td>
+                <td><strong>88.1</strong></td>
+                <td>90.7%</td>
+                <td>63.9%</td>
+                <td><strong>6.02s</strong></td>
+                <td>12.14s</td>
+                <td>7</td>
+              </tr>
+              <tr>
+                <td><strong>qwen3.7-plus</strong></td>
+                <td><strong>90.4</strong></td>
+                <td>30.2</td>
+                <td>72.3</td>
+                <td><strong>95.1%</strong></td>
+                <td><strong>78.9%</strong></td>
+                <td>19.94s</td>
+                <td>49.20s</td>
+                <td><strong>0</strong></td>
+              </tr>
+              <tr>
+                <td>qwen3.6-plus</td>
+                <td>90.2</td>
+                <td>31.5</td>
+                <td>72.6</td>
+                <td>94.9%</td>
+                <td>78.6%</td>
+                <td>19.11s</td>
+                <td>62.95s</td>
+                <td>2</td>
+              </tr>
+              <tr>
+                <td>mimo-v2.5</td>
+                <td>76.3</td>
+                <td>27.8</td>
+                <td>61.8</td>
+                <td>84.4%</td>
+                <td>58.2%</td>
+                <td>21.63s</td>
+                <td>56.32s</td>
+                <td>79</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="metrics-grid">
+          <article>
+            <span>+4.4 п.п.</span>
+            <p>Qwen 3.7 Plus лучше MiniMax по совпадению итоговой суммы: 95.1% против 90.7%.</p>
+          </article>
+          <article>
+            <span>+15.0 п.п.</span>
+            <p>Qwen 3.7 Plus лучше MiniMax по item name+price recall: 78.9% против 63.9%.</p>
+          </article>
+          <article>
+            <span>3.31x</span>
+            <p>Qwen 3.7 Plus медленнее MiniMax по p50 latency: 19.94s против 6.02s.</p>
+          </article>
+          <article>
+            <span>0 errors</span>
+            <p>Qwen 3.7 Plus не дал parse errors на этом прогоне, что важно для quality-check режима.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="science">
+        <div class="section-head">
+          <p class="eyebrow">Scientific layer</p>
+          <h2>Как интерпретировались benchmark-метрики</h2>
+          <p>
+            Решение не строится на одном графике. Мы разделяем качество извлечения, пригодность ответа
+            для автоматической обработки и пользовательскую задержку. Поэтому у нас есть три режима оценки:
+            quality first, balanced и speed first.
+          </p>
+        </div>
+
+        <div class="definition-grid">
+          <article>
+            <h3>Total match</h3>
+            <p>Доля чеков, где итоговая сумма совпала с ground-truth разметкой. Это главная сумма, но не вся структура чека.</p>
+          </article>
+          <article>
+            <h3>Item name+price recall</h3>
+            <p>Доля товарных строк, где название похоже на target и совпала сумма строки. Это ключевая метрика для детального парсинга.</p>
+          </article>
+          <article>
+            <h3>Valid JSON rate</h3>
+            <p>Доля ответов, которые прошли JSON/schema validation. Без этого модельный ответ сложно безопасно автоматизировать.</p>
+          </article>
+          <article>
+            <h3>p50 / p95 latency</h3>
+            <p>Медианная и 95-перцентильная задержка. p50 влияет на обычный UX, p95 показывает тяжелые хвосты ожидания.</p>
+          </article>
+          <article>
+            <h3>Quality score</h3>
+            <p>Агрегат качества: 45% Total match, 35% Item name+price recall, 20% Valid JSON.</p>
+          </article>
+          <article>
+            <h3>Balanced score</h3>
+            <p>70% Quality score и 30% Speed score. Эта метрика не заменяет продуктовый выбор, но показывает компромисс.</p>
+          </article>
+        </div>
+
+        <div class="scenario-block">
+          <h3>Сценарии выбора</h3>
+          <div class="scenario-grid">
+            <article>
+              <strong>Quality first</strong>
+              <p>Если важнее всего точность позиций и нулевая терпимость к parse errors, выбираем Qwen 3.7 Plus.</p>
+            </article>
+            <article>
+              <strong>Balanced</strong>
+              <p>Если качество важно, но пользователь не должен ждать 20 секунд на обычный чек, выигрывает MiniMax M3.</p>
+            </article>
+            <article>
+              <strong>Speed first</strong>
+              <p>Если нужен массовый поток и near-realtime UX, MiniMax M3 остается единственным рациональным primary-кандидатом.</p>
+            </article>
+          </div>
+        </div>
+
+        <div class="note">
+          <strong>Источник данных:</strong>
+          локальный benchmark из PDF “Receipt OCR Model Choice Dashboard”, результаты `results/combined_4model_analytics`,
+          построенные из `results/runs/*/results.jsonl` и `data/annotations_non_empty_target.jsonl`.
+          В основной анализ вошли 803 чека с непустой ground-truth разметкой; 197 чеков с пустой разметкой исключены.
+        </div>
+      </section>
+
+      <section class="section" id="receipt-flow">
+        <div class="section-head">
+          <p class="eyebrow">Why multimodal, not OCR-only</p>
+          <h2>Почему чек распознается как структура, а не как сырой текст</h2>
+          <p>
+            Классический OCR отвечает на вопрос “какие символы видны на изображении”. SplitApp решает другую
+            задачу: “какие финансовые сущности надо предложить пользователю в черновике”. Поэтому модель должна
+            извлечь не только текст, но и смысловые поля.
+          </p>
+        </div>
+
+        <div class="compare">
+          <article>
+            <h3>OCR-first pipeline</h3>
+            <p>
+              Требует отдельного OCR-движка, постобработки строк, восстановления позиций, исправления переносов
+              и отдельной логики сборки JSON. Без выделенного GPU-сервера такой контур становится медленным,
+              сложным в эксплуатации и дорогим по времени разработки.
+            </p>
+          </article>
+          <article>
+            <h3>Multimodal draft pipeline</h3>
+            <p>
+              Модель видит изображение и сразу предлагает структурированный receipt draft: магазин, итог,
+              позиции, суммы, возможные ошибки. Backend валидирует JSON, сохраняет model metadata и не дает
+              черновику изменить баланс без подтверждения человека.
+            </p>
+          </article>
+        </div>
+
+        <div class="logic-list">
+          <div>
+            <span>01</span>
+            <p>Фото чека или текстовый ввод превращается только в draft payload.</p>
+          </div>
+          <div>
+            <span>02</span>
+            <p>Backend проверяет JSON/schema, payer, participants, totals, shares и membership.</p>
+          </div>
+          <div>
+            <span>03</span>
+            <p>Пользователь видит editable review card и исправляет ошибки до финансовой мутации.</p>
+          </div>
+          <div>
+            <span>04</span>
+            <p>Только подтвержденный receipt попадает в ledger и влияет на balances.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="ledger">
+        <div class="section-head">
+          <p class="eyebrow">Financial safety</p>
+          <h2>Почему SplitApp строится вокруг safe ledger-flow</h2>
+          <p>
+            В приложениях для общих расходов ошибка воспринимается не как технический баг, а как несправедливый долг.
+            Поэтому SplitApp разделяет событие, участие, чек, подтверждение, оплату и закрытие события.
+          </p>
+        </div>
+
+        <ol class="timeline">
+          <li>
+            <strong>Event</strong>
+            <p>Сначала создается пространство расходов. Само событие еще не означает финансовое обязательство.</p>
+          </li>
+          <li>
+            <strong>Participants</strong>
+            <p>Пользователь должен быть участником события. Client-supplied user ID не дает прав сам по себе.</p>
+          </li>
+          <li>
+            <strong>Receipt draft</strong>
+            <p>Ручной ввод, AI или image-flow сначала создают черновик, который можно проверить и исправить.</p>
+          </li>
+          <li>
+            <strong>Review</strong>
+            <p>Пользователь проверяет позиции, суммы, плательщика и доли участников до подтверждения.</p>
+          </li>
+          <li>
+            <strong>Confirmed ledger</strong>
+            <p>Только confirmed receipts и confirmed payments участвуют в итоговом расчете долга.</p>
+          </li>
+          <li>
+            <strong>Payment confirmation</strong>
+            <p>Заявление “я оплатил” отделено от факта “получатель подтвердил получение”.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="section" id="permissions">
+        <div class="section-head">
+          <p class="eyebrow">Permissions model</p>
+          <h2>Как устроены роли, доступ и права на операции</h2>
+          <p>
+            В SplitApp права нельзя выводить из того, что пришло в payload. Любой пользовательский ID в запросе
+            воспринимается как данные, а не как доказательство права. Сначала backend определяет authenticated actor,
+            затем проверяет membership события, роль пользователя и состояние доменного объекта.
+          </p>
+        </div>
+
+        <div class="permission-model">
+          <article>
+            <span>Actor</span>
+            <h3>Кто реально делает запрос</h3>
+            <p>
+              Actor берется из access token. Если payload содержит `sender_id`, `payer_id` или `receiver_id`,
+              backend все равно сверяет эти поля с authenticated actor или с правами actor внутри события.
+            </p>
+          </article>
+          <article>
+            <span>Membership</span>
+            <h3>Есть ли доступ к событию</h3>
+            <p>
+              Читать событие, чеки, платежи и балансы может только creator или active event member.
+              Это защищает финансы и чеки от просмотра людьми вне события.
+            </p>
+          </article>
+          <article>
+            <span>State</span>
+            <h3>Можно ли менять объект сейчас</h3>
+            <p>
+              Closed event блокирует финансовые mutations. Confirmed payment нельзя откатить простым update.
+              Receipt draft и confirmed receipt имеют разные права и последствия.
+            </p>
+          </article>
+        </div>
+
+        <div class="table-wrap permission-table" aria-label="Матрица прав SplitApp">
+          <table>
+            <thead>
+              <tr>
+                <th>Операция</th>
+                <th>Кто может</th>
+                <th>Почему именно так</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Создать событие</strong></td>
+                <td>Authenticated user</td>
+                <td>Любой вошедший пользователь может начать пространство расходов, где он становится creator.</td>
+              </tr>
+              <tr>
+                <td><strong>Читать событие, чеки, платежи, балансы</strong></td>
+                <td>Creator или active member</td>
+                <td>Финансовые данные события видны только людям, которые реально участвуют в этом событии.</td>
+              </tr>
+              <tr>
+                <td><strong>Менять политики или закрывать событие</strong></td>
+                <td>Creator</td>
+                <td>Изменение правил и lifecycle события влияет на всех участников, поэтому это creator-only зона.</td>
+              </tr>
+              <tr>
+                <td><strong>Добавлять участников или invite links</strong></td>
+                <td>Creator или policy-based members</td>
+                <td>Базово безопаснее creator-only; если политика разрешает шире, backend все равно проверяет event state.</td>
+              </tr>
+              <tr>
+                <td><strong>Создать чек</strong></td>
+                <td>Authorized event member</td>
+                <td>Payer и share users должны быть участниками события, а сумма items должна сходиться с total.</td>
+              </tr>
+              <tr>
+                <td><strong>Подтвердить чек</strong></td>
+                <td>Creator или payer по policy</td>
+                <td>Подтверждение переводит расход ближе к ledger, поэтому это не обычное редактирование формы.</td>
+              </tr>
+              <tr>
+                <td><strong>Создать payment</strong></td>
+                <td>Sender</td>
+                <td>Backend требует `sender_id == actor_user_id`, иначе пользователь мог бы заявить оплату от чужого имени.</td>
+              </tr>
+              <tr>
+                <td><strong>Подтвердить или отклонить payment</strong></td>
+                <td>Receiver</td>
+                <td>Только получатель может подтвердить, что деньги действительно пришли.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="security-grid">
+          <article>
+            <h3>Actor-first authorization</h3>
+            <p>Проверка начинается с authenticated actor, а не с user ID, который клиент прислал в JSON.</p>
+          </article>
+          <article>
+            <h3>Closed event lock</h3>
+            <p>После закрытия события чтение остается, но новые чеки, платежи и money-changing операции отклоняются.</p>
+          </article>
+          <article>
+            <h3>Private receipt images</h3>
+            <p>Изображения чеков хранятся приватно; чтение идет через временный presigned URL.</p>
+          </article>
+          <article>
+            <h3>Soft deletes</h3>
+            <p>Security-sensitive deletes сохраняют след через `deleted_at`, чтобы не терять историю финансовых действий.</p>
+          </article>
+          <article>
+            <h3>Idempotency keys</h3>
+            <p>Повторный POST после сетевого сбоя не должен создать второй чек, payment или payment request.</p>
+          </article>
+          <article>
+            <h3>Generic client errors</h3>
+            <p>Клиент получает безопасную ошибку, а подробности unexpected failure остаются в серверных логах.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="architecture">
+        <div class="section-head">
+          <p class="eyebrow">Architecture</p>
+          <h2>Почему такой backend, база и PWA-контур</h2>
+          <p>
+            Архитектура выбрана не ради моды на стек, а под конкретные свойства продукта: объяснимость,
+            быстрый demo-flow, строгие server-side проверки и эволюция доменной модели чеков.
+          </p>
+        </div>
+
+        <div class="architecture">
+          <article>
+            <h3>FastAPI</h3>
+            <p>
+              Удобен для явного API-контракта, Pydantic-схем, dependency checks, OpenAPI и сервисных regression tests.
+              Это важно, потому что frontend не должен сам решать, кто что может делать с деньгами.
+            </p>
+          </article>
+          <article>
+            <h3>MongoDB</h3>
+            <p>
+              Подходит для событий, чеков, item shares, receipt draft metadata, audit fields и постепенно меняющихся
+              AI-структур. Документная модель снижает friction при изменении формы черновика и диагностических данных.
+            </p>
+          </article>
+          <article>
+            <h3>Backend-served PWA</h3>
+            <p>
+              Один deployment-контур упрощает показ продукта: PWA открывается рядом с API, использует тот же backend
+              и не требует отдельной frontend-инфраструктуры для публичного demo-flow.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="market">
+        <div class="section-head">
+          <p class="eyebrow">Market comparison</p>
+          <h2>Что взято из международных split-expense сценариев</h2>
+          <p>
+            SplitApp не копирует один продукт. Он собирает несколько зрелых паттернов и добавляет строгий
+            backend-first safety layer.
+          </p>
+        </div>
+
+        <div class="market">
+          <article>
+            <strong>Splitwise-style</strong>
+            <p>События, участники, балансы и взаимозачет как базовый mental model.</p>
+          </article>
+          <article>
+            <strong>Tab-style</strong>
+            <p>Разделение конкретных позиций чека, а не только итоговой суммы.</p>
+          </article>
+          <article>
+            <strong>Tricount / Settle Up-style</strong>
+            <p>Прозрачность происхождения долга и понятные расчеты между участниками.</p>
+          </article>
+          <article>
+            <strong>Request / pay pattern</strong>
+            <p>Отдельная стадия запроса оплаты, заявления об оплате и подтверждения получателем.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="risks">
+        <div class="section-head">
+          <p class="eyebrow">Risk control</p>
+          <h2>Какие риски закрывает такая схема</h2>
+        </div>
+
+        <div class="risk-grid">
+          <article>
+            <h3>Ошибка модели</h3>
+            <p>AI-output не влияет на баланс напрямую. Ошибка остается в draft и исправляется до confirmed receipt.</p>
+          </article>
+          <article>
+            <h3>Слишком долгий ответ</h3>
+            <p>Primary-модель выбирается по скорости; медленная quality-модель используется только там, где это оправдано.</p>
+          </article>
+          <article>
+            <h3>Чужие данные</h3>
+            <p>Backend проверяет authenticated actor и membership рядом с операцией, а не доверяет frontend.</p>
+          </article>
+          <article>
+            <h3>Спорный долг</h3>
+            <p>Pending, disputed и confirmed не смешиваются в одну сумму, чтобы пользователь видел статус денег.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="closing">
+        <p class="eyebrow">Documentation bridge</p>
+        <h2>Дальше - технические детали</h2>
+        <p>
+          Эта страница объясняет “почему”. Остальные разделы показывают “как”: сценарии, расчет денег,
+          права доступа, API-карта и работа Splitик-агента.
+        </p>
+        <div class="closing-links">
+          <a href="flows.html">Сценарии</a>
+          <a href="money.html">Деньги</a>
+          <a href="security.html">Права</a>
+          <a href="api-map.html">API-карта</a>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

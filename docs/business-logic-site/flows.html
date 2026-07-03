@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SplitApp Backend: сценарии</title>
+    <link rel="stylesheet" href="assets/decisions.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="nav" aria-label="Основная навигация">
+        <a class="brand" href="index.html"><span class="brand-mark">S</span><span>SplitApp Backend</span></a>
+        <div class="nav-links">
+          <a href="index.html">Обзор</a>
+          <a href="decisions.html">Почему так</a>
+          <a href="flows.html" aria-current="page">Сценарии</a>
+          <a href="money.html">Деньги</a>
+          <a href="security.html">Права</a>
+          <a href="api-map.html">API-карта</a>
+          <a href="splitik-agent.html">Сплитик</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Путь пользователя</p>
+        <h1>Актуальные сценарии от входа до закрытия долгов</h1>
+        <p class="lead">
+          Текущий backend строит путь вокруг события, explicit review и подтверждений. Финансовые операции
+          проходят через draft, pending, disputed и confirmed состояния, а frontend не принимает решения
+          по правам вместо сервера.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Happy path: общий расход</h2>
+        <ol class="steps">
+          <li><strong>Пользователь логинится.</strong> iOS получает Yandex token и отправляет его в backend. Backend выдает app access token и refresh token.</li>
+          <li><strong>Creator создает событие.</strong> Backend автоматически добавляет creator как активного участника с ролью <code>creator</code>.</li>
+          <li><strong>Участники попадают в событие.</strong> Это происходит через прямое добавление или invite preview → accept. Decline не создает membership.</li>
+          <li><strong>Участник добавляет чек.</strong> Backend проверяет политику создания чеков, membership payer и всех share users, сумму позиций, fees, discounts и долей.</li>
+          <li><strong>Чек проходит validation.</strong> Draft переводится в <code>pending_confirmation</code>, создаются share reviews, начинается review window.</li>
+          <li><strong>Участники принимают или спорят доли.</strong> Accept закрывает личный review, dispute переводит receipt в disputed и блокирует confirm.</li>
+          <li><strong>Чек подтверждается.</strong> Confirm разрешен только для допустимого actor и только когда нет disputed share reviews.</li>
+          <li><strong>Backend считает balances.</strong> Только confirmed receipts и confirmed payments влияют на итоговый долг.</li>
+          <li><strong>Creditor создает payment request или debtor заявляет payment.</strong> Это еще не уменьшает долг.</li>
+          <li><strong>Receiver подтверждает платеж.</strong> После confirmation payment попадает в ledger и уменьшает встречный долг.</li>
+        </ol>
+      </section>
+
+      <section class="section band">
+        <h2>Lifecycle события</h2>
+        <div class="sequence">
+          <div class="node">
+            <h3>Created</h3>
+            <p class="muted">Есть creator, active membership и политики по умолчанию или выбранные при создании.</p>
+          </div>
+          <div class="node">
+            <h3>Open</h3>
+            <p class="muted">Можно приглашать, добавлять чеки, валидировать drafts, собирать share reviews, создавать payments и payment requests.</p>
+          </div>
+          <div class="node">
+            <h3>Closed</h3>
+            <p class="muted">Финансовые изменения блокируются. Read endpoints остаются доступны участникам.</p>
+          </div>
+          <div class="node">
+            <h3>Deleted</h3>
+            <p class="muted">Creator-only soft delete помечает событие, memberships, receipts и payments.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Lifecycle чека</h2>
+        <div class="sequence">
+          <div class="node">
+            <h3>Draft</h3>
+            <p class="muted">Ручной ввод, Splitik или AI receipt draft подготавливают структуру: payer, title, category, items, fees, total.</p>
+          </div>
+          <div class="node">
+            <h3>Pending confirmation</h3>
+            <p class="muted">После validate backend создает share reviews для затронутых участников и ставит review window.</p>
+          </div>
+          <div class="node">
+            <h3>Confirmed</h3>
+            <p class="muted">Только confirmed receipt участвует в balances. Disputed reviews блокируют confirm.</p>
+          </div>
+          <div class="node">
+            <h3>Voided / corrected</h3>
+            <p class="muted">Confirmed receipt можно void или создать correction draft; старый чек выходит из активного ledger.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Политики события</h2>
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>Политика</th>
+              <th>Варианты</th>
+              <th>Бизнес-смысл</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>split_strategy</code></td>
+              <td><code>equal_default</code>, <code>itemized_creator</code>, <code>itemized_self_select</code>, <code>agent_assisted</code></td>
+              <td>Как событие ожидает раскладывать расходы: поровну, вручную по позициям, self-select или через будущего агента.</td>
+            </tr>
+            <tr>
+              <td><code>receipt_creation_policy</code></td>
+              <td><code>creator_only</code>, <code>participants_can_add</code></td>
+              <td>Кто может добавлять чеки в событие.</td>
+            </tr>
+            <tr>
+              <td><code>receipt_finalization_policy</code></td>
+              <td><code>creator_finalizes</code>, <code>payer_finalizes</code>, <code>all_involved_confirm</code></td>
+              <td>Кто может подтвердить чек после validation/share review этапа.</td>
+            </tr>
+            <tr>
+              <td><code>participants_invite_policy</code></td>
+              <td><code>creator_only</code>, <code>participants_can_invite_with_approval</code>, <code>participants_can_invite_directly</code></td>
+              <td>Кто может добавлять участников или выпускать invite link.</td>
+            </tr>
+            <tr>
+              <td><code>debt_display_mode</code></td>
+              <td><code>simplified_default</code>, <code>raw_default</code>, <code>show_both</code></td>
+              <td>Как UI должен показывать долги. Backend сейчас возвращает net rows.</td>
+            </tr>
+            <tr>
+              <td><code>settlement_deadline_policy</code></td>
+              <td><code>disabled</code>, <code>soft_deadline</code>, <code>strict_deadline_with_reliability_score</code></td>
+              <td>Подготовка для deadlines и надежности в расчетах платежных запросов.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section">
+        <h2>Invite flow</h2>
+        <ol class="steps">
+          <li><strong>Create invite.</strong> Authorized actor создает token с expiry через <code>POST /api/events/{id}/invites</code>.</li>
+          <li><strong>Preview.</strong> Получатель открывает <code>GET /api/invites/{token}/preview</code> и видит event name, creator и participant_count.</li>
+          <li><strong>Accept или decline.</strong> Accept создает active membership, decline фиксирует отказ и не добавляет участника.</li>
+          <li><strong>Revoke.</strong> Invite можно отозвать через <code>DELETE /api/events/{id}/invites/{invite_id}</code>.</li>
+        </ol>
+      </section>
+
+      <section class="section">
+        <h2>Сбор долей по позициям</h2>
+        <div class="grid two">
+          <article class="rule">
+            <strong>Ручной чек</strong>
+            <p class="muted">Client сразу присылает items и share_items. Backend требует, чтобы сумма долей каждой позиции была ровно 1, а payer/share users были участниками события.</p>
+          </article>
+          <article class="rule">
+            <strong>Self-select allocation</strong>
+            <p class="muted">Creator или payer запускает allocation session. Участники claim/unclaim позиции, session помечается ready, затем finalize превращает claims в share_items.</p>
+          </article>
+          <article class="rule">
+            <strong>AI/Splitik draft</strong>
+            <p class="muted">Модельный контур возвращает draft payload и metadata. До commit/confirm он не влияет на balances.</p>
+          </article>
+          <article class="rule">
+            <strong>Receipt image</strong>
+            <p class="muted">Изображение хранится приватно. Upload/replace/delete управляют object storage, чтение идет через presigned URL.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Payment request flow</h2>
+        <div class="sequence">
+          <div class="node">
+            <h3>Requested</h3>
+            <p class="muted">Creditor создает request к debtor; create требует Idempotency-Key.</p>
+          </div>
+          <div class="node">
+            <h3>Acknowledge / extension</h3>
+            <p class="muted">Debtor может отметить просмотр или попросить extension. Balance не меняется.</p>
+          </div>
+          <div class="node">
+            <h3>Mark paid</h3>
+            <p class="muted">Debtor создает linked pending payment; это еще не confirmed money movement.</p>
+          </div>
+          <div class="node">
+            <h3>Confirm / reject / dispute</h3>
+            <p class="muted">Receiver подтверждает или отклоняет payment; request можно cancel или перевести в disputed.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      См. также: <a href="money.html">денежная модель</a> и <a href="security.html">права доступа</a>.
+    </footer>
+  </body>
+</html>
