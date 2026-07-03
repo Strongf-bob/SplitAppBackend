@@ -135,7 +135,18 @@ def configure_pwa(api: FastAPI) -> None:
     if not WEB_ROOT.exists():
         return
 
-    api.mount("/assets", StaticFiles(directory=WEB_ROOT / "assets"), name="pwa-assets")
+    pwa_root = WEB_ROOT / "out" if (WEB_ROOT / "out" / "index.html").exists() else WEB_ROOT
+    assets_root = pwa_root / "assets" if (pwa_root / "assets").exists() else WEB_ROOT / "assets"
+    if assets_root.exists():
+        api.mount("/assets", StaticFiles(directory=assets_root), name="pwa-assets")
+
+    next_static_root = pwa_root / "_next" / "static"
+    if next_static_root.exists():
+        api.mount(
+            "/_next/static",
+            StaticFiles(directory=next_static_root),
+            name="next-static",
+        )
 
     @api.get("/", include_in_schema=False)
     @api.head("/", include_in_schema=False)
@@ -144,19 +155,25 @@ def configure_pwa(api: FastAPI) -> None:
     @api.get("/app/{path:path}", include_in_schema=False)
     @api.head("/app/{path:path}", include_in_schema=False)
     async def pwa_shell() -> FileResponse:
-        return FileResponse(WEB_ROOT / "index.html")
+        return FileResponse(pwa_root / "index.html")
 
     @api.get("/manifest.webmanifest", include_in_schema=False)
     @api.head("/manifest.webmanifest", include_in_schema=False)
     async def pwa_manifest() -> FileResponse:
+        manifest_path = pwa_root / "manifest.webmanifest"
+        if not manifest_path.exists():
+            manifest_path = WEB_ROOT / "manifest.webmanifest"
         return FileResponse(
-            WEB_ROOT / "manifest.webmanifest", media_type="application/manifest+json"
+            manifest_path, media_type="application/manifest+json"
         )
 
     @api.get("/sw.js", include_in_schema=False)
     @api.head("/sw.js", include_in_schema=False)
     async def pwa_service_worker() -> FileResponse:
-        return FileResponse(WEB_ROOT / "sw.js", media_type="application/javascript")
+        service_worker_path = pwa_root / "sw.js"
+        if not service_worker_path.exists():
+            service_worker_path = WEB_ROOT / "sw.js"
+        return FileResponse(service_worker_path, media_type="application/javascript")
 
 
 def configure_public_docs(api: FastAPI) -> None:

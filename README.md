@@ -57,13 +57,29 @@ Login endpoint: `POST /api/login`.
 
 PWA-клиент обслуживается тем же FastAPI-процессом:
 
-- `GET /` и `GET /app` возвращают web/PWA shell из `web/`.
+- `GET /` и `GET /app` возвращают web/PWA shell из `web/out/` после Next.js build.
 - `GET /manifest.webmanifest` и `GET /sw.js` нужны для installability.
-- Static assets лежат в `web/assets/`.
+- Static assets лежат в `web/public/` на уровне исходников и попадают в `web/out/` при сборке.
 - Protected product data по-прежнему берется из `/api/*` с bearer auth.
 
-Сборочного шага для frontend пока нет; vanilla PWA-файлы редактируются в `web/`,
-после чего API перезапускается для smoke check.
+Frontend теперь живет в `web/` как Next.js/React PWA на Tailwind CSS, shadcn/ui-style
+компонентах и Framer Motion. Для локальной разработки используйте:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Для production/static export:
+
+```bash
+cd web
+npm run build
+```
+
+FastAPI обслуживает `web/out/`, а если сборки еще нет, падает обратно на старый
+статический shell для локальных smoke checks.
 
 ## Запуск на сервере
 
