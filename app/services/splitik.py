@@ -11,7 +11,7 @@ from app.services.access import (
 )
 from app.services.balances import get_event_balance_explanations, get_event_balances
 from app.services.common import new_uuid, strip_mongo_id, utc_now, user_to_api_dict
-from app.services.splitik_guardrails import evaluate_user_message
+from app.services.splitik_guardrails import evaluate_assistant_message, evaluate_user_message
 from app.services.splitik_interactions import log_interaction
 from app.services import splitik_attachments, splitik_tools
 
@@ -608,9 +608,18 @@ def send_splitik_message(
         user_message=payload.message,
         context=context,
     )
+    post_guardrail_decision = evaluate_assistant_message(
+        reply,
+        committed_resource=False,
+    )
+    if not post_guardrail_decision["allowed"]:
+        reply = post_guardrail_decision["message"]
+        guardrail_decision = post_guardrail_decision
     now = utc_now()
     message_id = new_uuid()
     intent = "draft" if drafts else "explain" if explanation_requested else "chat"
+    if not guardrail_decision["allowed"]:
+        intent = "guardrail"
     db.splitik_sessions.update_one(
         {"id": session["id"]},
         {

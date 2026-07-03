@@ -93,6 +93,12 @@ metadata и event context, после чего backend валидирует ре
 - foreign sessions, drafts, events, receipts and members return owner/membership
   scoped errors.
 
+После LLM backend дополнительно проверяет assistant response. Если модель
+утверждает, что напрямую удалила событие, изменила баланс/долг или подтвердила
+чек без committed resource от backend, ответ заменяется безопасным текстом:
+"Я не изменил данные напрямую...". Response получает `intent: "guardrail"` и
+`guardrail_decision.reason: "unsafe_model_state_change_claim"`.
+
 Every Splitik message writes `splitik_interactions` with actor, session,
 message id, sanitized message, intent, guardrail decision, draft ids and model
 metadata. Logs redact accidental tokens and must not include auth tokens,
