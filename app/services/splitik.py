@@ -12,6 +12,8 @@ from app.services.access import (
 from app.services.balances import get_event_balance_explanations, get_event_balances
 from app.services.common import new_uuid, strip_mongo_id, utc_now, user_to_api_dict
 from app.services.events import create_event
+from app.services.splitik_guardrails import evaluate_user_message
+from app.services.splitik_interactions import log_interaction
 
 _MODES = {"general", "event", "receipt", "member"}
 
@@ -299,6 +301,53 @@ def send_splitik_message(
     db: Database, payload: schemas.SplitikMessageRequest, actor_user_id: str
 ) -> dict:
     get_user_or_404(db, actor_user_id)
+    mode = payload.mode.strip().lower()
+    guardrail_decision = evaluate_user_message(payload.message, context_scope=mode)
+    if not guardrail_decision["allowed"]:
+        session = _get_or_create_session(db, payload, actor_user_id)
+        now = utc_now()
+        message_id = new_uuid()
+        reply = guardrail_decision["message"]
+        db.splitik_sessions.update_one(
+            {"id": session["id"]},
+            {
+                "$push": {
+                    "messages": {
+                        "id": message_id,
+                        "user_message": payload.message,
+                        "assistant_message": reply,
+                        "mode": mode,
+                        "created_at": now,
+                    }
+                },
+                "$set": {"updated_at": now, "mode": mode},
+            },
+        )
+        log_interaction(
+            db,
+            actor_user_id=actor_user_id,
+            session_id=session["id"],
+            message_id=message_id,
+            sanitized_user_message=payload.message,
+            intent="refusal",
+            context_scope=mode,
+            assistant_message=reply,
+            guardrail_decision=guardrail_decision,
+        )
+        return {
+            "session_id": session["id"],
+            "message_id": message_id,
+            "assistant_message": reply,
+            "mode": mode,
+            "intent": "refusal",
+            "guardrail_decision": guardrail_decision,
+            "context_chips": [],
+            "capabilities": [],
+            "drafts": [],
+            "questions": [],
+            "suggested_actions": [],
+        }
+
     context, chips, capabilities = _build_context(db, payload, actor_user_id)
     drafts = _maybe_create_draft(db, payload, actor_user_id)
     if drafts:
@@ -312,6 +361,7 @@ def send_splitik_message(
     session = _get_or_create_session(db, payload, actor_user_id)
     now = utc_now()
     message_id = new_uuid()
+    intent = "draft" if drafts else "chat"
     db.splitik_sessions.update_one(
         {"id": session["id"]},
         {
@@ -327,14 +377,30 @@ def send_splitik_message(
             "$set": {"updated_at": now, "mode": payload.mode.strip().lower()},
         },
     )
+    log_interaction(
+        db,
+        actor_user_id=actor_user_id,
+        session_id=session["id"],
+        message_id=message_id,
+        sanitized_user_message=payload.message,
+        intent=intent,
+        context_scope=payload.mode.strip().lower(),
+        assistant_message=reply,
+        guardrail_decision=guardrail_decision,
+        draft_ids=[str(draft["id"]) for draft in drafts],
+    )
     return {
         "session_id": session["id"],
         "message_id": message_id,
         "assistant_message": reply,
         "mode": payload.mode.strip().lower(),
+        "intent": intent,
+        "guardrail_decision": guardrail_decision,
         "context_chips": chips,
         "capabilities": capabilities,
         "drafts": drafts,
+        "questions": [],
+        "suggested_actions": [],
     }
 
 
