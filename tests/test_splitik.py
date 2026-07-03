@@ -5,7 +5,7 @@ import pytest
 from fastapi import HTTPException
 
 from app import schemas
-from app.services import receipt_ai_drafts, splitik, splitik_llm
+from app.services import receipt_ai_drafts, splitik, splitik_attachments, splitik_llm
 from tests.conftest import EVENT_ID, USER_A, USER_B, USER_C, seed_event, seed_users
 
 
@@ -487,6 +487,58 @@ def test_splitik_commits_receipt_draft_only_on_explicit_commit(db, monkeypatch):
     assert committed["resource"]["status"] == "draft"
     assert committed["resource"]["total_amount_kopecks"] == 120000
     assert db.receipts.count_documents({"event_id": EVENT_ID}) == 1
+
+
+def test_splitik_creates_receipt_draft_from_image_attachment(db, fake_s3, monkeypatch):
+    _mock_llm(monkeypatch)
+    monkeypatch.setenv("S3_BUCKET", "test-bucket")
+    seed_event(db)
+    attachment = splitik_attachments.create_attachment(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        filename="receipt.jpg",
+        content_type="image/jpeg",
+        content=b"\xff\xd8\xfffake-jpeg",
+    )
+    image_calls = []
+
+    def fake_image_candidate(*, model_role, attachment_metadata, context):
+        image_calls.append(
+            {
+                "model_role": model_role,
+                "attachment_metadata": attachment_metadata,
+                "context": context,
+            }
+        )
+        return _receipt_ai_candidate(model_role)
+
+    monkeypatch.setattr(splitik_llm, "generate_receipt_image_candidate", fake_image_candidate)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Создай черновик чека по фото",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+            attachment_ids=[attachment["id"]],
+        ),
+        USER_A,
+    )
+
+    assert image_calls[0]["attachment_metadata"]["id"] == attachment["id"]
+    assert "key" not in image_calls[0]["attachment_metadata"]
+    assert response["intent"] == "draft"
+    draft = response["drafts"][0]
+    assert draft["type"] == "create_receipt"
+    assert draft["source"] == "image"
+    assert draft["attachment_ids"] == [attachment["id"]]
+    assert draft["payload"]["items"][0]["name"] == "Капучино"
+    assert db.receipts.count_documents({"event_id": EVENT_ID}) == 0
+    log = db.splitik_interactions.find_one({"message_id": response["message_id"]})
+    assert log is not None
+    assert "attachments/" not in str(log)
+    assert "test-bucket" not in str(log)
 
 
 def test_seed_demo_friends_is_idempotent(db, monkeypatch):

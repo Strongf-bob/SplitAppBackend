@@ -13,7 +13,7 @@ from app.services.balances import get_event_balance_explanations, get_event_bala
 from app.services.common import new_uuid, strip_mongo_id, utc_now, user_to_api_dict
 from app.services.splitik_guardrails import evaluate_user_message
 from app.services.splitik_interactions import log_interaction
-from app.services import splitik_tools
+from app.services import splitik_attachments, splitik_tools
 
 _MODES = {"general", "event", "receipt", "member"}
 
@@ -272,6 +272,38 @@ def _maybe_create_draft(
         return []
 
     event_id = str(payload.entry_point.event_id)
+    attachment_ids = [str(attachment_id) for attachment_id in payload.attachment_ids]
+    if attachment_ids:
+        attachments = splitik_attachments.list_attachments_for_actor(
+            db,
+            actor_user_id=actor_user_id,
+            attachment_ids=attachment_ids,
+        )
+        candidate = splitik_llm.generate_receipt_image_candidate(
+            model_role="primary",
+            attachment_metadata=attachments[0],
+            context={
+                "event_id": event_id,
+                "attachment_ids": attachment_ids,
+                "human_review_required": True,
+            },
+        )
+        content = candidate.get("content", {})
+        receipt_payload = content.get("payload") if isinstance(content, dict) else None
+        if not receipt_payload:
+            return []
+        return [
+            splitik_tools.create_receipt_draft(
+                db,
+                actor_user_id=actor_user_id,
+                session_id=session_id,
+                event_id=event_id,
+                payload=receipt_payload,
+                source="image",
+                attachment_ids=attachment_ids,
+            )
+        ]
+
     amount_kopecks = splitik_tools.amount_kopecks_from_text(payload.message)
     latest_receipt_draft = splitik_tools.latest_pending_draft(
         db,

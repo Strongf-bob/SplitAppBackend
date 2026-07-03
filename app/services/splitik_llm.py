@@ -278,3 +278,20 @@ def generate_receipt_draft_candidate(
         "model_id": model,
         "content": _parse_json_object(_extract_chat_content(body)),
     }
+
+
+def generate_receipt_image_candidate(
+    *,
+    model_role: str,
+    attachment_metadata: dict,
+    context: dict,
+) -> dict:
+    return generate_receipt_draft_candidate(
+        model_role=model_role,
+        system_prompt=(
+            "You create SplitApp receipt drafts from receipt image metadata and "
+            "OCR/vision input. Return only JSON in the receipt draft shape."
+        ),
+        user_message=f"Receipt image attachment metadata:\n{attachment_metadata}",
+        context=context,
+    )
