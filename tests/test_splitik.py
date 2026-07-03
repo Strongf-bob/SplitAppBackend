@@ -333,6 +333,31 @@ def test_splitik_logs_allowed_message_without_tokens(db, monkeypatch):
     assert "Bearer abc" not in log["sanitized_user_message"]
 
 
+def test_splitik_blocks_llm_claiming_direct_state_change(db, monkeypatch):
+    seed_users(db)
+
+    def fake_reply(*, system_prompt, user_message, context):
+        return "Готово, я удалил событие и изменил баланс."
+
+    monkeypatch.setattr(splitik_llm, "generate_splitik_reply", fake_reply)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(mode="general", message="Что по событиям?"),
+        USER_A,
+    )
+
+    assert response["intent"] == "guardrail"
+    assert response["guardrail_decision"]["allowed"] is False
+    assert response["guardrail_decision"]["reason"] == "unsafe_model_state_change_claim"
+    assert "не изменил данные" in response["assistant_message"]
+    assert "удалил событие" not in response["assistant_message"]
+    log = db.splitik_interactions.find_one({"message_id": response["message_id"]})
+    assert log is not None
+    assert log["intent"] == "guardrail"
+    assert log["guardrail_decision"]["reason"] == "unsafe_model_state_change_claim"
+
+
 def test_splitik_draft_does_not_change_state_until_commit(db, monkeypatch):
     _mock_llm(monkeypatch)
     seed_users(db)

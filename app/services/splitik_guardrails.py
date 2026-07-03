@@ -26,6 +26,19 @@ _FRIEND_PRIVATE_MARKERS = (
     "на что тратит",
     "траты друга",
 )
+_UNSAFE_MODEL_STATE_CHANGE_MARKERS = (
+    "я удалил",
+    "я удалила",
+    "удалил событие",
+    "удалила событие",
+    "изменил баланс",
+    "изменила баланс",
+    "изменил долг",
+    "изменила долг",
+    "подтвердил чек",
+    "подтвердила чек",
+    "деньги изменены",
+)
 
 
 def _contains_any(message: str, markers: tuple[str, ...]) -> bool:
@@ -72,6 +85,19 @@ def evaluate_user_message(message: str, *, context_scope: str = "general") -> di
             False,
             "private_friend_spending",
             "Я не могу раскрывать личные траты другого пользователя вне общего события.",
+        )
+    return _decision(True, "allowed")
+
+
+def evaluate_assistant_message(message: str, *, committed_resource: bool = False) -> dict:
+    if not committed_resource and _contains_any(message, _UNSAFE_MODEL_STATE_CHANGE_MARKERS):
+        return _decision(
+            False,
+            "unsafe_model_state_change_claim",
+            (
+                "Я не изменил данные напрямую. В SplitApp изменения проходят через "
+                "черновик и явное подтверждение."
+            ),
         )
     return _decision(True, "allowed")
 
