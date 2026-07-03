@@ -129,7 +129,7 @@ MongoDB. Перед каждым LLM-вызовом backend собирает bou
 - scope по `mode`: `general`, `event`, `receipt` или `member`;
 - `splitik` metadata: mode, locale, timezone;
 - `available_tools`: allowlist backend tools, допустимых в текущем mode;
-- `tool_results`: результаты уже исполненных backend-owned reads;
+- `tool_results`: результаты уже исполненных серверных reads;
 - `conversation_state`: состояние только текущей `session_id`;
 - `drafts`, если текущий запрос создал или обновил draft;
 - `user_balance_summary`, если запрос похож на вопрос о тратах/долгах.
