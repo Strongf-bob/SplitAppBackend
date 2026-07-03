@@ -578,6 +578,24 @@ class SplitikContextChip(BaseModel):
     value: str
 
 
+class SplitikGuardrailDecision(BaseModel):
+    allowed: bool
+    reason: str
+    message: str = ""
+
+
+class SplitikQuestion(BaseModel):
+    id: str
+    text: str
+    required: bool = True
+
+
+class SplitikSuggestedAction(BaseModel):
+    type: str
+    label: str
+    draft_id: UUID | None = None
+
+
 class SplitikDraft(BaseModel):
     id: UUID
     type: str
@@ -593,9 +611,15 @@ class SplitikMessageResponse(BaseModel):
     message_id: UUID
     assistant_message: str
     mode: str
+    intent: str = "chat"
+    guardrail_decision: SplitikGuardrailDecision = Field(
+        default_factory=lambda: SplitikGuardrailDecision(allowed=True, reason="allowed")
+    )
     context_chips: list[SplitikContextChip]
     capabilities: list[str]
     drafts: list[SplitikDraft] = []
+    questions: list[SplitikQuestion] = []
+    suggested_actions: list[SplitikSuggestedAction] = []
 
 
 class SplitikSession(BaseModel):

@@ -287,6 +287,48 @@ def test_splitik_llm_is_mocked_and_receives_bounded_event_context(db, monkeypatc
     }
 
 
+def test_splitik_refuses_homework_and_logs_interaction(db, monkeypatch):
+    calls = _mock_llm(monkeypatch)
+    seed_users(db)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(mode="general", message="Реши домашку по алгебре"),
+        USER_A,
+    )
+
+    assert calls == []
+    assert response["intent"] == "refusal"
+    assert response["guardrail_decision"]["allowed"] is False
+    assert response["guardrail_decision"]["reason"] == "out_of_scope_homework"
+    assert "SplitApp" in response["assistant_message"]
+    log = db.splitik_interactions.find_one({"actor_user_id": USER_A})
+    assert log is not None
+    assert log["intent"] == "refusal"
+    assert log["guardrail_decision"]["reason"] == "out_of_scope_homework"
+    assert "алгебре" in log["sanitized_user_message"]
+
+
+def test_splitik_logs_allowed_message_without_tokens(db, monkeypatch):
+    _mock_llm(monkeypatch)
+    seed_users(db)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="general",
+            message="Сколько я должен? token=secret-token Authorization: Bearer abc",
+        ),
+        USER_A,
+    )
+
+    assert response["guardrail_decision"]["allowed"] is True
+    log = db.splitik_interactions.find_one({"message_id": response["message_id"]})
+    assert log is not None
+    assert "secret-token" not in log["sanitized_user_message"]
+    assert "Bearer abc" not in log["sanitized_user_message"]
+
+
 def test_splitik_draft_does_not_change_state_until_commit(db, monkeypatch):
     _mock_llm(monkeypatch)
     seed_users(db)
