@@ -25,11 +25,14 @@ _FORBIDDEN_CAPABILITIES = [
 ]
 
 _SYSTEM_PROMPT = """
-You are Splitik, a SplitApp assistant. Answer in the user's language.
-Use only the backend-provided context. Do not claim that you changed data unless
-the backend response includes a committed resource. For changes, explain the
-draft/confirmation step. Never ask for secrets, payment credentials, or private
-data outside the provided SplitApp context.
+Ты Сплитик, ассистент SplitApp. Отвечай на языке пользователя.
+Используй только контекст и инструменты, которые передал backend.
+Не утверждай, что изменил данные, если backend не вернул подтвержденный ресурс.
+Для любых изменений объясняй шаг draft/подтверждения: сначала создается или
+редактируется черновик, а реальные деньги меняются только после явного commit.
+Не проси секреты, платежные данные, пароли, токены или приватные данные вне
+контекста SplitApp. Не раскрывай личные траты другого пользователя вне общего
+события и разрешенного backend-контекста.
 """.strip()
 
 
@@ -63,6 +66,20 @@ def _mode_capabilities(mode: str) -> list[str]:
         "member": [],
     }
     return read_by_mode[mode] + draft_by_mode[mode] + _FORBIDDEN_CAPABILITIES
+
+
+def _available_tools(mode: str) -> list[str]:
+    common_tools = [
+        "splitik.get_active_draft",
+        "splitik.get_recent_session_messages",
+    ]
+    mode_tools = {
+        "general": ["splitik.get_user_spending_summary"],
+        "event": ["splitik.get_event_history"],
+        "receipt": ["splitik.get_event_history"],
+        "member": ["splitik.get_event_history"],
+    }
+    return common_tools + mode_tools.get(mode, [])
 
 
 def _event_summary(db: Database, event_id: str, actor_user_id: str) -> dict:
@@ -382,6 +399,61 @@ def _get_or_create_session(
     return session
 
 
+def _event_id_from_payload(payload: schemas.SplitikMessageRequest) -> str | None:
+    if payload.entry_point and payload.entry_point.event_id:
+        return str(payload.entry_point.event_id)
+    return None
+
+
+def _build_tool_results(
+    db: Database,
+    *,
+    payload: schemas.SplitikMessageRequest,
+    actor_user_id: str,
+    session_id: str,
+) -> dict:
+    mode = payload.mode.strip().lower()
+    results = {
+        "splitik.get_active_draft": splitik_tools.read_active_draft(
+            db,
+            actor_user_id=actor_user_id,
+            session_id=session_id,
+        ),
+        "splitik.get_recent_session_messages": splitik_tools.read_recent_session_messages(
+            db,
+            actor_user_id=actor_user_id,
+            session_id=session_id,
+            limit=6,
+        ),
+    }
+    event_id = _event_id_from_payload(payload)
+    if event_id and "splitik.get_event_history" in _available_tools(mode):
+        results["splitik.get_event_history"] = splitik_tools.read_event_history(
+            db,
+            actor_user_id=actor_user_id,
+            event_id=event_id,
+            limit=10,
+        )
+    return results
+
+
+def _build_conversation_state(
+    *,
+    session_id: str,
+    mode: str,
+    tool_results: dict,
+) -> dict:
+    state = {
+        "session_id": session_id,
+        "mode": mode,
+        "recent_messages": tool_results.get("splitik.get_recent_session_messages", []),
+    }
+    active_draft = tool_results.get("splitik.get_active_draft")
+    if active_draft:
+        state["active_draft"] = active_draft
+    return state
+
+
 def send_splitik_message(
     db: Database, payload: schemas.SplitikMessageRequest, actor_user_id: str
 ) -> dict:
@@ -433,16 +505,33 @@ def send_splitik_message(
             "suggested_actions": [],
         }
 
-    context, chips, capabilities = _build_context(db, payload, actor_user_id)
     session = _get_or_create_session(db, payload, actor_user_id)
+    context, chips, capabilities = _build_context(db, payload, actor_user_id)
     drafts = _maybe_create_draft(db, payload, actor_user_id, session["id"])
     if drafts:
         context["drafts"] = drafts
+    tools = _available_tools(mode)
+    tool_results = _build_tool_results(
+        db,
+        payload=payload,
+        actor_user_id=actor_user_id,
+        session_id=session["id"],
+    )
+    context["available_tools"] = tools
+    context["tool_results"] = tool_results
+    context["conversation_state"] = _build_conversation_state(
+        session_id=session["id"],
+        mode=mode,
+        tool_results=tool_results,
+    )
     explanation_requested = _is_expense_explanation_request(payload.message)
     if explanation_requested:
         context["user_balance_summary"] = splitik_tools.read_user_balance_summary(
             db, actor_user_id=actor_user_id
         )
+        context["tool_results"]["splitik.get_user_spending_summary"] = context[
+            "user_balance_summary"
+        ]
 
     reply = splitik_llm.generate_splitik_reply(
         system_prompt=_SYSTEM_PROMPT,
@@ -477,6 +566,9 @@ def send_splitik_message(
         context_scope=payload.mode.strip().lower(),
         assistant_message=reply,
         guardrail_decision=guardrail_decision,
+        tool_calls=[
+            {"name": name, "status": "completed"} for name in context["tool_results"].keys()
+        ],
         draft_ids=[str(draft["id"]) for draft in drafts],
     )
     return {

@@ -129,6 +129,53 @@ def latest_pending_draft(
     return db.splitik_drafts.find_one(query, sort=[("updated_at", -1)])
 
 
+def read_active_draft(db: Database, *, actor_user_id: str, session_id: str) -> dict | None:
+    draft = latest_pending_draft(db, actor_user_id=actor_user_id, session_id=session_id)
+    if not draft:
+        return None
+    return draft_to_api(draft)
+
+
+def read_recent_session_messages(
+    db: Database,
+    *,
+    actor_user_id: str,
+    session_id: str,
+    limit: int = 6,
+) -> list[dict]:
+    session = db.splitik_sessions.find_one({"id": session_id, "owner_user_id": actor_user_id})
+    if not session:
+        raise HTTPException(status_code=404, detail="Splitik session not found.")
+    messages = session.get("messages", [])[-limit:]
+    return [
+        {
+            "id": message.get("id"),
+            "user_message": message.get("user_message"),
+            "assistant_message": message.get("assistant_message"),
+            "mode": message.get("mode"),
+            "created_at": message.get("created_at"),
+        }
+        for message in messages
+    ]
+
+
+def read_event_history(
+    db: Database,
+    *,
+    actor_user_id: str,
+    event_id: str,
+    limit: int = 10,
+) -> dict:
+    event = assert_event_access(db, event_id, actor_user_id)
+    receipts = [
+        strip_mongo_id(receipt)
+        for receipt in db.receipts.find({"event_id": event_id, "deleted_at": {"$exists": False}})
+        .sort("created_at", -1)
+        .limit(limit)
+    ]
+    return {"event": strip_mongo_id(event), "recent_receipts": receipts}
+
+
 def get_draft(db: Database, *, actor_user_id: str, draft_id: str) -> dict:
     draft = db.splitik_drafts.find_one({"id": draft_id, "owner_user_id": actor_user_id})
     if not draft:

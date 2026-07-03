@@ -9,9 +9,9 @@ from app.services.access import active_event_memberships, assert_event_access, a
 from app.services.common import new_uuid, strip_mongo_id, utc_now, user_to_api_dict
 
 _SYSTEM_PROMPT = """
-You create SplitApp receipt drafts from user-provided receipt text.
-Use only backend-provided event participants and payer constraints.
-Return a JSON object with:
+Ты создаешь черновики чеков SplitApp по тексту чека от пользователя.
+Используй только участников события и ограничения payer, которые передал backend.
+Верни JSON object в форме:
 {
   "payload": {
     "payer_id": "uuid",
@@ -36,7 +36,7 @@ Return a JSON object with:
   },
   "warnings": ["short human-review warning"]
 }
-Never create payments, never confirm receipts, and never claim that money was changed.
+Никогда не создавай payments, не подтверждай receipts и не утверждай, что деньги изменены.
 """.strip()
 
 

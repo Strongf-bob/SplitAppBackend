@@ -418,6 +418,72 @@ def test_splitik_updates_receipt_draft_from_chat(db, monkeypatch):
     assert db.receipts.count_documents({"event_id": EVENT_ID}) == 0
 
 
+def test_splitik_sends_russian_prompt_and_session_state_to_llm(db, monkeypatch):
+    calls = _mock_llm(monkeypatch)
+    seed_event(db)
+
+    created = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Добавь чек: кофе 1200 рублей",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+    draft_id = created["drafts"][0]["id"]
+
+    splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            session_id=created["session_id"],
+            mode="event",
+            message="Поменяй сумму на 1500 рублей",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+
+    assert "Ты Сплитик" in calls[-1]["system_prompt"]
+    state = calls[-1]["context"]["conversation_state"]
+    assert state["session_id"] == created["session_id"]
+    assert state["active_draft"]["id"] == draft_id
+    assert state["active_draft"]["type"] == "create_receipt"
+    assert state["recent_messages"][0]["user_message"] == "Добавь чек: кофе 1200 рублей"
+    assert "splitik.get_active_draft" in calls[-1]["context"]["available_tools"]
+    assert calls[-1]["context"]["tool_results"]["splitik.get_active_draft"]["id"] == draft_id
+    assert calls[-1]["context"]["tool_results"]["splitik.get_recent_session_messages"]
+
+
+def test_splitik_new_session_does_not_reuse_previous_active_draft(db, monkeypatch):
+    calls = _mock_llm(monkeypatch)
+    seed_event(db)
+
+    splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Добавь чек: кофе 1200 рублей",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Поменяй сумму на 1500 рублей",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+
+    assert response["drafts"] == []
+    assert "active_draft" not in calls[-1]["context"]["conversation_state"]
+    assert calls[-1]["context"]["tool_results"]["splitik.get_active_draft"] is None
+
+
 def test_splitik_rejects_foreign_draft_commit(db, monkeypatch):
     _mock_llm(monkeypatch)
     seed_users(db)
