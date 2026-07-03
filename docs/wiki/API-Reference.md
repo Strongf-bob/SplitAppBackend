@@ -75,7 +75,7 @@ Payment phone visibility is conservative: `nobody`, `event_members`, or `friends
 | `PATCH` | `/api/splitik/drafts/{id}` | Обновить pending Splitik draft. | Только owner; confirmed money state не меняется. |
 | `POST` | `/api/splitik/drafts/{id}/commit` | Подтвердить backend-created draft action. | Поддерживает `create_event` и `create_receipt`; receipt commit создает обычный receipt draft. |
 
-Сплитик работает в режимах `general`, `event`, `receipt`, `member`. Клиент передает entry point и optional `attachment_ids`, но backend заново проверяет actor, event membership, draft owner, attachment owner и видимость target user/receipt. LLM не получает прямого доступа к MongoDB и не может менять состояние без отдельного commit endpoint. Все сообщения пишутся в `splitik_interactions` с sanitized text и guardrail decision.
+Сплитик работает в режимах `general`, `event`, `receipt`, `member`. Клиент передает entry point и optional `attachment_ids`, но backend заново проверяет actor, event membership, draft owner, attachment owner и видимость target user/receipt. LLM не получает прямого доступа к MongoDB и не может менять состояние без отдельного commit endpoint. Все сообщения пишутся в `splitik_interactions` с sanitized text, `request_id`, status/stage, latency, context summary, guardrail decision and safe error diagnostics.
 
 ## Events
 
