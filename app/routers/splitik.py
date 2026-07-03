@@ -1,13 +1,34 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile, status
 from pymongo.database import Database
 
 from app import schemas
-from app.dependencies import get_actor_user_id, get_db
-from app.services import splitik
+from app.dependencies import get_actor_user_id, get_db, get_s3
+from app.services import splitik, splitik_attachments
 
 router = APIRouter(tags=["Splitik"])
+
+
+@router.post(
+    "/api/splitik/attachments",
+    response_model=schemas.SplitikAttachment,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_attachment(
+    file: UploadFile = File(...),
+    db: Database = Depends(get_db),
+    s3=Depends(get_s3),
+    current_user_id: str = Depends(get_actor_user_id),
+):
+    return splitik_attachments.create_attachment(
+        db,
+        s3,
+        actor_user_id=current_user_id,
+        filename=file.filename or "attachment",
+        content_type=file.content_type or "application/octet-stream",
+        content=await file.read(),
+    )
 
 
 @router.post("/api/splitik/messages", response_model=schemas.SplitikMessageResponse)
