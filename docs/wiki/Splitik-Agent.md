@@ -100,6 +100,349 @@ General spending questions such as "кто мне должен" or "скольк
 backend-computed balance facts. LLM receives `user_balance_summary` and formats
 the answer; it is not the source of financial calculations.
 
+## Examples
+
+### Create event draft
+
+Client request:
+
+```json
+{
+  "mode": "general",
+  "message": "Создай событие: Ужин в Duo",
+  "locale": "ru-RU",
+  "timezone": "Europe/Moscow"
+}
+```
+
+Backend creates a pending draft before any committed event exists:
+
+```json
+{
+  "type": "create_event",
+  "status": "pending",
+  "payload": {
+    "name": "Ужин в Duo"
+  },
+  "version": 1,
+  "source": "text"
+}
+```
+
+The LLM receives only backend-approved context:
+
+```json
+{
+  "model": "qwen3.7-plus",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are Splitik, a SplitApp assistant..."
+    },
+    {
+      "role": "user",
+      "content": "User message:\nСоздай событие: Ужин в Duo\n\nAllowed backend context JSON:\n{current_user, events, friendships, splitik, drafts}"
+    }
+  ],
+  "temperature": 0.2
+}
+```
+
+The model returns assistant text, for example:
+
+```text
+Сплитик: готово.
+```
+
+Backend response:
+
+```json
+{
+  "intent": "draft",
+  "assistant_message": "Сплитик: готово.",
+  "guardrail_decision": {
+    "allowed": true,
+    "reason": "allowed"
+  },
+  "drafts": [
+    {
+      "type": "create_event",
+      "status": "pending",
+      "payload": {
+        "name": "Ужин в Duo"
+      }
+    }
+  ]
+}
+```
+
+The event is created only after `POST /api/splitik/drafts/{id}/commit`.
+
+### Create receipt draft from text
+
+Client request in event mode:
+
+```json
+{
+  "mode": "event",
+  "message": "Добавь чек: кофе 1200 рублей",
+  "entry_point": {
+    "type": "event",
+    "event_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+  }
+}
+```
+
+Backend validates event membership and creates a receipt draft:
+
+```json
+{
+  "type": "create_receipt",
+  "status": "pending",
+  "event_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  "source": "text",
+  "version": 1,
+  "payload": {
+    "payer_id": "current-user-id",
+    "title": "Черновик чека",
+    "total_amount_kopecks": 120000,
+    "items": [
+      {
+        "name": "Позиция из сообщения",
+        "cost_kopecks": 120000,
+        "split_mode": "custom",
+        "share_items": [
+          {
+            "user_id": "participant-id",
+            "share_value": "0.5"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+No `receipts` document is created until explicit commit. Receipt draft commit
+creates a normal receipt with status `draft`; it still does not become a
+confirmed money source until the receipt confirmation flow runs.
+
+### Update draft through chat
+
+Follow-up request in the same session:
+
+```json
+{
+  "session_id": "same-session-id",
+  "mode": "event",
+  "message": "Поменяй сумму на 1500 рублей",
+  "entry_point": {
+    "type": "event",
+    "event_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+  }
+}
+```
+
+Backend finds the latest pending `create_receipt` draft in that session and
+updates it:
+
+```json
+{
+  "version": 2,
+  "payload": {
+    "total_amount_kopecks": 150000,
+    "items": [
+      {
+        "cost_kopecks": 150000
+      }
+    ]
+  }
+}
+```
+
+### Create receipt draft from image
+
+First upload an image:
+
+```http
+POST /api/splitik/attachments
+Content-Type: multipart/form-data
+```
+
+Backend stores the object privately and returns only sanitized metadata:
+
+```json
+{
+  "id": "attachment-id",
+  "filename": "receipt.jpg",
+  "content_type": "image/jpeg",
+  "size_bytes": 12345,
+  "created_at": "2026-07-03T12:00:00Z"
+}
+```
+
+Then send the attachment to Splitik:
+
+```json
+{
+  "mode": "event",
+  "message": "Создай черновик чека по фото",
+  "entry_point": {
+    "type": "event",
+    "event_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+  },
+  "attachment_ids": ["attachment-id"]
+}
+```
+
+The image model receives sanitized attachment metadata, not bucket/key or a
+private storage URL:
+
+```json
+{
+  "model": "qwen3.7-plus",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You create SplitApp receipt drafts from receipt image metadata and OCR/vision input. Return only JSON in the receipt draft shape."
+    },
+    {
+      "role": "user",
+      "content": "Receipt image attachment metadata:\n{id, filename, content_type, size_bytes, created_at}\n\nAllowed backend context JSON:\n{event_id, attachment_ids, human_review_required: true}\n\nReturn only JSON."
+    }
+  ],
+  "temperature": 0.1,
+  "response_format": {
+    "type": "json_object"
+  }
+}
+```
+
+Expected model response:
+
+```json
+{
+  "payload": {
+    "payer_id": "user-id",
+    "title": "Кофе",
+    "category": "Кафе",
+    "total_amount_kopecks": 1000,
+    "items": [
+      {
+        "name": "Капучино",
+        "cost_kopecks": 1000,
+        "split_mode": "custom",
+        "share_items": [
+          {
+            "user_id": "user-a",
+            "share_value": 0.5
+          },
+          {
+            "user_id": "user-b",
+            "share_value": 0.5
+          }
+        ]
+      }
+    ]
+  },
+  "warnings": []
+}
+```
+
+Backend validates this as `CreateReceiptRequest` and stores a `create_receipt`
+draft with `source: "image"`.
+
+### Explain user spending
+
+Client request:
+
+```json
+{
+  "mode": "general",
+  "message": "Кто мне должен деньги?"
+}
+```
+
+Backend computes money facts and passes them to the LLM:
+
+```json
+{
+  "user_balance_summary": {
+    "outstanding_owed_kopecks": 0,
+    "outstanding_receivable_kopecks": 5000,
+    "events": [
+      {
+        "event": {
+          "name": "Trip"
+        },
+        "balances": [
+          {
+            "debitor_id": "user-b",
+            "creditor_id": "user-a",
+            "amount_kopecks": 5000
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The LLM formats the explanation, but backend remains the source of financial
+truth.
+
+### Guardrail refusal
+
+Homework/general assistant request:
+
+```json
+{
+  "mode": "general",
+  "message": "Реши домашку по алгебре"
+}
+```
+
+Backend refuses before the LLM call:
+
+```json
+{
+  "intent": "refusal",
+  "assistant_message": "Я могу помогать только со SplitApp: событиями, чеками, долгами и личными тратами.",
+  "guardrail_decision": {
+    "allowed": false,
+    "reason": "out_of_scope_homework"
+  },
+  "drafts": []
+}
+```
+
+Private friend-spending requests outside shared context are also refused:
+
+```json
+{
+  "allowed": false,
+  "reason": "private_friend_spending"
+}
+```
+
+Interaction log example:
+
+```json
+{
+  "actor_user_id": "current-user-id",
+  "session_id": "session-id",
+  "message_id": "message-id",
+  "intent": "draft",
+  "sanitized_user_message": "Сколько я должен? token=[REDACTED] Authorization: Bearer [REDACTED]",
+  "guardrail_decision": {
+    "allowed": true,
+    "reason": "allowed"
+  },
+  "draft_ids": ["draft-id"],
+  "created_at": "2026-07-03T12:00:00Z"
+}
+```
+
 ## Demo friends
 
 Для локального заполнения друзей есть скрипт:
