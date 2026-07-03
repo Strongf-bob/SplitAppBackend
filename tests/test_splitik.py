@@ -2,9 +2,13 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 from app import schemas
+from app.dependencies import get_actor_user_id, get_db, get_s3
+from app.routers import splitik as splitik_router
 from app.services import receipt_ai_drafts, receipts, splitik, splitik_attachments, splitik_llm
 from tests.conftest import EVENT_ID, USER_A, USER_B, USER_C, seed_event, seed_users
 
@@ -539,6 +543,30 @@ def test_splitik_creates_receipt_draft_from_image_attachment(db, fake_s3, monkey
     assert log is not None
     assert "attachments/" not in str(log)
     assert "test-bucket" not in str(log)
+
+
+def test_splitik_attachment_upload_endpoint_returns_private_metadata(db, fake_s3, monkeypatch):
+    monkeypatch.setenv("S3_BUCKET", "test-bucket")
+    api = FastAPI()
+    api.dependency_overrides[get_db] = lambda: db
+    api.dependency_overrides[get_s3] = lambda: fake_s3
+    api.dependency_overrides[get_actor_user_id] = lambda: USER_A
+    api.include_router(splitik_router.router)
+    client = TestClient(api)
+
+    response = client.post(
+        "/api/splitik/attachments",
+        files={"file": ("receipt.jpg", b"\xff\xd8\xfffake-jpeg", "image/jpeg")},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["filename"] == "receipt.jpg"
+    assert body["content_type"] == "image/jpeg"
+    assert body["size_bytes"] == len(b"\xff\xd8\xfffake-jpeg")
+    assert "bucket" not in body
+    assert "key" not in body
+    assert db.splitik_attachments.count_documents({"owner_user_id": USER_A}) == 1
 
 
 def test_splitik_explains_user_scoped_spending_from_backend_facts(db, monkeypatch):

@@ -76,6 +76,9 @@ URL или presigned URL. Vision/OCR provider получает sanitized attachm
 metadata и event context, после чего backend валидирует результат как
 `CreateReceiptRequest`.
 
+Клиент загружает фото через `POST /api/splitik/attachments`, затем передает
+полученный `attachment_id` в `POST /api/splitik/messages`.
+
 ## Guardrails and logs
 
 Перед вызовом LLM backend применяет deterministic guardrails:

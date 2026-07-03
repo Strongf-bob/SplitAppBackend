@@ -563,6 +563,14 @@ class SplitikEntryPoint(BaseModel):
     target_user_id: UUID | None = None
 
 
+class SplitikAttachment(BaseModel):
+    id: UUID
+    filename: str
+    content_type: str
+    size_bytes: int
+    created_at: datetime
+
+
 class SplitikMessageRequest(BaseModel):
     session_id: UUID | None = None
     mode: str = "general"
