@@ -54,6 +54,7 @@ def create_receipt_draft(
     event_id: str,
     payload: dict,
     source: str = "text",
+    attachment_ids: list[str] | None = None,
 ) -> dict:
     assert_event_access(db, event_id, actor_user_id)
     try:
@@ -72,7 +73,7 @@ def create_receipt_draft(
         "payload": parsed_payload.model_dump(mode="json"),
         "version": 1,
         "source": source,
-        "attachment_ids": [],
+        "attachment_ids": attachment_ids or [],
         "questions": [],
         "model_metadata": {},
         "created_at": now,

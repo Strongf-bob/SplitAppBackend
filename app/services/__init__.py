@@ -68,6 +68,7 @@ from app.services.receipts import (
     void_receipt,
 )
 from app.services.reports import build_event_csv_export, list_receipt_categories
+from app.services import splitik_attachments
 from app.services.users import get_current_user_financial_stats, list_users, search_users
 
 __all__ = [
@@ -134,6 +135,7 @@ __all__ = [
     "revoke_event_invite",
     "rotate_refresh_token",
     "search_users",
+    "splitik_attachments",
     "start_allocation_session",
     "unclaim_receipt_item",
     "update_event",

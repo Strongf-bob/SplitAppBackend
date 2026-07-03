@@ -568,6 +568,7 @@ class SplitikMessageRequest(BaseModel):
     mode: str = "general"
     message: str = Field(min_length=1)
     entry_point: SplitikEntryPoint | None = None
+    attachment_ids: list[UUID] = Field(default_factory=list)
     locale: str = "ru-RU"
     timezone: str = "Europe/Moscow"
 
