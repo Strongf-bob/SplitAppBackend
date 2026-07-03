@@ -429,6 +429,66 @@ def test_splitik_rejects_foreign_draft_commit(db, monkeypatch):
     assert exc.value.status_code == 404
 
 
+def test_splitik_draft_read_update_is_owner_scoped(db, monkeypatch):
+    _mock_llm(monkeypatch)
+    seed_users(db)
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(mode="general", message="Создай событие: Поездка"),
+        USER_A,
+    )
+    draft_id = response["drafts"][0]["id"]
+
+    draft = splitik.get_splitik_draft(db, draft_id, USER_A)
+    assert draft["payload"]["name"] == "Поездка"
+
+    updated = splitik.update_splitik_draft(
+        db,
+        draft_id,
+        schemas.SplitikDraftUpdateRequest(payload={"name": "Поездка в Казань"}),
+        USER_A,
+    )
+    assert updated["version"] == 2
+    assert updated["payload"]["name"] == "Поездка в Казань"
+
+    with pytest.raises(HTTPException) as read_exc:
+        splitik.get_splitik_draft(db, draft_id, USER_B)
+    assert read_exc.value.status_code == 404
+
+    with pytest.raises(HTTPException) as update_exc:
+        splitik.update_splitik_draft(
+            db,
+            draft_id,
+            schemas.SplitikDraftUpdateRequest(payload={"name": "Чужая правка"}),
+            USER_B,
+        )
+    assert update_exc.value.status_code == 404
+
+
+def test_splitik_commits_receipt_draft_only_on_explicit_commit(db, monkeypatch):
+    _mock_llm(monkeypatch)
+    seed_event(db)
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Добавь чек: кофе 1200 рублей",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+    draft_id = response["drafts"][0]["id"]
+    assert db.receipts.count_documents({"event_id": EVENT_ID}) == 0
+
+    committed = splitik.commit_splitik_draft(db, draft_id, USER_A)
+
+    assert committed["draft"]["status"] == "committed"
+    assert committed["resource"]["event_id"] == EVENT_ID
+    assert committed["resource"]["status"] == "draft"
+    assert committed["resource"]["total_amount_kopecks"] == 120000
+    assert db.receipts.count_documents({"event_id": EVENT_ID}) == 1
+
+
 def test_seed_demo_friends_is_idempotent(db, monkeypatch):
     seed_users(db)
     db.users.update_one(

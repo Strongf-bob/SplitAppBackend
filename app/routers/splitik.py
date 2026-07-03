@@ -28,6 +28,25 @@ def get_session(
     return splitik.get_splitik_session(db, str(id), current_user_id)
 
 
+@router.get("/api/splitik/drafts/{id}", response_model=schemas.SplitikDraft)
+def get_draft(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+):
+    return splitik.get_splitik_draft(db, str(id), current_user_id)
+
+
+@router.patch("/api/splitik/drafts/{id}", response_model=schemas.SplitikDraft)
+def update_draft(
+    id: UUID,
+    payload: schemas.SplitikDraftUpdateRequest,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+):
+    return splitik.update_splitik_draft(db, str(id), payload, current_user_id)
+
+
 @router.post("/api/splitik/drafts/{id}/commit", response_model=schemas.SplitikDraftCommitResponse)
 def commit_draft(
     id: UUID,
