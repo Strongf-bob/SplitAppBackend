@@ -824,6 +824,31 @@ tr:last-child td {
   color: var(--muted) !important;
 }
 
+/* Splitik hero needs denser type than the decision landing pages. */
+.splitik-hero .splitik-shell {
+  align-items: center;
+  gap: 32px;
+  border: 0;
+  background: transparent;
+}
+
+.splitik-hero .splitik-shell > * {
+  min-width: 0;
+  background: transparent !important;
+}
+
+.splitik-hero h1 {
+  max-width: 720px;
+  font-size: clamp(40px, 5.2vw, 74px);
+  line-height: 0.98;
+  overflow-wrap: anywhere;
+}
+
+.splitik-hero .lead {
+  max-width: 680px;
+  font-size: clamp(18px, 1.55vw, 22px);
+}
+
 @media (max-width: 1040px) {
   .site-header .nav,
   .hero-grid,
@@ -837,6 +862,10 @@ tr:last-child td {
   .scenario-grid,
   .source-list {
     grid-template-columns: 1fr;
+  }
+
+  .splitik-hero h1 {
+    font-size: clamp(38px, 8vw, 68px);
   }
 
   .nav-links {
