@@ -1,3 +1,9 @@
+import hashlib
+import json
+import logging
+import time
+import traceback
+
 from fastapi import HTTPException
 from pymongo.database import Database
 
@@ -11,10 +17,15 @@ from app.services.access import (
 )
 from app.services.balances import get_event_balance_explanations, get_event_balances
 from app.services.common import new_uuid, strip_mongo_id, utc_now, user_to_api_dict
-from app.services.splitik_guardrails import evaluate_assistant_message, evaluate_user_message
+from app.services.splitik_guardrails import (
+    evaluate_assistant_message,
+    evaluate_user_message,
+    sanitize_message,
+)
 from app.services.splitik_interactions import log_interaction
 from app.services import splitik_attachments, splitik_tools
 
+logger = logging.getLogger("splitapp")
 _MODES = {"general", "event", "receipt", "member"}
 
 _FORBIDDEN_CAPABILITIES = [
@@ -523,17 +534,247 @@ def _draft_questions(drafts: list[dict]) -> list[dict]:
     return questions
 
 
-def send_splitik_message(
-    db: Database, payload: schemas.SplitikMessageRequest, actor_user_id: str
+def _entry_point_summary(payload: schemas.SplitikMessageRequest) -> dict:
+    entry_point = payload.entry_point
+    if entry_point is None:
+        return {"entry_point_type": None}
+    return {
+        "entry_point_type": entry_point.type,
+        "event_id": str(entry_point.event_id) if entry_point.event_id else None,
+        "receipt_id": str(entry_point.receipt_id) if entry_point.receipt_id else None,
+        "target_user_id": str(entry_point.target_user_id) if entry_point.target_user_id else None,
+    }
+
+
+def _count_context_values(context: dict) -> dict:
+    counts: dict[str, int] = {}
+    for key, value in context.items():
+        if isinstance(value, list):
+            counts[key] = len(value)
+        elif isinstance(value, dict):
+            counts[key] = len(value)
+    return counts
+
+
+def _context_summary(
+    payload: schemas.SplitikMessageRequest,
+    *,
+    mode: str,
+    context: dict | None = None,
+    tools: list[str] | None = None,
+    drafts: list[dict] | None = None,
 ) -> dict:
-    get_user_or_404(db, actor_user_id)
+    summary = {
+        "mode": mode,
+        "message_length": len(payload.message),
+        "attachment_count": len(payload.attachment_ids),
+        "available_tools": tools or [],
+        "draft_count": len(drafts or []),
+        "context_counts": _count_context_values(context or {}),
+    }
+    summary.update(_entry_point_summary(payload))
+    return summary
+
+
+def _error_payload(exc: Exception) -> dict:
+    status_code = exc.status_code if isinstance(exc, HTTPException) else None
+    detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+    stack = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    return {
+        "type": type(exc).__name__,
+        "http_status": status_code,
+        "message": sanitize_message(str(detail)),
+        "traceback_hash": hashlib.sha256(stack.encode("utf-8")).hexdigest(),
+    }
+
+
+def _log_splitik_failure(
+    db: Database,
+    *,
+    payload: schemas.SplitikMessageRequest,
+    actor_user_id: str,
+    request_id: str | None,
+    session_id: str | None,
+    message_id: str,
+    mode: str,
+    stage: str,
+    started: float,
+    context: dict | None,
+    tools: list[str] | None,
+    drafts: list[dict] | None,
+    guardrail_decision: dict | None,
+    exc: Exception,
+) -> None:
+    error = _error_payload(exc)
+    logger.error(
+        json.dumps(
+            {
+                "level": "ERROR",
+                "message": "splitik_message_failed",
+                "request_id": request_id,
+                "actor_user_id": actor_user_id,
+                "session_id": session_id,
+                "message_id": message_id,
+                "stage": stage,
+                "error": error,
+            },
+            default=str,
+        ),
+        exc_info=True,
+    )
+    try:
+        log_interaction(
+            db,
+            actor_user_id=actor_user_id,
+            session_id=session_id,
+            message_id=message_id,
+            sanitized_user_message=payload.message,
+            intent="error",
+            context_scope=mode,
+            assistant_message="",
+            guardrail_decision=guardrail_decision or {},
+            request_id=request_id,
+            status="error",
+            stage=stage,
+            model_ids=["primary"] if stage.startswith("llm.") else [],
+            context_summary=_context_summary(
+                payload,
+                mode=mode,
+                context=context,
+                tools=tools,
+                drafts=drafts,
+            ),
+            tool_calls=[{"name": name, "status": "available"} for name in (tools or [])],
+            draft_ids=[str(draft["id"]) for draft in (drafts or [])],
+            latency_ms=round((time.monotonic() - started) * 1000, 2),
+            error=error,
+        )
+    except Exception:
+        logger.error("splitik_failure_log_write_failed", exc_info=True)
+
+
+def send_splitik_message(
+    db: Database,
+    payload: schemas.SplitikMessageRequest,
+    actor_user_id: str,
+    request_id: str | None = None,
+) -> dict:
+    started = time.monotonic()
     mode = payload.mode.strip().lower()
-    guardrail_decision = evaluate_user_message(payload.message, context_scope=mode)
-    if not guardrail_decision["allowed"]:
+    session: dict | None = None
+    message_id = new_uuid()
+    stage = "actor.lookup"
+    guardrail_decision: dict | None = None
+    context: dict = {}
+    drafts: list[dict] = []
+    tools: list[str] = []
+    try:
+        get_user_or_404(db, actor_user_id)
+        stage = "guardrail.user"
+        guardrail_decision = evaluate_user_message(payload.message, context_scope=mode)
+        if not guardrail_decision["allowed"]:
+            stage = "session.load"
+            session = _get_or_create_session(db, payload, actor_user_id)
+            now = utc_now()
+            reply = guardrail_decision["message"]
+            stage = "session.write"
+            db.splitik_sessions.update_one(
+                {"id": session["id"]},
+                {
+                    "$push": {
+                        "messages": {
+                            "id": message_id,
+                            "user_message": payload.message,
+                            "assistant_message": reply,
+                            "mode": mode,
+                            "created_at": now,
+                        }
+                    },
+                    "$set": {"updated_at": now, "mode": mode},
+                },
+            )
+            log_interaction(
+                db,
+                actor_user_id=actor_user_id,
+                session_id=session["id"],
+                message_id=message_id,
+                sanitized_user_message=payload.message,
+                intent="refusal",
+                context_scope=mode,
+                assistant_message=reply,
+                guardrail_decision=guardrail_decision,
+                request_id=request_id,
+                status="success",
+                stage="completed",
+                context_summary=_context_summary(payload, mode=mode),
+                latency_ms=round((time.monotonic() - started) * 1000, 2),
+            )
+            return {
+                "session_id": session["id"],
+                "message_id": message_id,
+                "assistant_message": reply,
+                "mode": mode,
+                "intent": "refusal",
+                "guardrail_decision": guardrail_decision,
+                "context_chips": [],
+                "capabilities": [],
+                "drafts": [],
+                "questions": [],
+                "suggested_actions": [],
+            }
+
+        stage = "session.load"
         session = _get_or_create_session(db, payload, actor_user_id)
+        stage = "context.build"
+        context, chips, capabilities = _build_context(db, payload, actor_user_id)
+        stage = "drafts.create"
+        drafts = _maybe_create_draft(db, payload, actor_user_id, session["id"])
+        questions = _draft_questions(drafts)
+        if drafts:
+            context["drafts"] = drafts
+        tools = _available_tools(mode)
+        stage = "tools.build"
+        tool_results = _build_tool_results(
+            db,
+            payload=payload,
+            actor_user_id=actor_user_id,
+            session_id=session["id"],
+        )
+        context["available_tools"] = tools
+        context["tool_results"] = tool_results
+        context["conversation_state"] = _build_conversation_state(
+            session_id=session["id"],
+            mode=mode,
+            tool_results=tool_results,
+        )
+        explanation_requested = _is_expense_explanation_request(payload.message)
+        if explanation_requested:
+            context["user_balance_summary"] = splitik_tools.read_user_balance_summary(
+                db, actor_user_id=actor_user_id
+            )
+            context["tool_results"]["splitik.get_user_spending_summary"] = context[
+                "user_balance_summary"
+            ]
+
+        stage = "llm.generate_reply"
+        reply = splitik_llm.generate_splitik_reply(
+            system_prompt=_SYSTEM_PROMPT,
+            user_message=payload.message,
+            context=context,
+        )
+        stage = "guardrail.assistant"
+        post_guardrail_decision = evaluate_assistant_message(
+            reply,
+            committed_resource=False,
+        )
+        if not post_guardrail_decision["allowed"]:
+            reply = post_guardrail_decision["message"]
+            guardrail_decision = post_guardrail_decision
         now = utc_now()
-        message_id = new_uuid()
-        reply = guardrail_decision["message"]
+        intent = "draft" if drafts else "explain" if explanation_requested else "chat"
+        if not guardrail_decision["allowed"]:
+            intent = "guardrail"
+        stage = "session.write"
         db.splitik_sessions.update_one(
             {"id": session["id"]},
             {
@@ -555,114 +796,58 @@ def send_splitik_message(
             session_id=session["id"],
             message_id=message_id,
             sanitized_user_message=payload.message,
-            intent="refusal",
+            intent=intent,
             context_scope=mode,
             assistant_message=reply,
             guardrail_decision=guardrail_decision,
+            request_id=request_id,
+            status="success",
+            stage="completed",
+            model_ids=["primary"],
+            context_summary=_context_summary(
+                payload,
+                mode=mode,
+                context=context,
+                tools=tools,
+                drafts=drafts,
+            ),
+            tool_calls=[
+                {"name": name, "status": "completed"} for name in context["tool_results"].keys()
+            ],
+            draft_ids=[str(draft["id"]) for draft in drafts],
+            latency_ms=round((time.monotonic() - started) * 1000, 2),
         )
         return {
             "session_id": session["id"],
             "message_id": message_id,
             "assistant_message": reply,
             "mode": mode,
-            "intent": "refusal",
+            "intent": intent,
             "guardrail_decision": guardrail_decision,
-            "context_chips": [],
-            "capabilities": [],
-            "drafts": [],
-            "questions": [],
+            "context_chips": chips,
+            "capabilities": capabilities,
+            "drafts": drafts,
+            "questions": questions,
             "suggested_actions": [],
         }
-
-    session = _get_or_create_session(db, payload, actor_user_id)
-    context, chips, capabilities = _build_context(db, payload, actor_user_id)
-    drafts = _maybe_create_draft(db, payload, actor_user_id, session["id"])
-    questions = _draft_questions(drafts)
-    if drafts:
-        context["drafts"] = drafts
-    tools = _available_tools(mode)
-    tool_results = _build_tool_results(
-        db,
-        payload=payload,
-        actor_user_id=actor_user_id,
-        session_id=session["id"],
-    )
-    context["available_tools"] = tools
-    context["tool_results"] = tool_results
-    context["conversation_state"] = _build_conversation_state(
-        session_id=session["id"],
-        mode=mode,
-        tool_results=tool_results,
-    )
-    explanation_requested = _is_expense_explanation_request(payload.message)
-    if explanation_requested:
-        context["user_balance_summary"] = splitik_tools.read_user_balance_summary(
-            db, actor_user_id=actor_user_id
+    except Exception as exc:
+        _log_splitik_failure(
+            db,
+            payload=payload,
+            actor_user_id=actor_user_id,
+            request_id=request_id,
+            session_id=session["id"] if session else None,
+            message_id=message_id,
+            mode=mode,
+            stage=stage,
+            started=started,
+            context=context,
+            tools=tools,
+            drafts=drafts,
+            guardrail_decision=guardrail_decision,
+            exc=exc,
         )
-        context["tool_results"]["splitik.get_user_spending_summary"] = context[
-            "user_balance_summary"
-        ]
-
-    reply = splitik_llm.generate_splitik_reply(
-        system_prompt=_SYSTEM_PROMPT,
-        user_message=payload.message,
-        context=context,
-    )
-    post_guardrail_decision = evaluate_assistant_message(
-        reply,
-        committed_resource=False,
-    )
-    if not post_guardrail_decision["allowed"]:
-        reply = post_guardrail_decision["message"]
-        guardrail_decision = post_guardrail_decision
-    now = utc_now()
-    message_id = new_uuid()
-    intent = "draft" if drafts else "explain" if explanation_requested else "chat"
-    if not guardrail_decision["allowed"]:
-        intent = "guardrail"
-    db.splitik_sessions.update_one(
-        {"id": session["id"]},
-        {
-            "$push": {
-                "messages": {
-                    "id": message_id,
-                    "user_message": payload.message,
-                    "assistant_message": reply,
-                    "mode": payload.mode.strip().lower(),
-                    "created_at": now,
-                }
-            },
-            "$set": {"updated_at": now, "mode": payload.mode.strip().lower()},
-        },
-    )
-    log_interaction(
-        db,
-        actor_user_id=actor_user_id,
-        session_id=session["id"],
-        message_id=message_id,
-        sanitized_user_message=payload.message,
-        intent=intent,
-        context_scope=payload.mode.strip().lower(),
-        assistant_message=reply,
-        guardrail_decision=guardrail_decision,
-        tool_calls=[
-            {"name": name, "status": "completed"} for name in context["tool_results"].keys()
-        ],
-        draft_ids=[str(draft["id"]) for draft in drafts],
-    )
-    return {
-        "session_id": session["id"],
-        "message_id": message_id,
-        "assistant_message": reply,
-        "mode": payload.mode.strip().lower(),
-        "intent": intent,
-        "guardrail_decision": guardrail_decision,
-        "context_chips": chips,
-        "capabilities": capabilities,
-        "drafts": drafts,
-        "questions": questions,
-        "suggested_actions": [],
-    }
+        raise
 
 
 def get_splitik_session(db: Database, session_id: str, actor_user_id: str) -> dict:

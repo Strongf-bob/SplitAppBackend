@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from pymongo.database import Database
 
 from app import schemas
@@ -34,10 +34,12 @@ async def upload_attachment(
 @router.post("/api/splitik/messages", response_model=schemas.SplitikMessageResponse)
 def send_message(
     payload: schemas.SplitikMessageRequest,
+    request: Request,
     db: Database = Depends(get_db),
     current_user_id: str = Depends(get_actor_user_id),
 ):
-    return splitik.send_splitik_message(db, payload, current_user_id)
+    request_id = getattr(request.state, "request_id", None)
+    return splitik.send_splitik_message(db, payload, current_user_id, request_id=request_id)
 
 
 @router.get("/api/splitik/sessions/{id}", response_model=schemas.SplitikSession)
