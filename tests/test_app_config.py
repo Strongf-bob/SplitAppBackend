@@ -2,9 +2,11 @@ import json
 import logging
 from pathlib import Path
 
+import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
+from app import main as app_main
 from app.core.monitoring import metrics_response, monitor_db_operation, monitor_service_operation
 from app.core.monitoring import record_domain_event, refresh_database_metrics
 from app.dependencies import _is_internal_client, require_auth_token
@@ -66,6 +68,33 @@ def test_cors_rejects_unconfigured_origin(monkeypatch):
 
     assert response.status_code == 400
     assert "access-control-allow-origin" not in response.headers
+
+
+@pytest.mark.anyio
+async def test_lifespan_validates_splitik_models(monkeypatch):
+    api = FastAPI()
+    calls = []
+
+    monkeypatch.setattr(app_main, "load_env_file", lambda: calls.append("env"))
+    monkeypatch.setattr(app_main, "init_sentry", lambda: calls.append("sentry"))
+    monkeypatch.setattr(
+        app_main,
+        "connect_mongodb",
+        lambda app: (calls.append("mongo"), setattr(app.state, "db", object())),
+    )
+    monkeypatch.setattr(app_main, "connect_s3", lambda app: calls.append("s3"))
+    monkeypatch.setattr(app_main, "ensure_indexes", lambda db: calls.append("indexes"))
+    monkeypatch.setattr(app_main, "close_mongodb", lambda app: calls.append("close"))
+    monkeypatch.setattr(
+        app_main.splitik_llm,
+        "validate_configured_models_available",
+        lambda: calls.append("models"),
+    )
+
+    async with app_main.lifespan(api):
+        calls.append("served")
+
+    assert calls == ["env", "sentry", "mongo", "s3", "indexes", "models", "served", "close"]
 
 
 def test_unhandled_errors_return_generic_500():
@@ -164,6 +193,33 @@ def test_pwa_static_routes_are_registered():
     app_asset = client.get("/assets/app.js")
     assert app_asset.status_code == 200
     assert "bootstrap" in app_asset.text
+
+
+def test_public_root_is_install_landing_page():
+    index_html = (PROJECT_ROOT / "web" / "index.html").read_text()
+    app_css = (PROJECT_ROOT / "web" / "assets" / "app.css").read_text()
+    design_doc = PROJECT_ROOT / "DESIGN.md"
+
+    assert design_doc.exists()
+    assert "Passionfroot — Style Reference" in design_doc.read_text()
+    assert "Установить SplitApp" in index_html
+    assert "topbar-install-button" in index_html
+    assert "Открыть приложение" not in index_html
+    assert "data-scroll-login" not in index_html
+    assert "hero-login" not in index_html
+    assert '<section id="authPanel" class="panel auth-panel" hidden>' in index_html
+    assert "landing-hero" in index_html
+    assert "product-card-stack" in index_html
+    assert "star-field" in index_html
+    assert "cloud-belt" in index_html
+    assert "trusted-marquee" in index_html
+    assert "@keyframes float-card" in app_css
+    assert "@keyframes marquee" in app_css
+    assert "@keyframes twinkle" in app_css
+    assert "[hidden]" in app_css
+    assert "display: none !important" in app_css
+    assert 'window.location.protocol === "file:"' in index_html
+    assert "splitAppAssetBase" in index_html
 
 
 def test_pwa_static_routes_support_head_smoke_checks():

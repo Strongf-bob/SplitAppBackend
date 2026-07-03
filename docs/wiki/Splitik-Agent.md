@@ -9,7 +9,7 @@
 
 - `SPLITIK_LLM_BASE_URL`
 - `SPLITIK_LLM_API_KEY`
-- `SPLITIK_PRIMARY_MODEL` - primary model for Splitik replies and future receipt understanding.
+- `SPLITIK_PRIMARY_MODEL` - primary model for Splitik replies and receipt understanding.
 - `SPLITIK_VERIFICATION_MODEL` - independent verification model for receipt understanding cross-checks.
 - `SPLITIK_ESCALATION_MODEL` - escalation model used when primary and verification results disagree.
 - `SPLITIK_LLM_TIMEOUT_SECONDS`
@@ -44,19 +44,58 @@ Capabilities вычисляются на backend:
 
 - read capabilities: summaries, receipt details, member context, balance explanations.
 - draft capabilities: create event, add receipt.
-- commit v1: create event.
+- commit v1: create event and create receipt.
 - forbidden capabilities: impersonation, event deletion, direct existing money-state edits,
   marking someone else's payment as paid.
 
 ## Draft and commit flow
 
 Сплитик может создать draft action, но draft не меняет деньги и не создает
-события сам по себе. Изменение состояния выполняется только через
-`POST /api/splitik/drafts/{id}/commit`, где backend проверяет owner draft и
-поддерживаемый тип действия.
+события или чеки сам по себе. Изменение состояния выполняется только через
+`POST /api/splitik/drafts/{id}/commit`, где backend проверяет owner draft,
+status и поддерживаемый тип действия.
 
-V1 поддерживает commit только для `create_event`. Остальные write flows должны
-оставаться draft-only до отдельного backend policy layer и regression tests.
+MVP поддерживает:
+
+- `create_event` draft из текста в `general` mode;
+- `create_receipt` draft из текста в `event` mode;
+- `create_receipt` draft из image attachment;
+- update pending draft через `PATCH /api/splitik/drafts/{id}` или follow-up
+  chat command в той же session;
+- explicit commit для `create_event` и `create_receipt`.
+
+Confirmed money state не меняется от обычного chat response. Receipt draft
+commit создает обычный backend receipt со status `draft`; дальнейшая
+confirmation/review логика остается в receipt domain services.
+
+## Attachments
+
+Image attachments хранятся приватно. API и interaction logs возвращают только
+metadata (`id`, filename, content type, size), но не bucket/key, private storage
+URL или presigned URL. Vision/OCR provider получает sanitized attachment
+metadata и event context, после чего backend валидирует результат как
+`CreateReceiptRequest`.
+
+## Guardrails and logs
+
+Перед вызовом LLM backend применяет deterministic guardrails:
+
+- out-of-scope homework/general assistant prompts получают refusal;
+- requests for passwords, tokens, API keys or payment credentials are refused;
+- private friend-spending questions outside shared context are refused;
+- foreign sessions, drafts, events, receipts and members return owner/membership
+  scoped errors.
+
+Every Splitik message writes `splitik_interactions` with actor, session,
+message id, sanitized message, intent, guardrail decision, draft ids and model
+metadata. Logs redact accidental tokens and must not include auth tokens,
+payment credentials, private storage keys or private URLs.
+
+## Spending explanations
+
+General spending questions such as "кто мне должен" or "сколько я должен" use
+backend-computed balance facts. LLM receives `user_balance_summary` and formats
+the answer; it is not the source of financial calculations.
 
 ## Demo friends
 

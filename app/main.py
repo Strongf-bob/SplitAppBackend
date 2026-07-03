@@ -30,6 +30,7 @@ from app.routers import (
     users_router,
 )
 from app.services import ensure_indexes
+from app.services import splitik_llm
 
 logger = logging.getLogger("splitapp")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -165,6 +166,7 @@ async def lifespan(app: FastAPI):
         connect_mongodb(app)
         connect_s3(app)
         ensure_indexes(app.state.db)
+        splitik_llm.validate_configured_models_available()
     except Exception as exc:
         raise RuntimeError("Could not connect to MongoDB with current settings.") from exc
 
