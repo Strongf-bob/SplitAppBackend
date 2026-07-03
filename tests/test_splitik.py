@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from app import schemas
 from app.dependencies import get_actor_user_id, get_db, get_s3
+from app.main import configure_request_logging
 from app.routers import splitik as splitik_router
 from app.services import receipt_ai_drafts, receipts, splitik, splitik_attachments, splitik_llm
 from tests.conftest import EVENT_ID, USER_A, USER_B, USER_C, seed_event, seed_users
@@ -331,6 +332,88 @@ def test_splitik_logs_allowed_message_without_tokens(db, monkeypatch):
     assert log is not None
     assert "secret-token" not in log["sanitized_user_message"]
     assert "Bearer abc" not in log["sanitized_user_message"]
+
+
+def test_splitik_logs_request_context_summary_and_request_id(db, monkeypatch):
+    _mock_llm(monkeypatch)
+    seed_event(db)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Что по этому событию?",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+        request_id="req-splitik-123",
+    )
+
+    log = db.splitik_interactions.find_one({"message_id": response["message_id"]})
+    assert log is not None
+    assert log["request_id"] == "req-splitik-123"
+    assert log["status"] == "success"
+    assert log["stage"] == "completed"
+    assert log["latency_ms"] >= 0
+    assert log["context_summary"]["mode"] == "event"
+    assert log["context_summary"]["entry_point_type"] == "event"
+    assert log["context_summary"]["event_id"] == EVENT_ID
+    assert log["context_summary"]["context_counts"]["receipts"] == 0
+    assert log["model_ids"] == ["primary"]
+    assert log["error"] is None
+
+
+def test_splitik_logs_llm_error_for_later_debugging(db, monkeypatch):
+    seed_users(db)
+
+    def fake_reply(*, system_prompt, user_message, context):
+        raise HTTPException(status_code=502, detail="Splitik LLM provider returned an error.")
+
+    monkeypatch.setattr(splitik_llm, "generate_splitik_reply", fake_reply)
+
+    with pytest.raises(HTTPException) as exc:
+        splitik.send_splitik_message(
+            db,
+            schemas.SplitikMessageRequest(mode="general", message="Сколько я должен?"),
+            USER_A,
+            request_id="req-error-456",
+        )
+
+    assert exc.value.status_code == 502
+    log = db.splitik_interactions.find_one({"request_id": "req-error-456"})
+    assert log is not None
+    assert log["status"] == "error"
+    assert log["stage"] == "llm.generate_reply"
+    assert log["intent"] == "error"
+    assert log["error"]["type"] == "HTTPException"
+    assert log["error"]["http_status"] == 502
+    assert log["error"]["message"] == "Splitik LLM provider returned an error."
+    assert log["latency_ms"] >= 0
+    assert log["context_summary"]["mode"] == "general"
+    assert "Authorization" not in str(log)
+    assert "Bearer" not in str(log)
+
+
+def test_splitik_message_endpoint_passes_request_id_to_interaction_log(db, monkeypatch):
+    _mock_llm(monkeypatch)
+    seed_users(db)
+    api = FastAPI()
+    api.dependency_overrides[get_db] = lambda: db
+    api.dependency_overrides[get_actor_user_id] = lambda: USER_A
+    api.include_router(splitik_router.router)
+    configure_request_logging(api)
+    client = TestClient(api)
+
+    response = client.post(
+        "/api/splitik/messages",
+        headers={"X-Request-ID": "req-router-789"},
+        json={"mode": "general", "message": "Что у меня по событиям?"},
+    )
+
+    assert response.status_code == 200
+    log = db.splitik_interactions.find_one({"message_id": response.json()["message_id"]})
+    assert log is not None
+    assert log["request_id"] == "req-router-789"
 
 
 def test_splitik_blocks_llm_claiming_direct_state_change(db, monkeypatch):
