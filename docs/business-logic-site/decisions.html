@@ -27,12 +27,12 @@
         <p class="lead">
           Это публичное объяснение того, как устроен SplitApp: роли и права, safe ledger-flow,
           AI-черновики чеков, выбор модели по benchmark, расчет долгов, платежи, хранение чеков
-          и backend как источник правды.
+          и серверные проверки для всех действий, которые меняют деньги или права.
         </p>
         <div class="decision-grid" aria-label="Ключевые решения">
           <article>
             <span>01</span>
-            <strong>Backend решает права</strong>
+            <strong>Права проверяются рядом с действием</strong>
             <p>Frontend отправляет намерение, но сервер проверяет actor, membership, роль и состояние события.</p>
           </article>
           <article>
@@ -263,7 +263,7 @@
           </div>
           <div>
             <span>02</span>
-            <p>Backend проверяет JSON/schema, payer, participants, totals, shares и membership.</p>
+            <p>Сервер проверяет JSON/schema, payer, participants, totals, shares и membership.</p>
           </div>
           <div>
             <span>03</span>
@@ -460,7 +460,7 @@
             </p>
           </article>
           <article>
-            <h3>Backend-served PWA</h3>
+            <h3>PWA на том же серверном контуре</h3>
             <p>
               Один deployment-контур упрощает показ продукта: PWA открывается рядом с API, использует тот же backend
               и не требует отдельной frontend-инфраструктуры для публичного demo-flow.
@@ -516,7 +516,7 @@
           </article>
           <article>
             <h3>Чужие данные</h3>
-            <p>Backend проверяет authenticated actor и membership рядом с операцией, а не доверяет frontend.</p>
+            <p>Проверка authenticated actor и membership выполняется рядом с операцией, а не переносится только во frontend.</p>
           </article>
           <article>
             <h3>Спорный долг</h3>

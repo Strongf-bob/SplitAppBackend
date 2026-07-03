@@ -1,6 +1,6 @@
 # Receipt Agent Backlog
 
-AI receipt draft parsing уже имеет backend-owned text flow. OCR/image provider
+AI receipt draft parsing уже имеет серверный text flow. OCR/image provider
 integration намеренно не реализован, пока не выбран provider contract.
 
 ## Текущее Состояние

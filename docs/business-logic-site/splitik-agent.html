@@ -409,7 +409,7 @@
           <div class="agent-board" aria-label="Как Сплитик обрабатывает запрос">
             <div class="agent-board-header">
               <strong>Splitik runtime</strong>
-              <span class="status-dot">backend-owned</span>
+              <span class="status-dot">server-checked</span>
             </div>
             <div class="agent-stage">
               <div class="stage-cell">
@@ -419,7 +419,7 @@
               </div>
               <div class="stage-cell">
                 <span class="stage-index">2</span>
-                <strong>Backend собирает факты</strong>
+                <strong>Сервер собирает факты</strong>
                 <p class="muted">Actor, membership, последние сообщения, active draft, balances и tool results.</p>
               </div>
               <div class="stage-cell">
@@ -431,7 +431,7 @@
             <div class="agent-visual">
               <div class="pipeline">
                 <div class="pipe-block backend">
-                  <strong>Backend policy</strong>
+                  <strong>Access policy</strong>
                   <p class="muted">Проверяет доступ, режим, session и допустимые capabilities.</p>
                 </div>
                 <div class="pipe-arrow" aria-hidden="true">→</div>
@@ -553,7 +553,7 @@
             <div class="scenario-header">
               <div>
                 <h3>2. Добавить чек из текста</h3>
-                <p class="muted">Backend проверяет доступ к событию, строит payload чека и возвращает вопросы для review.</p>
+                <p class="muted">Сервер проверяет доступ к событию, строит payload чека и возвращает вопросы для review.</p>
               </div>
               <span class="tag warn">event mode</span>
             </div>
@@ -807,7 +807,7 @@ POST /api/splitik/messages
           <div class="commit-arrow" aria-hidden="true">→</div>
           <div class="commit-box">
             <strong>POST /api/splitik/drafts/{id}/commit</strong>
-            <p class="muted">Backend проверяет owner, pending status и тип draft, затем создает событие или receipt draft в обычной доменной логике.</p>
+            <p class="muted">Сервер проверяет owner, pending status и тип draft, затем создает событие или receipt draft в обычной доменной логике.</p>
           </div>
         </div>
       </section>
