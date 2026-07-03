@@ -264,6 +264,26 @@ def _extract_event_name(message: str) -> str | None:
     return None
 
 
+def _receipt_clarifying_questions() -> list[dict]:
+    return [
+        {
+            "id": "payer",
+            "text": "Кто платил за этот чек?",
+            "required": True,
+        },
+        {
+            "id": "participants",
+            "text": "Кто участвовал в этом чеке?",
+            "required": True,
+        },
+        {
+            "id": "split_details",
+            "text": "Кто что ел или как делим сумму?",
+            "required": True,
+        },
+    ]
+
+
 def _maybe_create_draft(
     db: Database,
     payload: schemas.SplitikMessageRequest,
@@ -309,6 +329,9 @@ def _maybe_create_draft(
         receipt_payload = content.get("payload") if isinstance(content, dict) else None
         if not receipt_payload:
             return []
+        questions = content.get("questions") if isinstance(content, dict) else None
+        if not questions:
+            questions = _receipt_clarifying_questions()
         return [
             splitik_tools.create_receipt_draft(
                 db,
@@ -318,6 +341,7 @@ def _maybe_create_draft(
                 payload=receipt_payload,
                 source="image",
                 attachment_ids=attachment_ids,
+                questions=questions,
             )
         ]
 
@@ -364,6 +388,7 @@ def _maybe_create_draft(
             session_id=session_id,
             event_id=event_id,
             payload=receipt_payload,
+            questions=_receipt_clarifying_questions(),
         )
     ]
 
@@ -454,6 +479,19 @@ def _build_conversation_state(
     return state
 
 
+def _draft_questions(drafts: list[dict]) -> list[dict]:
+    questions: list[dict] = []
+    seen_ids: set[str] = set()
+    for draft in drafts:
+        for question in draft.get("questions", []):
+            question_id = str(question.get("id") or "")
+            if question_id in seen_ids:
+                continue
+            seen_ids.add(question_id)
+            questions.append(question)
+    return questions
+
+
 def send_splitik_message(
     db: Database, payload: schemas.SplitikMessageRequest, actor_user_id: str
 ) -> dict:
@@ -508,6 +546,7 @@ def send_splitik_message(
     session = _get_or_create_session(db, payload, actor_user_id)
     context, chips, capabilities = _build_context(db, payload, actor_user_id)
     drafts = _maybe_create_draft(db, payload, actor_user_id, session["id"])
+    questions = _draft_questions(drafts)
     if drafts:
         context["drafts"] = drafts
     tools = _available_tools(mode)
@@ -581,7 +620,7 @@ def send_splitik_message(
         "context_chips": chips,
         "capabilities": capabilities,
         "drafts": drafts,
-        "questions": [],
+        "questions": questions,
         "suggested_actions": [],
     }
 

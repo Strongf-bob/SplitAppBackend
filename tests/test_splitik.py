@@ -384,6 +384,25 @@ def test_splitik_creates_receipt_draft_from_event_text_without_changing_money(db
     assert db.receipts.count_documents({"event_id": EVENT_ID}) == 0
 
 
+def test_splitik_receipt_draft_returns_clarifying_questions(db, monkeypatch):
+    _mock_llm(monkeypatch)
+    seed_event(db)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Добавь чек: кофе 1200 рублей",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+
+    question_ids = {question["id"] for question in response["questions"]}
+    assert {"payer", "participants", "split_details"} <= question_ids
+    assert response["drafts"][0]["questions"] == response["questions"]
+
+
 def test_splitik_updates_receipt_draft_from_chat(db, monkeypatch):
     _mock_llm(monkeypatch)
     seed_event(db)
@@ -604,6 +623,11 @@ def test_splitik_creates_receipt_draft_from_image_attachment(db, fake_s3, monkey
     assert draft["source"] == "image"
     assert draft["attachment_ids"] == [attachment["id"]]
     assert draft["payload"]["items"][0]["name"] == "Капучино"
+    assert {question["id"] for question in response["questions"]} == {
+        "payer",
+        "participants",
+        "split_details",
+    }
     assert db.receipts.count_documents({"event_id": EVENT_ID}) == 0
     log = db.splitik_interactions.find_one({"message_id": response["message_id"]})
     assert log is not None

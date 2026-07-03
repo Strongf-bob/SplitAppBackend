@@ -60,6 +60,8 @@ MVP поддерживает:
 - `create_event` draft из текста в `general` mode;
 - `create_receipt` draft из текста в `event` mode;
 - `create_receipt` draft из image attachment;
+- receipt drafts возвращают уточняющие `questions` для payer, participants и
+  split details, если данных недостаточно для уверенного подтверждения;
 - update pending draft через `PATCH /api/splitik/drafts/{id}` или follow-up
   chat command в той же session;
 - explicit commit для `create_event` и `create_receipt`.
@@ -262,7 +264,24 @@ Backend validates event membership and creates a receipt draft:
         ]
       }
     ]
-  }
+  },
+  "questions": [
+    {
+      "id": "payer",
+      "text": "Кто платил за этот чек?",
+      "required": true
+    },
+    {
+      "id": "participants",
+      "text": "Кто участвовал в этом чеке?",
+      "required": true
+    },
+    {
+      "id": "split_details",
+      "text": "Кто что ел или как делим сумму?",
+      "required": true
+    }
+  ]
 }
 ```
 
