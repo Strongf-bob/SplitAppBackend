@@ -403,6 +403,45 @@ def test_splitik_receipt_draft_returns_clarifying_questions(db, monkeypatch):
     assert response["drafts"][0]["questions"] == response["questions"]
 
 
+def test_splitik_followup_answers_receipt_draft_questions(db, monkeypatch):
+    _mock_llm(monkeypatch)
+    seed_event(db)
+
+    created = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Добавь чек: кофе 1200 рублей",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+    draft_id = created["drafts"][0]["id"]
+    assert created["questions"]
+
+    answered = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            session_id=created["session_id"],
+            mode="event",
+            message="Я платил, были все участники, делим поровну",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+
+    assert answered["intent"] == "draft"
+    assert answered["questions"] == []
+    assert answered["drafts"][0]["id"] == draft_id
+    assert answered["drafts"][0]["version"] == 2
+    assert answered["drafts"][0]["questions"] == []
+    assert answered["drafts"][0]["model_metadata"]["answered_question_ids"] == [
+        "payer",
+        "participants",
+        "split_details",
+    ]
+
+
 def test_splitik_updates_receipt_draft_from_chat(db, monkeypatch):
     _mock_llm(monkeypatch)
     seed_event(db)

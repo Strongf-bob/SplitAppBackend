@@ -62,6 +62,8 @@ MVP поддерживает:
 - `create_receipt` draft из image attachment;
 - receipt drafts возвращают уточняющие `questions` для payer, participants и
   split details, если данных недостаточно для уверенного подтверждения;
+- follow-up answer в той же session может закрыть эти questions и обновить
+  metadata активного draft без commit;
 - update pending draft через `PATCH /api/splitik/drafts/{id}` или follow-up
   chat command в той же session;
 - explicit commit для `create_event` и `create_receipt`.
@@ -365,6 +367,41 @@ If the same text is sent without `session_id`, backend creates a new Splitik
 session and `conversation_state.active_draft` is absent. The old pending draft
 is still available through its draft API, but it is not treated as the active
 chat target.
+
+Follow-up answers to draft questions use the same session-local active draft.
+For example:
+
+```json
+{
+  "session_id": "same-session-id",
+  "mode": "event",
+  "message": "Я платил, были все участники, делим поровну",
+  "entry_point": {
+    "type": "event",
+    "event_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+  }
+}
+```
+
+Backend updates the same pending draft, removes answered questions, increments
+the version and records which questions were answered:
+
+```json
+{
+  "intent": "draft",
+  "questions": [],
+  "drafts": [
+    {
+      "id": "draft-id",
+      "version": 2,
+      "questions": [],
+      "model_metadata": {
+        "answered_question_ids": ["payer", "participants", "split_details"]
+      }
+    }
+  ]
+}
+```
 
 ### Create receipt draft from image
 
