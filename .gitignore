@@ -51,6 +51,10 @@ coverage.xml
 .pytest_cache/
 cover/
 
+# Local OS and generated analysis artifacts
+.DS_Store
+app/graphify-out/
+
 # Translations
 *.mo
 *.pot
