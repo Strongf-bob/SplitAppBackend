@@ -26,6 +26,7 @@ def create_event_draft(
     session_id: str | None,
     payload: dict,
     source: str = "text",
+    questions: list[dict] | None = None,
 ) -> dict:
     now = utc_now()
     draft = {
@@ -38,7 +39,7 @@ def create_event_draft(
         "version": 1,
         "source": source,
         "attachment_ids": [],
-        "questions": [],
+        "questions": questions or [],
         "model_metadata": {},
         "created_at": now,
         "updated_at": now,
@@ -56,6 +57,7 @@ def create_receipt_draft(
     payload: dict,
     source: str = "text",
     attachment_ids: list[str] | None = None,
+    questions: list[dict] | None = None,
 ) -> dict:
     assert_event_access(db, event_id, actor_user_id)
     try:
@@ -75,7 +77,7 @@ def create_receipt_draft(
         "version": 1,
         "source": source,
         "attachment_ids": attachment_ids or [],
-        "questions": [],
+        "questions": questions or [],
         "model_metadata": {},
         "created_at": now,
         "updated_at": now,
