@@ -4062,6 +4062,110 @@
         }
       }
     },
+    "/api/splitik/drafts/{id}": {
+      "get": {
+        "tags": [
+          "Splitik"
+        ],
+        "summary": "Get Draft",
+        "operationId": "get_draft_api_splitik_drafts__id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitikDraft"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Splitik"
+        ],
+        "summary": "Update Draft",
+        "operationId": "update_draft_api_splitik_drafts__id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SplitikDraftUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitikDraft"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/splitik/drafts/{id}/commit": {
       "post": {
         "tags": [
@@ -6745,10 +6849,77 @@
             "type": "object",
             "title": "Payload"
           },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 1
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "text"
+          },
+          "attachment_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Attachment Ids"
+          },
+          "questions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Questions"
+          },
+          "model_metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Model Metadata"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           },
           "committed_at": {
             "anyOf": [
@@ -6803,6 +6974,17 @@
         ],
         "title": "SplitikDraftCommitResponse"
       },
+      "SplitikDraftUpdateRequest": {
+        "properties": {
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          }
+        },
+        "type": "object",
+        "title": "SplitikDraftUpdateRequest"
+      },
       "SplitikEntryPoint": {
         "properties": {
           "type": {
@@ -6850,6 +7032,29 @@
         "type": "object",
         "title": "SplitikEntryPoint"
       },
+      "SplitikGuardrailDecision": {
+        "properties": {
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "allowed",
+          "reason"
+        ],
+        "title": "SplitikGuardrailDecision"
+      },
       "SplitikMessageRequest": {
         "properties": {
           "session_id": {
@@ -6883,6 +7088,14 @@
                 "type": "null"
               }
             ]
+          },
+          "attachment_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Attachment Ids"
           },
           "locale": {
             "type": "string",
@@ -6921,6 +7134,14 @@
             "type": "string",
             "title": "Mode"
           },
+          "intent": {
+            "type": "string",
+            "title": "Intent",
+            "default": "chat"
+          },
+          "guardrail_decision": {
+            "$ref": "#/components/schemas/SplitikGuardrailDecision"
+          },
           "context_chips": {
             "items": {
               "$ref": "#/components/schemas/SplitikContextChip"
@@ -6942,6 +7163,22 @@
             "type": "array",
             "title": "Drafts",
             "default": []
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/SplitikQuestion"
+            },
+            "type": "array",
+            "title": "Questions",
+            "default": []
+          },
+          "suggested_actions": {
+            "items": {
+              "$ref": "#/components/schemas/SplitikSuggestedAction"
+            },
+            "type": "array",
+            "title": "Suggested Actions",
+            "default": []
           }
         },
         "type": "object",
@@ -6954,6 +7191,29 @@
           "capabilities"
         ],
         "title": "SplitikMessageResponse"
+      },
+      "SplitikQuestion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "SplitikQuestion"
       },
       "SplitikSession": {
         "properties": {
@@ -7010,6 +7270,36 @@
           "updated_at"
         ],
         "title": "SplitikSession"
+      },
+      "SplitikSuggestedAction": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "draft_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "label"
+        ],
+        "title": "SplitikSuggestedAction"
       },
       "UpdateReceiptRequest": {
         "properties": {

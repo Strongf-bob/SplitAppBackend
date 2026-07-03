@@ -68,11 +68,13 @@ Payment phone visibility is conservative: `nobody`, `event_members`, or `friends
 
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
-| `POST` | `/api/splitik/messages` | Отправить сообщение контекстному агенту Сплитику. | Backend validates context, computes capabilities, calls configured LLM provider. |
+| `POST` | `/api/splitik/messages` | Отправить сообщение контекстному агенту Сплитику. | Backend validates context, guardrails, capabilities, draft operations, and calls configured LLM provider. |
 | `GET` | `/api/splitik/sessions/{id}` | Получить историю своей Splitik-сессии. | Только owner сессии. |
-| `POST` | `/api/splitik/drafts/{id}/commit` | Подтвердить backend-created draft action. | V1 поддерживает commit draft создания события. |
+| `GET` | `/api/splitik/drafts/{id}` | Получить свой Splitik draft. | Только owner draft. |
+| `PATCH` | `/api/splitik/drafts/{id}` | Обновить pending Splitik draft. | Только owner; confirmed money state не меняется. |
+| `POST` | `/api/splitik/drafts/{id}/commit` | Подтвердить backend-created draft action. | Поддерживает `create_event` и `create_receipt`; receipt commit создает обычный receipt draft. |
 
-Сплитик работает в режимах `general`, `event`, `receipt`, `member`. Клиент передает entry point, но backend заново проверяет actor, event membership и видимость target user/receipt. LLM не получает прямого доступа к MongoDB и не может менять состояние без отдельного commit endpoint.
+Сплитик работает в режимах `general`, `event`, `receipt`, `member`. Клиент передает entry point и optional `attachment_ids`, но backend заново проверяет actor, event membership, draft owner, attachment owner и видимость target user/receipt. LLM не получает прямого доступа к MongoDB и не может менять состояние без отдельного commit endpoint. Все сообщения пишутся в `splitik_interactions` с sanitized text и guardrail decision.
 
 ## Events
 
