@@ -459,5 +459,23 @@ def get_splitik_session(db: Database, session_id: str, actor_user_id: str) -> di
     return _session_to_api(session)
 
 
+def get_splitik_draft(db: Database, draft_id: str, actor_user_id: str) -> dict:
+    return splitik_tools.get_draft(db, actor_user_id=actor_user_id, draft_id=draft_id)
+
+
+def update_splitik_draft(
+    db: Database,
+    draft_id: str,
+    payload: schemas.SplitikDraftUpdateRequest,
+    actor_user_id: str,
+) -> dict:
+    return splitik_tools.update_draft(
+        db,
+        actor_user_id=actor_user_id,
+        draft_id=draft_id,
+        patch=payload.model_dump(mode="json"),
+    )
+
+
 def commit_splitik_draft(db: Database, draft_id: str, actor_user_id: str) -> dict:
     return splitik_tools.commit_draft(db, actor_user_id=actor_user_id, draft_id=draft_id)

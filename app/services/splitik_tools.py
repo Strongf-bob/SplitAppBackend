@@ -127,6 +127,13 @@ def latest_pending_draft(
     return db.splitik_drafts.find_one(query, sort=[("updated_at", -1)])
 
 
+def get_draft(db: Database, *, actor_user_id: str, draft_id: str) -> dict:
+    draft = db.splitik_drafts.find_one({"id": draft_id, "owner_user_id": actor_user_id})
+    if not draft:
+        raise HTTPException(status_code=404, detail="Splitik draft not found.")
+    return draft_to_api(draft)
+
+
 def commit_draft(db: Database, *, actor_user_id: str, draft_id: str) -> dict:
     draft = db.splitik_drafts.find_one({"id": draft_id, "owner_user_id": actor_user_id})
     if not draft:

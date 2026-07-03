@@ -601,9 +601,21 @@ class SplitikDraft(BaseModel):
     type: str
     status: str
     payload: dict
+    event_id: UUID | None = None
+    session_id: UUID | None = None
+    version: int = 1
+    source: str = "text"
+    attachment_ids: list[UUID] = Field(default_factory=list)
+    questions: list[dict] = Field(default_factory=list)
+    model_metadata: dict = Field(default_factory=dict)
     created_at: datetime
+    updated_at: datetime | None = None
     committed_at: datetime | None = None
     committed_resource_id: UUID | None = None
+
+
+class SplitikDraftUpdateRequest(BaseModel):
+    payload: dict = Field(default_factory=dict)
 
 
 class SplitikMessageResponse(BaseModel):
