@@ -104,10 +104,16 @@ metadata и event context, после чего backend валидирует ре
 события, backend заменяет ответ privacy refusal и пишет
 `guardrail_decision.reason: "unsafe_model_private_spending_claim"`.
 
-Every Splitik message writes `splitik_interactions` with actor, session,
-message id, sanitized message, intent, guardrail decision, draft ids and model
-metadata. Logs redact accidental tokens and must not include auth tokens,
-payment credentials, private storage keys or private URLs.
+Every Splitik message writes `splitik_interactions` for later quality analysis.
+The record includes actor, session, message id, `request_id`, sanitized message,
+intent, status, processing stage, latency, guardrail decision, context summary,
+tool calls, draft ids and model metadata. If a request fails before a normal
+assistant response is produced, backend still writes an `intent: "error"` record
+with the failed stage, HTTP status when available, error type, safe error message
+and traceback hash. Logs redact accidental tokens and must not include auth
+tokens, payment credentials, private storage keys or private URLs. Raw LLM
+prompts and full backend context are not persisted; `context_summary` stores
+counts, entry point identifiers and available tools instead.
 
 ## Spending explanations
 
