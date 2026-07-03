@@ -284,6 +284,18 @@ def _receipt_clarifying_questions() -> list[dict]:
     ]
 
 
+def _answered_receipt_question_ids(message: str) -> list[str]:
+    lowered = message.casefold()
+    answered: list[str] = []
+    if any(marker in lowered for marker in ("я плат", "платил я", "платила я", "оплатил")):
+        answered.append("payer")
+    if any(marker in lowered for marker in ("были все", "все участник", "участвовали все")):
+        answered.append("participants")
+    if any(marker in lowered for marker in ("делим поровну", "поровну", "равн")):
+        answered.append("split_details")
+    return answered
+
+
 def _maybe_create_draft(
     db: Database,
     payload: schemas.SplitikMessageRequest,
@@ -352,6 +364,25 @@ def _maybe_create_draft(
         session_id=session_id,
         draft_type="create_receipt",
     )
+    if latest_receipt_draft and latest_receipt_draft.get("questions"):
+        answered_question_ids = _answered_receipt_question_ids(payload.message)
+        if answered_question_ids:
+            remaining_questions = [
+                question
+                for question in latest_receipt_draft.get("questions", [])
+                if question.get("id") not in set(answered_question_ids)
+            ]
+            return [
+                splitik_tools.update_draft(
+                    db,
+                    actor_user_id=actor_user_id,
+                    draft_id=latest_receipt_draft["id"],
+                    patch={
+                        "questions": remaining_questions,
+                        "model_metadata": {"answered_question_ids": answered_question_ids},
+                    },
+                )
+            ]
     if (
         latest_receipt_draft
         and amount_kopecks

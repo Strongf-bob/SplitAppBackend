@@ -103,16 +103,22 @@ def update_draft(
     if draft["type"] == "create_receipt":
         payload = schemas.CreateReceiptRequest.model_validate(payload).model_dump(mode="json")
 
-    now = utc_now()
+    update_fields = {
+        "payload": payload,
+        "updated_at": utc_now(),
+        "version": int(draft.get("version", 1)) + 1,
+    }
+    if "questions" in patch:
+        update_fields["questions"] = patch["questions"]
+    if "model_metadata" in patch:
+        update_fields["model_metadata"] = {
+            **draft.get("model_metadata", {}),
+            **patch["model_metadata"],
+        }
+
     db.splitik_drafts.update_one(
         {"id": draft_id},
-        {
-            "$set": {
-                "payload": payload,
-                "updated_at": now,
-                "version": int(draft.get("version", 1)) + 1,
-            }
-        },
+        {"$set": update_fields},
     )
     updated = db.splitik_drafts.find_one({"id": draft_id})
     return draft_to_api(updated)
