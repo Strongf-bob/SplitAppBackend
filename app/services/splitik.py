@@ -351,6 +351,11 @@ def _maybe_create_draft(
     ]
 
 
+def _is_expense_explanation_request(message: str) -> bool:
+    lowered = message.casefold()
+    return any(marker in lowered for marker in ("долж", "деньг", "трат", "потрат", "баланс"))
+
+
 def _get_or_create_session(
     db: Database, payload: schemas.SplitikMessageRequest, actor_user_id: str
 ) -> dict:
@@ -433,6 +438,11 @@ def send_splitik_message(
     drafts = _maybe_create_draft(db, payload, actor_user_id, session["id"])
     if drafts:
         context["drafts"] = drafts
+    explanation_requested = _is_expense_explanation_request(payload.message)
+    if explanation_requested:
+        context["user_balance_summary"] = splitik_tools.read_user_balance_summary(
+            db, actor_user_id=actor_user_id
+        )
 
     reply = splitik_llm.generate_splitik_reply(
         system_prompt=_SYSTEM_PROMPT,
@@ -441,7 +451,7 @@ def send_splitik_message(
     )
     now = utc_now()
     message_id = new_uuid()
-    intent = "draft" if drafts else "chat"
+    intent = "draft" if drafts else "explain" if explanation_requested else "chat"
     db.splitik_sessions.update_one(
         {"id": session["id"]},
         {

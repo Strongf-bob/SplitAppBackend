@@ -5,7 +5,7 @@ import pytest
 from fastapi import HTTPException
 
 from app import schemas
-from app.services import receipt_ai_drafts, splitik, splitik_attachments, splitik_llm
+from app.services import receipt_ai_drafts, receipts, splitik, splitik_attachments, splitik_llm
 from tests.conftest import EVENT_ID, USER_A, USER_B, USER_C, seed_event, seed_users
 
 
@@ -539,6 +539,61 @@ def test_splitik_creates_receipt_draft_from_image_attachment(db, fake_s3, monkey
     assert log is not None
     assert "attachments/" not in str(log)
     assert "test-bucket" not in str(log)
+
+
+def test_splitik_explains_user_scoped_spending_from_backend_facts(db, monkeypatch):
+    seed_event(db)
+    receipt = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_A,
+            title="Dinner",
+            total_amount_kopecks=10000,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="Meal",
+                    cost_kopecks=10000,
+                    share_items=[
+                        schemas.CreateShareItemRequest(user_id=USER_A, share_value="0.5"),
+                        schemas.CreateShareItemRequest(user_id=USER_B, share_value="0.5"),
+                    ],
+                )
+            ],
+        ),
+        USER_A,
+        idempotency_key="splitik-spending-test",
+    )
+    db.receipts.update_one({"id": receipt["id"]}, {"$set": {"status": "confirmed"}})
+    calls = _mock_llm(monkeypatch)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(mode="general", message="Кто мне должен деньги?"),
+        USER_A,
+    )
+
+    assert response["intent"] == "explain"
+    summary = calls[0]["context"]["user_balance_summary"]
+    assert summary["outstanding_owed_kopecks"] == 0
+    assert summary["outstanding_receivable_kopecks"] == 5000
+    assert summary["events"][0]["balances"][0]["debitor_id"] == USER_B
+    assert summary["events"][0]["balances"][0]["creditor_id"] == USER_A
+
+
+def test_splitik_refuses_private_friend_spending_outside_shared_context(db, monkeypatch):
+    calls = _mock_llm(monkeypatch)
+    seed_users(db)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(mode="general", message="Куда тратит деньги Bob?"),
+        USER_A,
+    )
+
+    assert calls == []
+    assert response["intent"] == "refusal"
+    assert response["guardrail_decision"]["reason"] == "private_friend_spending"
 
 
 def test_seed_demo_friends_is_idempotent(db, monkeypatch):
