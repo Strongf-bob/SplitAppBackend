@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 540" role="img" aria-label="Preview SplitApp PWA">
+  <rect width="760" height="540" rx="36" fill="#101820"/>
+  <rect x="44" y="44" width="672" height="452" rx="28" fill="#f6f7f2"/>
+  <rect x="76" y="78" width="196" height="384" rx="24" fill="#ffffff"/>
+  <rect x="304" y="78" width="180" height="138" rx="24" fill="#f4d35e"/>
+  <rect x="508" y="78" width="176" height="138" rx="24" fill="#3fb8af"/>
+  <rect x="304" y="246" width="380" height="216" rx="24" fill="#ffffff"/>
+  <circle cx="124" cy="126" r="28" fill="#101820"/>
+  <rect x="166" y="112" width="76" height="14" rx="7" fill="#101820"/>
+  <rect x="166" y="136" width="52" height="10" rx="5" fill="#7a8274"/>
+  <rect x="104" y="198" width="140" height="16" rx="8" fill="#101820"/>
+  <rect x="104" y="230" width="108" height="10" rx="5" fill="#7a8274"/>
+  <rect x="104" y="268" width="136" height="16" rx="8" fill="#101820"/>
+  <rect x="104" y="300" width="92" height="10" rx="5" fill="#7a8274"/>
+  <rect x="104" y="366" width="116" height="42" rx="21" fill="#101820"/>
+  <text x="334" y="132" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#101820">Событие</text>
+  <text x="334" y="170" font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="#101820">4 250 ₽</text>
+  <text x="536" y="132" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#101820">Сплитик</text>
+  <text x="536" y="170" font-family="Arial, sans-serif" font-size="16" fill="#101820">Черновик чека готов</text>
+  <rect x="334" y="286" width="200" height="18" rx="9" fill="#101820"/>
+  <rect x="334" y="328" width="300" height="12" rx="6" fill="#7a8274"/>
+  <rect x="334" y="362" width="260" height="12" rx="6" fill="#7a8274"/>
+  <rect x="334" y="408" width="132" height="34" rx="17" fill="#3fb8af"/>
+</svg>
