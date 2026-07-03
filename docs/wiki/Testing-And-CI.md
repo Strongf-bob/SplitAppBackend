@@ -20,6 +20,12 @@ Format check:
 make format-check
 ```
 
+Dependency audit:
+
+```bash
+make security-audit
+```
+
 ## Текущий CI
 
 Backend CI workflow:
@@ -29,6 +35,8 @@ Backend CI workflow:
 - Запускается на pushes в `strongf/**` branches.
 - Устанавливает Python dependencies.
 - Запускает Ruff.
+- Проверяет форматирование Ruff formatter.
+- Запускает dependency audit.
 - Запускает pytest.
 - Deploy делает только на push в `main`.
 
@@ -61,6 +69,8 @@ Workflow source:
 5. Обновить Wiki source в `docs/wiki/`, если изменилось developer-facing поведение.
 6. Запустить `make test`.
 7. Запустить `make lint`, если lint tooling доступен.
+8. Запустить `make format-check`.
+9. Запустить `make security-audit`.
 
 ## Review focus
 

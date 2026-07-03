@@ -18,11 +18,6 @@ def _bucket_name() -> str | None:
     return name or None
 
 
-def public_url_for_object(bucket: str, key: str) -> str:
-    endpoint = os.getenv("S3_ENDPOINT_URL", "https://storage.yandexcloud.net").strip().rstrip("/")
-    return f"{endpoint}/{bucket}/{key}"
-
-
 def _object_key_from_url(bucket: str, image_url: str | None) -> str | None:
     if not image_url:
         return None
@@ -36,6 +31,14 @@ def _object_key_from_url(bucket: str, image_url: str | None) -> str | None:
 
 def _receipt_image_key(receipt: dict, bucket: str) -> str | None:
     return receipt.get("image_key") or _object_key_from_url(bucket, receipt.get("image_url"))
+
+
+def _presigned_image_url(s3: Any, bucket: str, key: str) -> str:
+    return s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": bucket, "Key": key},
+        ExpiresIn=900,
+    )
 
 
 @track_service_operation("receipt_images.upload")
@@ -70,7 +73,6 @@ def upload_receipt_image(
         )
 
     key = f"receipts/{receipt_id}/{new_uuid()}.jpg"
-    image_url = public_url_for_object(bucket, key)
     old_key = _receipt_image_key(receipt, bucket)
 
     s3.put_object(
@@ -85,10 +87,10 @@ def upload_receipt_image(
     now = utc_now()
     db.receipts.update_one(
         {"id": receipt_id},
-        {"$set": {"image_url": image_url, "image_key": key, "updated_at": now}},
+        {"$set": {"image_key": key, "updated_at": now}, "$unset": {"image_url": ""}},
     )
 
-    return {"image_url": image_url}
+    return {"image_url": _presigned_image_url(s3, bucket, key)}
 
 
 @track_service_operation("receipt_images.delete")
@@ -134,14 +136,6 @@ def get_receipt_image_presigned_url(
 
     key = _receipt_image_key(receipt, bucket)
     if not key:
-        if receipt.get("image_url"):
-            return {"image_url": receipt["image_url"]}
         raise HTTPException(status_code=404, detail="Receipt image not found.")
 
-    return {
-        "image_url": s3.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": bucket, "Key": key},
-            ExpiresIn=900,
-        )
-    }
+    return {"image_url": _presigned_image_url(s3, bucket, key)}

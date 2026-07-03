@@ -248,6 +248,54 @@ def test_docker_image_includes_pwa_assets():
     assert "COPY docs ./docs" in dockerfile
 
 
+def test_openapi_exposes_domain_enums_for_write_payloads():
+    schema = app_main.app.openapi()["components"]["schemas"]
+
+    event_create = schema["EventCreate"]["properties"]
+    user_update = schema["UserUpdate"]["properties"]
+    dispute_create = schema["DisputeCreate"]["properties"]
+    splitik_message = schema["SplitikMessageRequest"]["properties"]
+
+    assert set(event_create["split_strategy"]["enum"]) == {
+        "equal_default",
+        "itemized_creator",
+        "itemized_self_select",
+        "agent_assisted",
+    }
+    assert set(event_create["receipt_creation_policy"]["enum"]) == {
+        "creator_only",
+        "participants_can_add",
+    }
+    assert set(user_update["payment_phone_visibility"]["anyOf"][0]["enum"]) == {
+        "nobody",
+        "event_members",
+        "friends",
+    }
+    assert set(dispute_create["resource_type"]["enum"]) == {
+        "receipt",
+        "payment",
+        "payment_request",
+    }
+    assert set(splitik_message["mode"]["enum"]) == {"general", "event", "receipt", "member"}
+
+
+def test_ci_runs_format_and_security_audit_gates():
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+
+    assert "make format-check" in workflow
+    assert "make security-audit" in workflow
+
+
+def test_requirements_are_pinned_for_reproducible_installs():
+    requirements = (PROJECT_ROOT / "requirements.txt").read_text().splitlines()
+    package_lines = [
+        line.strip() for line in requirements if line.strip() and not line.strip().startswith("#")
+    ]
+
+    assert package_lines
+    assert all("==" in line for line in package_lines)
+
+
 def test_pwa_uses_yandex_oauth_button_instead_of_manual_token_field():
     app_page = (PROJECT_ROOT / "web" / "src" / "app" / "page.tsx").read_text()
     splitapp_api = (PROJECT_ROOT / "web" / "src" / "lib" / "splitapp-api.ts").read_text()

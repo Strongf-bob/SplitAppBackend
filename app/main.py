@@ -163,9 +163,7 @@ def configure_pwa(api: FastAPI) -> None:
         manifest_path = pwa_root / "manifest.webmanifest"
         if not manifest_path.exists():
             manifest_path = WEB_ROOT / "manifest.webmanifest"
-        return FileResponse(
-            manifest_path, media_type="application/manifest+json"
-        )
+        return FileResponse(manifest_path, media_type="application/manifest+json")
 
     @api.get("/sw.js", include_in_schema=False)
     @api.head("/sw.js", include_in_schema=False)

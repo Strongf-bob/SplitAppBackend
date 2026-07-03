@@ -195,6 +195,39 @@ Backend экспортирует business metrics: domain actions для events,
 payments и users; money amount histograms для receipts/payments; event participant
 count histograms; current collection document counts.
 
+## Backup And Restore
+
+Минимальный production baseline:
+
+- MongoDB data volume или managed MongoDB cluster должен иметь регулярные backups.
+- Перед destructive deploy или migration нужно иметь свежий restore point.
+- Restore drill должен быть проверен отдельно от backup creation.
+- RPO/RTO должны быть явно зафиксированы для production; до этого считать систему pre-production.
+
+Для Docker Compose self-hosted MongoDB используйте volume-level snapshots или
+`mongodump`/`mongorestore` из trusted host. Backup artifacts должны храниться
+зашифрованно, с ограниченным доступом и без копирования в личные устройства.
+
+## Incident Response
+
+Для production incident нужен короткий runbook:
+
+- Зафиксировать время начала, affected endpoint/domain flow и request IDs.
+- Снять `docker compose ps`, `docker compose logs api --tail=200` и Grafana/Loki evidence.
+- При suspected credential exposure сразу rotate affected secrets: `JWT_SECRET`,
+  object storage keys, deploy key, Grafana password и LLM provider token.
+- После mitigation записать root cause, customer impact, fixed commit и regression test.
+
+## Data Retention And Privacy
+
+До real-user launch нужны публичная privacy policy и внутренняя retention policy.
+Минимальные решения, которые должны быть зафиксированы:
+
+- как долго хранятся users, contacts, events, receipts, receipt images, audit logs и Splitik interactions;
+- как пользователь запрашивает export/delete account;
+- какие данные уходят в Yandex OAuth, object storage, Sentry и LLM provider;
+- где физически хранятся MongoDB/object-storage данные и включено ли encryption at rest.
+
 ## Logs
 
 Request middleware пишет structured JSON completion logs с level, request ID,
