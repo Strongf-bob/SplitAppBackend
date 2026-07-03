@@ -7,6 +7,7 @@ from pymongo.database import Database
 
 from app import schemas
 from app.services.access import active_event_memberships, assert_event_access
+from app.services.balances import get_event_balances
 from app.services.common import new_uuid, strip_mongo_id, utc_now
 from app.services.events import create_event
 from app.services.receipts import create_receipt
@@ -213,3 +214,45 @@ def build_simple_receipt_payload(
             )
         ],
     ).model_dump(mode="json")
+
+
+def read_user_balance_summary(db: Database, *, actor_user_id: str) -> dict:
+    memberships = list(
+        db.event_memberships.find(
+            {"user_id": actor_user_id, "status": "active", "deleted_at": {"$exists": False}}
+        )
+    )
+    event_ids = [membership["event_id"] for membership in memberships]
+    events_by_id = {
+        event["id"]: strip_mongo_id(event) for event in db.events.find({"id": {"$in": event_ids}})
+    }
+    outstanding_owed_kopecks = 0
+    outstanding_receivable_kopecks = 0
+    event_summaries = []
+
+    for event_id in event_ids:
+        event = events_by_id.get(event_id)
+        if not event:
+            continue
+        balances = [
+            row
+            for row in get_event_balances(db, event_id, actor_user_id)
+            if actor_user_id in {row["debitor_id"], row["creditor_id"]}
+        ]
+        for row in balances:
+            if row["debitor_id"] == actor_user_id:
+                outstanding_owed_kopecks += row["amount_kopecks"]
+            if row["creditor_id"] == actor_user_id:
+                outstanding_receivable_kopecks += row["amount_kopecks"]
+        event_summaries.append(
+            {
+                "event": event,
+                "balances": balances,
+            }
+        )
+
+    return {
+        "outstanding_owed_kopecks": outstanding_owed_kopecks,
+        "outstanding_receivable_kopecks": outstanding_receivable_kopecks,
+        "events": event_summaries,
+    }
