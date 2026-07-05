@@ -29,7 +29,7 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v7/);
+  assert.match(sw, /splitapp-next-pwa-v8/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
@@ -104,7 +104,8 @@ test("Splitik chat keeps backend error detail visible to diagnose LLM failures",
 
 test("authenticated startup refreshes expired access tokens instead of showing a fake offline slice", () => {
   assert.match(api, /\/api\/refresh/);
-  assert.match(api, /saveTokens\(\{ \.\.\.tokens, \.\.\.refreshedTokens \}\)/);
+  assert.match(api, /const nextTokens = \{ \.\.\.tokens, \.\.\.refreshedTokens \}/);
+  assert.match(api, /saveTokens\(nextTokens\)/);
   assert.match(page, /handleInitialDataError/);
   assert.match(page, /Сессия истекла\. Войдите через Яндекс еще раз\./);
   assert.doesNotMatch(page, /Backend недоступен, показан локальный срез PWA\./);
@@ -127,4 +128,24 @@ test("API errors show FastAPI validation details instead of a bare HTTP 422", ()
   assert.match(api, /formatValidationDetail/);
   assert.match(api, /Array\.isArray\(body\.detail\)/);
   assert.match(api, /detail\.loc/);
+});
+
+test("event creation surfaces backend errors instead of hiding the cause", () => {
+  assert.match(page, /catch \(error\)/);
+  assert.match(page, /error instanceof ApiError/);
+  assert.match(page, /setMessage\(`Не удалось создать событие: \$\{error\.message\}`\)/);
+});
+
+test("event creation clears expired auth sessions when refresh fails", () => {
+  assert.match(page, /if \(error instanceof ApiError && error\.status === 401\)/);
+  assert.match(page, /clearTokens\(\)/);
+  assert.match(page, /navigate\("home"\)/);
+});
+
+test("refreshed tokens update React state, not only localStorage", () => {
+  assert.match(api, /onTokensRefreshed\?: \(tokens: SplitAppTokens\) => void/);
+  assert.match(api, /onTokensRefreshed\?\.\(nextTokens\)/);
+  assert.match(page, /const authedApi = useCallback/);
+  assert.match(page, /setTokens\(nextTokens\)/);
+  assert.match(page, /api<T>\(path, tokens, init, \(nextTokens\) =>/);
 });

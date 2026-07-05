@@ -136,19 +136,37 @@ export default function SplitAppPage() {
   const [isSplitikSending, setIsSplitikSending] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
+  const navigate = useCallback((nextView: View) => {
+    setPreviousView(view);
+    setView(nextView);
+    window.history.replaceState(null, "", `#${nextView}`);
+  }, [view]);
+
+  const clearExpiredSession = useCallback(() => {
+    clearTokens();
+    setTokens(null);
+    setCurrentUser(null);
+    setSummary(null);
+    navigate("home");
+    setMessage("Сессия истекла. Войдите через Яндекс еще раз.");
+  }, [navigate]);
+
+  const authedApi = useCallback(<T,>(path: string, init: RequestInit = {}) => {
+    return api<T>(path, tokens, init, (nextTokens) => {
+      setTokens(nextTokens);
+      setCurrentUser(nextTokens.user ?? null);
+    });
+  }, [tokens]);
+
   const handleInitialDataError = useCallback((error: unknown) => {
     setEvents(fallbackEvents);
     if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-      clearTokens();
-      setTokens(null);
-      setCurrentUser(null);
-      setSummary(null);
-      setMessage("Сессия истекла. Войдите через Яндекс еще раз.");
+      clearExpiredSession();
       return;
     }
     const detail = error instanceof Error ? error.message : "неизвестная ошибка";
     setMessage(`Не удалось синхронизировать данные: ${detail}`);
-  }, []);
+  }, [clearExpiredSession]);
 
   useEffect(() => {
     const storedTokens = loadTokens();
@@ -187,9 +205,9 @@ export default function SplitAppPage() {
   useEffect(() => {
     if (!tokens) return;
     Promise.all([
-      api<HomeSummary>("/api/home/summary", tokens),
-      api<EventPage>("/api/events", tokens),
-      api<UserProfile>("/api/users/me", tokens)
+      authedApi<HomeSummary>("/api/home/summary"),
+      authedApi<EventPage>("/api/events"),
+      authedApi<UserProfile>("/api/users/me")
     ])
       .then(([nextSummary, eventPage, user]) => {
         setSummary(nextSummary);
@@ -197,7 +215,7 @@ export default function SplitAppPage() {
         setEvents(eventPage.items.length ? eventPage.items.map(normalizeEvent) : fallbackEvents);
       })
       .catch(handleInitialDataError);
-  }, [handleInitialDataError, tokens]);
+  }, [authedApi, handleInitialDataError, tokens]);
 
   useEffect(() => {
     if (!message) return;
@@ -207,12 +225,6 @@ export default function SplitAppPage() {
 
   const owedToMe = summary?.confirmed?.receivable_kopecks ?? 720000;
   const iOwe = summary?.confirmed?.owed_kopecks ?? 295000;
-
-  const navigate = (nextView: View) => {
-    setPreviousView(view);
-    setView(nextView);
-    window.history.replaceState(null, "", `#${nextView}`);
-  };
 
   const goBack = () => navigate(previousView === view ? "home" : previousView);
   const goHome = () => navigate("home");
@@ -342,7 +354,7 @@ export default function SplitAppPage() {
     if (!tokens || event.status === "invite" || eventReceipts[event.id]) return;
     setEventReceipts((current) => ({ ...current, [event.id]: { loading: true, items: [] } }));
     try {
-      const page = await api<ReceiptPage>(`/api/events/${event.id}/receipts`, tokens);
+      const page = await authedApi<ReceiptPage>(`/api/events/${event.id}/receipts`);
       setEventReceipts((current) => ({ ...current, [event.id]: { loading: false, items: page.items } }));
     } catch {
       setEventReceipts((current) => ({ ...current, [event.id]: { loading: false, items: [] } }));
@@ -355,7 +367,7 @@ export default function SplitAppPage() {
     const name = newEventName.trim();
     if (!tokens || !name) return;
     try {
-      const created = await api<EventSummary>("/api/events", tokens, {
+      const created = await authedApi<EventSummary>("/api/events", {
         method: "POST",
         body: JSON.stringify({ name })
       });
@@ -365,8 +377,16 @@ export default function SplitAppPage() {
       setEventTab("active");
       setSelectedEventId(created.id);
       setMessage("Событие создано.");
-    } catch {
-      setMessage("Не удалось создать событие.");
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        clearExpiredSession();
+        return;
+      }
+      if (error instanceof ApiError) {
+        setMessage(`Не удалось создать событие: ${error.message}`);
+        return;
+      }
+      setMessage("Не удалось создать событие: неизвестная ошибка");
     }
   };
 
@@ -398,7 +418,7 @@ export default function SplitAppPage() {
     setChatDraft("");
     setIsSplitikSending(true);
     try {
-      const response = await api<SplitikMessageResponse>("/api/splitik/messages", tokens, {
+      const response = await authedApi<SplitikMessageResponse>("/api/splitik/messages", {
         method: "POST",
         body: JSON.stringify({
           session_id: splitikSessionId,
