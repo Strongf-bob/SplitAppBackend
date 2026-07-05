@@ -392,6 +392,7 @@ export default function SplitAppPage() {
     event?.preventDefault();
     const text = chatDraft.trim();
     if (!text || !tokens || isSplitikSending) return;
+    const splitikEventId = isUuid(selectedEventId) ? selectedEventId : null;
     const userMessage = { id: `u-${Date.now()}`, from: "user" as const, text };
     setChatMessages((items) => [...items, userMessage]);
     setChatDraft("");
@@ -401,9 +402,9 @@ export default function SplitAppPage() {
         method: "POST",
         body: JSON.stringify({
           session_id: splitikSessionId,
-          mode: selectedEventId ? "event" : "general",
+          mode: splitikEventId ? "event" : "general",
           message: text,
-          entry_point: selectedEventId ? { type: "event", event_id: selectedEventId } : undefined
+          entry_point: splitikEventId ? { type: "event", event_id: splitikEventId } : undefined
         })
       });
       setSplitikSessionId(response.session_id);
@@ -1255,6 +1256,10 @@ function splitikErrorMessage(error: unknown) {
 function parseHashView(hash: string): View | null {
   const value = hash.replace("#", "");
   return validViews.includes(value as View) ? (value as View) : null;
+}
+
+function isUuid(value: string | null): value is string {
+  return Boolean(value?.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i));
 }
 
 function normalizeEvent(event: EventSummary): EventSummary {

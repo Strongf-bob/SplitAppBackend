@@ -29,7 +29,7 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v6/);
+  assert.match(sw, /splitapp-next-pwa-v7/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
@@ -115,4 +115,16 @@ test("Splitik assistant replies render safe Markdown instead of a flattened text
   assert.match(page, /parseMarkdownMessage/);
   assert.match(page, /<MarkdownMessage text=\{item\.text\} \/>/);
   assert.doesNotMatch(page, /\{item\.text\}\s*<\/div>/);
+});
+
+test("Splitik requests do not send demo event ids as UUID event context", () => {
+  assert.match(page, /const splitikEventId = isUuid\(selectedEventId\) \? selectedEventId : null/);
+  assert.match(page, /mode: splitikEventId \? "event" : "general"/);
+  assert.match(page, /entry_point: splitikEventId \? \{ type: "event", event_id: splitikEventId \} : undefined/);
+});
+
+test("API errors show FastAPI validation details instead of a bare HTTP 422", () => {
+  assert.match(api, /formatValidationDetail/);
+  assert.match(api, /Array\.isArray\(body\.detail\)/);
+  assert.match(api, /detail\.loc/);
 });
