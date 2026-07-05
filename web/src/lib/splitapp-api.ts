@@ -137,14 +137,21 @@ export async function handleYandexOAuthCallback(): Promise<SplitAppTokens | null
   return tokens;
 }
 
-export async function api<T>(path: string, tokens: SplitAppTokens | null, init: RequestInit = {}): Promise<T> {
+export async function api<T>(
+  path: string,
+  tokens: SplitAppTokens | null,
+  init: RequestInit = {},
+  onTokensRefreshed?: (tokens: SplitAppTokens) => void
+): Promise<T> {
   const response = await fetchWithAuth(path, tokens, init);
   if (response.ok) return (await response.json()) as T;
 
   if (response.status === 401 && tokens?.refresh_token) {
     const refreshedTokens = await refreshAccessToken(tokens.refresh_token);
-    saveTokens({ ...tokens, ...refreshedTokens });
-    const retry = await fetchWithAuth(path, { ...tokens, ...refreshedTokens }, init);
+    const nextTokens = { ...tokens, ...refreshedTokens };
+    saveTokens(nextTokens);
+    onTokensRefreshed?.(nextTokens);
+    const retry = await fetchWithAuth(path, nextTokens, init);
     if (retry.ok) return (await retry.json()) as T;
     throw new ApiError(retry.status, await responseErrorMessage(retry));
   }

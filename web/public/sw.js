@@ -1,4 +1,4 @@
-const CACHE_NAME = "splitapp-next-pwa-v7";
+const CACHE_NAME = "splitapp-next-pwa-v8";
 const APP_SHELL = [
   "/",
   "/app",
