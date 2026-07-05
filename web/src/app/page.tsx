@@ -1346,13 +1346,8 @@ function SplitikScreen({
   isSending: boolean;
 }) {
   return (
-    <div className="grid min-h-[690px] gap-3 pb-[112px]">
-      <div className="grid content-end gap-3 overflow-hidden rounded-2xl bg-white p-3">
-        <div className="grid justify-items-center gap-2 pb-3">
-          <div className="grid h-24 w-24 place-items-center rounded-3xl border-4 border-[#111111] bg-[#f5f5f7] text-[#111111]">
-            <Bot className="h-14 w-14" />
-          </div>
-        </div>
+    <div data-testid="splitik-chat-shell" className="flex min-h-[calc(100dvh-190px)] flex-col pb-[112px]">
+      <div data-testid="splitik-message-list" className="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto px-1 pb-3 pt-2">
         {messages.map((item) => (
           <div
             key={item.id}
