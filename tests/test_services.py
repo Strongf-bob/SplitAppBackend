@@ -119,6 +119,19 @@ def test_update_current_user_profile(db):
     assert db.audit_events.find_one({"action": "user.profile_updated", "resource_id": USER_A})
 
 
+def test_get_current_user_profile_returns_authenticated_actor(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+
+    user = users.get_current_user(db, USER_A)
+
+    assert user["id"] == USER_A
+    assert user["name"] == "Alice"
+    assert user["email"] == "alice@example.com"
+    assert user["phone_number"] == "+10000000001"
+
+
 def test_yandex_login_stores_extended_profile_fields_and_allows_missing_phone(db, monkeypatch):
     profile = {
         "id": "yandex-1",
