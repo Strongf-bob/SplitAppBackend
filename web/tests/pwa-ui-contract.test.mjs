@@ -29,7 +29,7 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v11/);
+  assert.match(sw, /splitapp-next-pwa-v12/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
@@ -182,6 +182,18 @@ test("event invite codes are displayed as compact six-character codes", () => {
   assert.match(page, /\.slice\(0, 6\)\.padEnd\(6, "0"\)/);
   assert.match(page, /const inviteCode = eventInviteDisplayCode\(/);
   assert.doesNotMatch(page, /inviteCode = invite\?\.token \?\? event\.token \?\? demoInviteCode/);
+});
+
+test("event creation adds every selected friend as a participant", () => {
+  assert.match(api, /export type Friendship/);
+  assert.match(page, /const \[friendships, setFriendships\] = useState<Friendship\[\]>/);
+  assert.match(page, /const \[selectedEventFriendIds, setSelectedEventFriendIds\] = useState<string\[\]>/);
+  assert.match(page, /authedApi<FriendshipPage>\("\/api\/friends\?status=accepted&limit=50"\)/);
+  assert.match(page, /const selectedUserIds = selectedEventFriendIds;/);
+  assert.match(page, /`\/api\/events\/\$\{created\.id\}\/participants`/);
+  assert.match(page, /body: JSON\.stringify\(\{ user_ids: selectedUserIds \}\)/);
+  assert.match(page, /eventParticipants\(event, friendOptions\)\.map/);
+  assert.doesNotMatch(page, /friends\.slice\(0, Math\.max\(1, Math\.min\(participantCount, friends\.length\)\)\)\.map/);
 });
 
 test("home add action opens a dedicated event creation screen", () => {

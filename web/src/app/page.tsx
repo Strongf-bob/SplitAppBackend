@@ -26,6 +26,8 @@ import {
   clearTokens,
   EventInvite,
   EventPage,
+  Friendship,
+  FriendshipPage,
   EventSummary,
   handleYandexOAuthCallback,
   HomeSummary,
@@ -51,6 +53,7 @@ type ChatMessage = { id: string; from: "user" | "splitik"; text: string };
 type EventReceipts = Record<string, { loading: boolean; items: ReceiptSummary[] }>;
 type EventInviteTokens = Record<string, { loading: boolean; token?: string; url?: string }>;
 type MarkdownBlock = { type: "paragraph"; text: string } | { type: "list"; items: string[] };
+type FriendOption = { id: string; initials: string; name: string; subtitle: string; amount: number; tone: string };
 
 declare global {
   interface Navigator {
@@ -86,10 +89,10 @@ const fallbackEvents: EventSummary[] = [
   { id: "demo-3", title: "Новый год", total_kopecks: 295000, participants_count: 3, status: "closed" }
 ];
 
-const friends = [
-  { initials: "А", name: "Алина Табакеева", subtitle: "вы должны", amount: -1480, tone: "text-red-600" },
-  { initials: "М", name: "Максим Демин", subtitle: "должен вам", amount: 1488, tone: "text-emerald-600" },
-  { initials: "И", name: "Иван Соловьев", subtitle: "ровно", amount: 0, tone: "text-slate-500" }
+const fallbackFriends: FriendOption[] = [
+  { id: "demo-alina", initials: "А", name: "Алина Табакеева", subtitle: "вы должны", amount: -1480, tone: "text-red-600" },
+  { id: "demo-maxim", initials: "М", name: "Максим Демин", subtitle: "должен вам", amount: 1488, tone: "text-emerald-600" },
+  { id: "demo-ivan", initials: "И", name: "Иван Соловьев", subtitle: "ровно", amount: 0, tone: "text-slate-500" }
 ];
 
 const notifications = {
@@ -128,6 +131,8 @@ export default function SplitAppPage() {
   const [eventInvites, setEventInvites] = useState<EventInviteTokens>({});
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [newEventName, setNewEventName] = useState("");
+  const [friendships, setFriendships] = useState<Friendship[]>([]);
+  const [selectedEventFriendIds, setSelectedEventFriendIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [permissionState, setPermissionState] = useState<PermissionState>(initialPermissionState);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -210,12 +215,14 @@ export default function SplitAppPage() {
     Promise.all([
       authedApi<HomeSummary>("/api/home/summary"),
       authedApi<EventPage>("/api/events"),
-      authedApi<UserProfile>("/api/users/me")
+      authedApi<UserProfile>("/api/users/me"),
+      authedApi<FriendshipPage>("/api/friends?status=accepted&limit=50")
     ])
-      .then(([nextSummary, eventPage, user]) => {
+      .then(([nextSummary, eventPage, user, friendshipPage]) => {
         setSummary(nextSummary);
         setCurrentUser(user);
         setEvents(eventPage.items.length ? eventPage.items.map(normalizeEvent) : fallbackEvents);
+        setFriendships(friendshipPage.items ?? []);
       })
       .catch(handleInitialDataError);
   }, [authedApi, handleInitialDataError, tokens]);
@@ -228,6 +235,7 @@ export default function SplitAppPage() {
 
   const owedToMe = summary?.confirmed?.receivable_kopecks ?? 720000;
   const iOwe = summary?.confirmed?.owed_kopecks ?? 295000;
+  const friendOptions = useMemo(() => friendshipsToOptions(friendships), [friendships]);
 
   const goBack = () => navigate(previousView === view ? "home" : previousView);
   const goHome = () => navigate("home");
@@ -407,13 +415,23 @@ export default function SplitAppPage() {
         method: "POST",
         body: JSON.stringify({ name })
       });
-      setEvents((current) => [normalizeEvent(created), ...current.filter((item) => !item.id.startsWith("demo-"))]);
+      const selectedUserIds = selectedEventFriendIds;
+      let nextEvent = normalizeEvent(created);
+      if (selectedUserIds.length) {
+        await authedApi<UserProfile[]>(`/api/events/${created.id}/participants`, {
+          method: "POST",
+          body: JSON.stringify({ user_ids: selectedUserIds })
+        });
+        nextEvent = normalizeEvent(eventWithAddedParticipants(nextEvent, selectedUserIds));
+      }
+      setEvents((current) => [nextEvent, ...current.filter((item) => !item.id.startsWith("demo-"))]);
       setNewEventName("");
+      setSelectedEventFriendIds([]);
       setIsCreatingEvent(false);
       setEventTab("active");
       setSelectedEventId(created.id);
       setMessage("Событие создано.");
-      void openEvent(normalizeEvent(created));
+      void openEvent(nextEvent);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         clearExpiredSession();
@@ -497,6 +515,7 @@ export default function SplitAppPage() {
           <WorkspaceScreen
             view={view}
             events={events}
+            friendOptions={friendOptions}
             eventTab={eventTab}
             onEventTab={setEventTab}
             selectedEventId={selectedEventId}
@@ -509,6 +528,8 @@ export default function SplitAppPage() {
             onAddReceipt={startReceiptFromEvent}
             isCreatingEvent={isCreatingEvent}
             newEventName={newEventName}
+            selectedEventFriendIds={selectedEventFriendIds}
+            onSelectedEventFriendIds={setSelectedEventFriendIds}
             onCreateEventOpen={() => {
               setIsCreatingEvent(true);
               setSelectedEventId(null);
@@ -696,6 +717,7 @@ function AuthScreen({ onLogin }: { onLogin: () => void }) {
 function WorkspaceScreen({
   view,
   events,
+  friendOptions,
   eventTab,
   onEventTab,
   selectedEventId,
@@ -708,8 +730,10 @@ function WorkspaceScreen({
   onAddReceipt,
   isCreatingEvent,
   newEventName,
+  selectedEventFriendIds,
   onCreateEventOpen,
   onNewEventName,
+  onSelectedEventFriendIds,
   onCreateEvent,
   onCancelCreateEvent,
   notificationTab,
@@ -729,6 +753,7 @@ function WorkspaceScreen({
 }: {
   view: View;
   events: EventSummary[];
+  friendOptions: FriendOption[];
   eventTab: EventTab;
   onEventTab: (tab: EventTab) => void;
   selectedEventId: string | null;
@@ -741,8 +766,10 @@ function WorkspaceScreen({
   onAddReceipt: (event: EventSummary) => void;
   isCreatingEvent: boolean;
   newEventName: string;
+  selectedEventFriendIds: string[];
   onCreateEventOpen: () => void;
   onNewEventName: (value: string) => void;
+  onSelectedEventFriendIds: (ids: string[]) => void;
   onCreateEvent: (event?: FormEvent<HTMLFormElement>) => void;
   onCancelCreateEvent: () => void;
   notificationTab: NotificationTab;
@@ -773,13 +800,14 @@ function WorkspaceScreen({
         {view === "home" ? (
           <HomeScreen events={events} owedToMe={owedToMe} iOwe={iOwe} onNavigate={onNavigate} onMessage={onMessage} onCreateEventOpen={onCreateEventOpen} />
         ) : null}
-        {view === "people" ? <PeopleScreen /> : null}
+        {view === "people" ? <PeopleScreen friendOptions={friendOptions} /> : null}
         {view === "profile" ? (
           <ProfileScreen currentUser={currentUser} owedToMe={owedToMe} iOwe={iOwe} permissionState={permissionState} onPermission={onPermission} />
         ) : null}
         {view === "events" ? (
           <EventsScreen
             events={events}
+            friendOptions={friendOptions}
             activeTab={eventTab}
             onTab={onEventTab}
             selectedEventId={selectedEventId}
@@ -792,7 +820,9 @@ function WorkspaceScreen({
             onAddReceipt={onAddReceipt}
             isCreatingEvent={isCreatingEvent}
             newEventName={newEventName}
+            selectedEventFriendIds={selectedEventFriendIds}
             onNewEventName={onNewEventName}
+            onSelectedEventFriendIds={onSelectedEventFriendIds}
             onCreateEvent={onCreateEvent}
             onCancelCreateEvent={onCancelCreateEvent}
           />
@@ -881,10 +911,10 @@ function QuickAction({ icon: Icon, label, onClick }: { icon: React.ElementType; 
   );
 }
 
-function PeopleScreen() {
+function PeopleScreen({ friendOptions }: { friendOptions: FriendOption[] }) {
   const [friendSearch, setFriendSearch] = useState("");
   const [friendCode, setFriendCode] = useState("");
-  const visibleFriends = friends.filter((friend) => friend.name.toLowerCase().includes(friendSearch.trim().toLowerCase()));
+  const visibleFriends = (friendOptions.length ? friendOptions : fallbackFriends).filter((friend) => friend.name.toLowerCase().includes(friendSearch.trim().toLowerCase()));
 
   return (
     <div className="grid gap-4">
@@ -941,6 +971,7 @@ function PeopleScreen() {
 
 function EventsScreen({
   events,
+  friendOptions,
   activeTab,
   onTab,
   selectedEventId,
@@ -953,11 +984,14 @@ function EventsScreen({
   onAddReceipt,
   isCreatingEvent,
   newEventName,
+  selectedEventFriendIds,
   onNewEventName,
+  onSelectedEventFriendIds,
   onCreateEvent,
   onCancelCreateEvent
 }: {
   events: EventSummary[];
+  friendOptions: FriendOption[];
   activeTab: EventTab;
   onTab: (tab: EventTab) => void;
   selectedEventId: string | null;
@@ -970,7 +1004,9 @@ function EventsScreen({
   onAddReceipt: (event: EventSummary) => void;
   isCreatingEvent: boolean;
   newEventName: string;
+  selectedEventFriendIds: string[];
   onNewEventName: (value: string) => void;
+  onSelectedEventFriendIds: (ids: string[]) => void;
   onCreateEvent: (event?: FormEvent<HTMLFormElement>) => void;
   onCancelCreateEvent: () => void;
 }) {
@@ -986,7 +1022,10 @@ function EventsScreen({
     return (
       <EventCreateScreen
         name={newEventName}
+        friendOptions={friendOptions}
+        selectedFriendIds={selectedEventFriendIds}
         onName={onNewEventName}
+        onSelectedFriendIds={onSelectedEventFriendIds}
         onSubmit={onCreateEvent}
         onCancel={onCancelCreateEvent}
       />
@@ -996,6 +1035,7 @@ function EventsScreen({
   return selectedEvent ? (
     <EventDetailScreen
       event={selectedEvent}
+      friendOptions={friendOptions}
       receipts={eventReceipts[selectedEvent.id]}
       invite={eventInvites[selectedEvent.id]}
       onBack={onCloseEvent}
@@ -1034,15 +1074,30 @@ function EventsScreen({
 
 function EventCreateScreen({
   name,
+  friendOptions,
+  selectedFriendIds,
   onName,
+  onSelectedFriendIds,
   onSubmit,
   onCancel
 }: {
   name: string;
+  friendOptions: FriendOption[];
+  selectedFriendIds: string[];
   onName: (value: string) => void;
+  onSelectedFriendIds: (ids: string[]) => void;
   onSubmit: (event?: FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
 }) {
+  const availableFriends = friendOptions;
+  const toggleFriend = (friendId: string, checked: boolean) => {
+    onSelectedFriendIds(
+      checked
+        ? Array.from(new Set([...selectedFriendIds, friendId]))
+        : selectedFriendIds.filter((selectedId) => selectedId !== friendId)
+    );
+  };
+
   return (
     <form data-testid="event-create-screen" onSubmit={onSubmit} className="grid gap-4">
       <div className="rounded-2xl bg-white p-4">
@@ -1062,13 +1117,19 @@ function EventCreateScreen({
       <div className="grid gap-3 rounded-2xl bg-white p-3">
         <p className="text-sm font-black">Добавить участников</p>
         <div className="grid gap-2">
-          {friends.slice(0, 3).map((friend) => (
+          {availableFriends.map((friend) => (
             <label key={friend.name} className="flex min-h-12 items-center gap-3 rounded-xl bg-[#f5f5f7] px-3">
-              <input type="checkbox" className="h-5 w-5 accent-[#1f3d8f]" />
+              <input
+                type="checkbox"
+                checked={selectedFriendIds.includes(friend.id)}
+                onChange={(event) => toggleFriend(friend.id, event.currentTarget.checked)}
+                className="h-5 w-5 accent-[#1f3d8f]"
+              />
               <Avatar>{friend.initials}</Avatar>
               <span className="text-sm font-bold">{friend.name}</span>
             </label>
           ))}
+          {!availableFriends.length ? <p className="rounded-xl bg-[#f5f5f7] p-3 text-sm font-semibold text-slate-500">Пока нет друзей для добавления. Пригласите друга по коду после создания события.</p> : null}
         </div>
         <button type="button" className="min-h-11 rounded-xl border border-[#c6cbdc] text-sm font-black text-[#1f3d8f]">Пригласить по коду после создания</button>
       </div>
@@ -1082,6 +1143,7 @@ function EventCreateScreen({
 
 function EventDetailScreen({
   event,
+  friendOptions,
   receipts,
   invite,
   onBack,
@@ -1090,6 +1152,7 @@ function EventDetailScreen({
   onAddReceipt
 }: {
   event: EventSummary;
+  friendOptions: FriendOption[];
   receipts?: { loading: boolean; items: ReceiptSummary[] };
   invite?: { loading: boolean; token?: string; url?: string };
   onBack: () => void;
@@ -1097,7 +1160,8 @@ function EventDetailScreen({
   onCreateEventInvite: (event: EventSummary) => void;
   onAddReceipt: (event: EventSummary) => void;
 }) {
-  const participantCount = event.participants_count ?? event.participants?.length ?? 1;
+  const participantItems = eventParticipants(event, friendOptions);
+  const participantCount = event.participants_count ?? event.participants?.length ?? participantItems.length;
   const inviteCode = eventInviteDisplayCode(invite?.token ?? event.token ?? demoInviteCode(event.id));
 
   if (event.status === "invite") {
@@ -1135,12 +1199,12 @@ function EventDetailScreen({
         </div>
       </div>
       <ContentPanel title="Участники">
-        {friends.slice(0, Math.max(1, Math.min(participantCount, friends.length))).map((friend) => (
-          <div key={friend.name} className="grid grid-cols-[40px_1fr] items-center gap-2 rounded-xl bg-[#f5f5f7] p-2">
-            <Avatar>{friend.initials}</Avatar>
+        {eventParticipants(event, friendOptions).map((participant) => (
+          <div key={participant.id} className="grid grid-cols-[40px_1fr] items-center gap-2 rounded-xl bg-[#f5f5f7] p-2">
+            <Avatar>{participant.initials}</Avatar>
             <div>
-              <p className="text-sm font-black">{friend.name}</p>
-              <p className="text-xs text-slate-500">участник</p>
+              <p className="text-sm font-black">{participant.name}</p>
+              <p className="text-xs text-slate-500">{participant.subtitle}</p>
             </div>
           </div>
         ))}
@@ -1495,6 +1559,55 @@ function demoInviteCode(eventId: string) {
 
 function eventInviteDisplayCode(rawCode: string) {
   return rawCode.replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, 6).padEnd(6, "0");
+}
+
+function friendshipsToOptions(friendships: Friendship[]): FriendOption[] {
+  return friendships
+    .map((friendship) => friendship.peer)
+    .filter((peer): peer is UserProfile => Boolean(peer?.id && peer.name))
+    .map((peer) => ({
+      id: peer.id,
+      initials: initialsFor(peer.name),
+      name: peer.name,
+      subtitle: "участник",
+      amount: 0,
+      tone: "text-slate-500"
+    }));
+}
+
+function eventWithAddedParticipants(event: EventSummary, userIds: string[]): EventSummary {
+  const existing = event.participants ?? [];
+  const existingUserIds = new Set(existing.map((participant) => participant.user_id));
+  const added = userIds
+    .filter((userId) => !existingUserIds.has(userId))
+    .map((userId) => ({ user_id: userId, role: "member", status: "active" }));
+  const participants = [...existing, ...added];
+  return { ...event, participants, participants_count: participants.length };
+}
+
+function eventParticipants(event: EventSummary, friendOptions: FriendOption[]): FriendOption[] {
+  const byUserId = new Map(friendOptions.map((friend) => [friend.id, friend]));
+  const participants = event.participants ?? [];
+  if (!participants.length) {
+    return fallbackFriends.slice(0, Math.max(1, Math.min(event.participants_count ?? 1, fallbackFriends.length)));
+  }
+  return participants.map((participant, index) => {
+    const friend = byUserId.get(participant.user_id);
+    if (friend) return { ...friend, subtitle: participant.role === "creator" ? "создатель" : "участник" };
+    const name = participant.role === "creator" ? "Вы" : `Участник ${index + 1}`;
+    return {
+      id: participant.user_id,
+      initials: initialsFor(name),
+      name,
+      subtitle: participant.role === "creator" ? "создатель" : "участник",
+      amount: 0,
+      tone: "text-slate-500"
+    };
+  });
+}
+
+function initialsFor(name: string) {
+  return name.trim().slice(0, 1).toUpperCase() || "•";
 }
 
 function normalizeEvent(event: EventSummary): EventSummary {

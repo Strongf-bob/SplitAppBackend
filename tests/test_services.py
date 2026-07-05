@@ -349,6 +349,8 @@ def test_friend_request_accept_remove_and_block(db):
     assert request["status"] == "requested"
     assert accepted["status"] == "accepted"
     assert [item["id"] for item in page["items"]] == [request["id"]]
+    assert page["items"][0]["peer"]["id"] == USER_B
+    assert page["items"][0]["peer"]["name"] == "Bob"
 
     friends.remove_friendship(db, request["id"], USER_A)
     removed = db.friends.find_one({"id": request["id"]})
