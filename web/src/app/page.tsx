@@ -121,7 +121,7 @@ export default function SplitAppPage() {
   const [eventReceipts, setEventReceipts] = useState<EventReceipts>({});
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [newEventName, setNewEventName] = useState("");
-  const [message, setMessage] = useState("Готов к работе");
+  const [message, setMessage] = useState("");
   const [permissionState, setPermissionState] = useState<PermissionState>(initialPermissionState);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { id: "hello", from: "splitik", text: "Привет! Я Сплитик, чем могу помочь?" },
@@ -178,6 +178,12 @@ export default function SplitAppPage() {
         setMessage("Backend недоступен, показан локальный срез PWA.");
       });
   }, [tokens]);
+
+  useEffect(() => {
+    if (!message) return;
+    const timeout = setTimeout(() => setMessage(""), 3200);
+    return () => clearTimeout(timeout);
+  }, [message]);
 
   const owedToMe = summary?.confirmed?.receivable_kopecks ?? 720000;
   const iOwe = summary?.confirmed?.owed_kopecks ?? 295000;

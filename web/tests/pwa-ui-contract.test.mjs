@@ -76,3 +76,9 @@ test("mobile shell keeps the real app surface full-height and gallery input moun
   assert.match(page, /galleryInputRef/);
   assert.doesNotMatch(page, /bg-\[#1e1e1e\]/);
 });
+
+test("toast messages are transient and not shown on initial load", () => {
+  assert.match(page, /const \[message, setMessage\] = useState\(""\)/);
+  assert.match(page, /setTimeout\(\(\) => setMessage\(""\), 3200\)/);
+  assert.doesNotMatch(page, /useState\("Готов к работе"\)/);
+});
