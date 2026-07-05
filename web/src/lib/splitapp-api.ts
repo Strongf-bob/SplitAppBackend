@@ -1,6 +1,7 @@
 const tokenKey = "splitapp.tokens";
 const yandexOAuthStateKey = "splitapp.yandexOAuthState";
 const yandexOAuthClientId = "6c5725f5868c4604adaea1e4b892c14d";
+const productionYandexRedirectUri = "https://split-app.ru/app";
 
 export type SplitAppTokens = {
   access_token: string;
@@ -41,11 +42,7 @@ export function clearTokens() {
 }
 
 export function yandexRedirectUri() {
-  if (typeof window === "undefined") return "https://split-app.ru/app";
-  if (window.location.hostname === "split-app.ru" || window.location.hostname === "www.split-app.ru") {
-    return "https://split-app.ru/app";
-  }
-  return `${window.location.origin}/app`;
+  return productionYandexRedirectUri;
 }
 
 export function startYandexLogin() {
