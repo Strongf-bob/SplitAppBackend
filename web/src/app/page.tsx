@@ -1097,7 +1097,7 @@ function SplitikScreen({
   isSending: boolean;
 }) {
   return (
-    <div className="grid min-h-[690px] grid-rows-[1fr_auto] gap-3">
+    <div className="grid min-h-[690px] gap-3 pb-[112px]">
       <div className="grid content-end gap-3 overflow-hidden rounded-2xl bg-white p-3">
         <div className="grid justify-items-center gap-2 pb-3">
           <div className="grid h-24 w-24 place-items-center rounded-3xl border-4 border-[#111111] bg-[#f5f5f7] text-[#111111]">
@@ -1116,7 +1116,11 @@ function SplitikScreen({
           </div>
         ))}
       </div>
-      <form onSubmit={onSend} className="flex gap-2 rounded-2xl bg-white p-2">
+      <form
+        onSubmit={onSend}
+        data-testid="splitik-composer"
+        className="fixed inset-x-4 bottom-[calc(86px+env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-[calc(100vw-2rem)] gap-2 rounded-2xl bg-white p-2 shadow-[0_14px_36px_rgba(15,23,42,0.18)]"
+      >
         <input
           aria-label="Сообщение Сплитику"
           data-testid="splitik-message-input"
