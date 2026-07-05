@@ -1098,7 +1098,7 @@ function EventDetailScreen({
   onAddReceipt: (event: EventSummary) => void;
 }) {
   const participantCount = event.participants_count ?? event.participants?.length ?? 1;
-  const inviteCode = invite?.token ?? event.token ?? demoInviteCode(event.id);
+  const inviteCode = eventInviteDisplayCode(invite?.token ?? event.token ?? demoInviteCode(event.id));
 
   if (event.status === "invite") {
     return (
@@ -1490,7 +1490,11 @@ function isUuid(value: string | null): value is string {
 }
 
 function demoInviteCode(eventId: string) {
-  return `SPLIT-${eventId.replace(/[^a-z0-9]/gi, "").slice(-4).toUpperCase().padStart(4, "0")}`;
+  return eventId.replace(/[^a-z0-9]/gi, "").slice(-6).toUpperCase().padStart(6, "0");
+}
+
+function eventInviteDisplayCode(rawCode: string) {
+  return rawCode.replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, 6).padEnd(6, "0");
 }
 
 function normalizeEvent(event: EventSummary): EventSummary {
