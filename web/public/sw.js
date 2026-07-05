@@ -4,6 +4,9 @@ const APP_SHELL = [
   "/app",
   "/manifest.webmanifest",
   "/assets/icon.svg",
+  "/assets/icon-192.png",
+  "/assets/icon-512.png",
+  "/assets/apple-touch-icon.png",
   "/assets/app-preview.svg"
 ];
 
@@ -51,6 +54,44 @@ self.addEventListener("fetch", (event) => {
         }
         return response;
       });
+    })
+  );
+});
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data?.text() };
+  }
+
+  const title = payload.title || "SplitApp";
+  const options = {
+    body: payload.body || "Есть новое действие в SplitApp.",
+    icon: "/assets/icon-192.png",
+    badge: "/assets/apple-touch-icon.png",
+    data: {
+      url: payload.url || "/app"
+    }
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/app";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) {
+          client.navigate?.(targetUrl);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(targetUrl);
     })
   );
 });

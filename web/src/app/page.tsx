@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  AlertCircle,
   Bell,
   Camera,
+  Check,
   CheckCircle2,
   CreditCard,
   Home,
@@ -14,7 +16,10 @@ import {
   MessageCircle,
   Plus,
   ReceiptText,
+  Share2,
   ShieldCheck,
+  Smartphone,
+  Upload,
   Users
 } from "lucide-react";
 
@@ -34,6 +39,27 @@ import {
 import { cn } from "@/lib/utils";
 
 type View = "home" | "events" | "receipts" | "payments" | "people" | "splitik";
+type PermissionId = "contacts" | "camera" | "gallery" | "notifications";
+type PermissionStatus = "pending" | "granted" | "unsupported" | "denied" | "skipped";
+type PermissionState = Record<PermissionId, { status: PermissionStatus; detail: string }>;
+
+declare global {
+  interface Navigator {
+    contacts?: {
+      select: (
+        properties: Array<"name" | "email" | "tel" | "address" | "icon">,
+        options?: { multiple?: boolean }
+      ) => Promise<Array<Record<string, unknown>>>;
+    };
+  }
+
+  interface Window {
+    showOpenFilePicker?: (options?: {
+      multiple?: boolean;
+      types?: Array<{ description?: string; accept: Record<string, string[]> }>;
+    }) => Promise<unknown[]>;
+  }
+}
 
 const navItems: Array<{ id: View; label: string; icon: React.ElementType }> = [
   { id: "home", label: "Главная", icon: Home },
@@ -50,11 +76,23 @@ const fallbackEvents = [
   { id: "demo-3", title: "Квартира июль", total_kopecks: 3690000, participants_count: 2, status: "closed" }
 ];
 
-const permissions = [
-  { label: "Контакты", icon: Users, detail: "найти участников быстрее" },
-  { label: "Камера", icon: Camera, detail: "снимать чеки сразу" },
-  { label: "Галерея", icon: ImageIcon, detail: "загрузить фото чека" },
-  { label: "Уведомления", icon: Bell, detail: "не забыть оплату" }
+const initialPermissionState: PermissionState = {
+  contacts: { status: "pending", detail: "Выберите контакт явно, без скрытого чтения адресной книги." },
+  camera: { status: "pending", detail: "Откроем системный запрос камеры для фото чека." },
+  gallery: { status: "pending", detail: "Откроем выбор изображения из Фото или файлов." },
+  notifications: { status: "pending", detail: "Запросим уведомления после установки PWA на экран Домой." }
+};
+
+const permissions: Array<{
+  id: PermissionId;
+  label: string;
+  icon: React.ElementType;
+  detail: string;
+}> = [
+  { id: "contacts", label: "Контакты", icon: Users, detail: "найти участников быстрее" },
+  { id: "camera", label: "Камера", icon: Camera, detail: "снимать чеки сразу" },
+  { id: "gallery", label: "Галерея", icon: ImageIcon, detail: "загрузить фото чека" },
+  { id: "notifications", label: "Уведомления", icon: Bell, detail: "не забыть оплату" }
 ];
 
 export default function SplitAppPage() {
@@ -64,10 +102,16 @@ export default function SplitAppPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [message, setMessage] = useState("Готов к работе");
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
+  const [isIos, setIsIos] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [permissionState, setPermissionState] = useState<PermissionState>(initialPermissionState);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setTokens(loadTokens());
     setIsOnline(navigator.onLine);
+    setIsIos(isIosDevice());
+    setIsStandalone(isStandalonePwa());
 
     const onOnline = () => setIsOnline(true);
     const onOffline = () => setIsOnline(false);
@@ -79,6 +123,9 @@ export default function SplitAppPage() {
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.matchMedia?.("(display-mode: standalone)").addEventListener?.("change", () => {
+      setIsStandalone(isStandalonePwa());
+    });
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
@@ -116,7 +163,7 @@ export default function SplitAppPage() {
 
   const runInstall = async () => {
     if (!installPrompt) {
-      setMessage("На iPhone используйте Share -> Add to Home Screen.");
+      setMessage("На iPhone нажмите Share -> Add to Home Screen, затем откройте SplitApp с ярлыка.");
       return;
     }
     const prompt = installPrompt as Event & { prompt?: () => Promise<void>; userChoice?: Promise<unknown> };
@@ -130,6 +177,128 @@ export default function SplitAppPage() {
     setTokens(null);
     setSummary(null);
     setMessage("Вы вышли. Локальная сессия очищена.");
+  };
+
+  const updatePermission = (id: PermissionId, status: PermissionStatus, detail: string) => {
+    setPermissionState((current) => ({ ...current, [id]: { status, detail } }));
+    setMessage(detail);
+  };
+
+  const requestCameraPermission = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      updatePermission("camera", "unsupported", "Этот браузер не дает доступ к камере через PWA.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false
+      });
+      stream.getTracks().forEach((track) => track.stop());
+      updatePermission("camera", "granted", "Камера разрешена. Можно снимать чеки из PWA.");
+    } catch (error) {
+      updatePermission("camera", "denied", permissionErrorMessage(error, "Камера не разрешена."));
+    }
+  };
+
+  const requestGalleryPermission = async () => {
+    if (window.showOpenFilePicker) {
+      try {
+        const files = await window.showOpenFilePicker({
+          multiple: false,
+          types: [{ description: "Receipt images", accept: { "image/*": [".png", ".jpg", ".jpeg", ".webp"] } }]
+        });
+        updatePermission(
+          "gallery",
+          files.length ? "granted" : "skipped",
+          files.length ? "Фото выбрано из галереи." : "Выбор фото отменен."
+        );
+        return;
+      } catch (error) {
+        updatePermission("gallery", "skipped", permissionErrorMessage(error, "Выбор фото отменен."));
+        return;
+      }
+    }
+
+    galleryInputRef.current?.click();
+  };
+
+  const requestNotificationPermission = async () => {
+    if (!("Notification" in window)) {
+      updatePermission("notifications", "unsupported", "Этот браузер не поддерживает web-уведомления.");
+      return;
+    }
+    if (isIosDevice() && !isStandalonePwa()) {
+      updatePermission(
+        "notifications",
+        "skipped",
+        "На iPhone сначала добавьте SplitApp: Share -> Add to Home Screen, потом откройте ярлык."
+      );
+      return;
+    }
+
+    try {
+      const result = await Notification.requestPermission();
+      if (result !== "granted") {
+        updatePermission("notifications", result === "denied" ? "denied" : "skipped", "Уведомления не разрешены.");
+        return;
+      }
+
+      const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.ready : null;
+      const pushPublicKey = process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY;
+      if (registration?.pushManager && pushPublicKey) {
+        await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(pushPublicKey)
+        });
+      }
+      updatePermission(
+        "notifications",
+        "granted",
+        pushPublicKey
+          ? "Уведомления разрешены и подписка создана."
+          : "Уведомления разрешены. Push-подписку подключим после добавления VAPID key."
+      );
+    } catch (error) {
+      updatePermission(
+        "notifications",
+        "denied",
+        permissionErrorMessage(error, "Не удалось запросить уведомления.")
+      );
+    }
+  };
+
+  const requestContactsPermission = async () => {
+    if (!navigator.contacts?.select) {
+      updatePermission(
+        "contacts",
+        "unsupported",
+        "iPhone Safari обычно не дает Web Contacts API. Используем ручное добавление/инвайт."
+      );
+      return;
+    }
+
+    try {
+      const contacts = await navigator.contacts.select(["name", "tel", "email"], { multiple: false });
+      updatePermission(
+        "contacts",
+        contacts.length ? "granted" : "skipped",
+        contacts.length ? "Контакт выбран." : "Выбор контакта отменен."
+      );
+    } catch (error) {
+      updatePermission("contacts", "skipped", permissionErrorMessage(error, "Выбор контакта отменен."));
+    }
+  };
+
+  const requestPermission = (id: PermissionId) => {
+    const handlers: Record<PermissionId, () => Promise<void>> = {
+      contacts: requestContactsPermission,
+      camera: requestCameraPermission,
+      gallery: requestGalleryPermission,
+      notifications: requestNotificationPermission
+    };
+    void handlers[id]();
   };
 
   return (
@@ -168,7 +337,22 @@ export default function SplitAppPage() {
 
         <section className="min-w-0">
           {!tokens ? (
-            <Landing onLogin={startYandexLogin} onInstall={runInstall} />
+            <Landing
+              isIos={isIos}
+              isStandalone={isStandalone}
+              onLogin={startYandexLogin}
+              onInstall={runInstall}
+              onPermission={requestPermission}
+              permissionState={permissionState}
+              galleryInputRef={galleryInputRef}
+              onGalleryPicked={(picked) =>
+                updatePermission(
+                  "gallery",
+                  picked ? "granted" : "skipped",
+                  picked ? "Фото выбрано из галереи." : "Выбор фото отменен."
+                )
+              }
+            />
           ) : (
             <Workspace view={view} events={events} owedToMe={owedToMe} iOwe={iOwe} />
           )}
@@ -231,9 +415,44 @@ function NavButton({
   );
 }
 
-function Landing({ onLogin, onInstall }: { onLogin: () => void; onInstall: () => void }) {
+function Landing({
+  isIos,
+  isStandalone,
+  onLogin,
+  onInstall,
+  onPermission,
+  permissionState,
+  galleryInputRef,
+  onGalleryPicked
+}: {
+  isIos: boolean;
+  isStandalone: boolean;
+  onLogin: () => void;
+  onInstall: () => void;
+  onPermission: (id: PermissionId) => void;
+  permissionState: PermissionState;
+  galleryInputRef: React.RefObject<HTMLInputElement | null>;
+  onGalleryPicked: (picked: boolean) => void;
+}) {
   return (
     <div className="grid gap-6">
+      {isIos && !isStandalone ? (
+        <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950 shadow-panel">
+          <div className="flex gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-200">
+              <Share2 className="h-5 w-5" />
+            </div>
+            <div className="grid gap-1">
+              <h2 className="font-semibold">iPhone: сначала добавьте SplitApp на экран Домой</h2>
+              <p className="text-sm leading-6">
+                Откройте меню Share в Safari и нажмите Add to Home Screen. После запуска с ярлыка
+                SplitApp сможет запросить разрешения PWA, включая уведомления.
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <motion.section
         className="grid overflow-hidden rounded-lg border bg-card shadow-panel lg:grid-cols-[1.05fr_0.95fr]"
         initial={{ opacity: 0, y: 16 }}
@@ -258,6 +477,7 @@ function Landing({ onLogin, onInstall }: { onLogin: () => void; onInstall: () =>
               Войти через Яндекс
             </Button>
             <Button size="lg" variant="outline" onClick={onInstall}>
+              <Smartphone className="h-4 w-4" />
               Установить SplitApp
             </Button>
           </div>
@@ -267,23 +487,65 @@ function Landing({ onLogin, onInstall }: { onLogin: () => void; onInstall: () =>
         </div>
       </motion.section>
 
-      <section className="grid gap-4 md:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {permissions.map((item) => {
           const Icon = item.icon;
+          const current = permissionState[item.id];
           return (
             <Card key={item.label}>
-              <CardHeader>
-                <div className="grid h-10 w-10 place-items-center rounded-md bg-secondary text-secondary-foreground">
-                  <Icon className="h-5 w-5" />
+              <CardHeader className="min-h-full">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-md bg-secondary text-secondary-foreground">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <PermissionBadge status={current.status} />
                 </div>
                 <CardTitle>{item.label}</CardTitle>
-                <CardDescription>{item.detail}</CardDescription>
+                <CardDescription>{current.detail || item.detail}</CardDescription>
+                <Button
+                  className="mt-2 w-full"
+                  variant={current.status === "granted" ? "secondary" : "outline"}
+                  onClick={() => onPermission(item.id)}
+                >
+                  {item.id === "gallery" ? <Upload className="h-4 w-4" /> : null}
+                  {current.status === "granted" ? "Проверить снова" : "Разрешить"}
+                </Button>
               </CardHeader>
             </Card>
           );
         })}
       </section>
+
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          onGalleryPicked(Boolean(event.currentTarget.files?.length));
+          event.currentTarget.value = "";
+        }}
+      />
     </div>
+  );
+}
+
+function PermissionBadge({ status }: { status: PermissionStatus }) {
+  const content: Record<PermissionStatus, { label: string; className: string; icon: React.ElementType }> = {
+    pending: { label: "ожидает", className: "bg-muted text-muted-foreground", icon: AlertCircle },
+    granted: { label: "готово", className: "bg-emerald-100 text-emerald-800", icon: Check },
+    unsupported: { label: "fallback", className: "bg-amber-100 text-amber-800", icon: AlertCircle },
+    denied: { label: "запрещено", className: "bg-red-100 text-red-800", icon: AlertCircle },
+    skipped: { label: "пропущено", className: "bg-slate-100 text-slate-700", icon: AlertCircle }
+  };
+  const item = content[status];
+  const Icon = item.icon;
+
+  return (
+    <span className={cn("inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold", item.className)}>
+      <Icon className="h-3.5 w-3.5" />
+      {item.label}
+    </span>
   );
 }
 
@@ -438,4 +700,38 @@ function viewTitle(view: View) {
     splitik: "Сплитик"
   };
   return titles[view];
+}
+
+function isIosDevice() {
+  if (typeof navigator === "undefined") return false;
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
+function isStandalonePwa() {
+  if (typeof window === "undefined") return false;
+  const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
+  return window.matchMedia?.("(display-mode: standalone)").matches || navigatorWithStandalone.standalone === true;
+}
+
+function permissionErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof DOMException && error.name === "NotAllowedError") {
+    return `${fallback} Проверьте системные настройки Safari/SplitApp.`;
+  }
+  if (error instanceof Error && error.message) {
+    return `${fallback} ${error.message}`;
+  }
+  return fallback;
+}
+
+function urlBase64ToUint8Array(value: string) {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = `${value}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const output = new Uint8Array(rawData.length);
+
+  for (let index = 0; index < rawData.length; index += 1) {
+    output[index] = rawData.charCodeAt(index);
+  }
+
+  return output;
 }

@@ -7,8 +7,12 @@ export const metadata: Metadata = {
   description: "PWA-клиент SplitApp для событий, чеков, долгов и Сплитика.",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/assets/icon.svg",
-    apple: "/assets/icon.svg"
+    icon: [
+      { url: "/assets/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/assets/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/assets/icon.svg", type: "image/svg+xml" }
+    ],
+    apple: "/assets/apple-touch-icon.png"
   }
 };
 
