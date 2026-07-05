@@ -646,6 +646,40 @@ def test_splitik_sends_russian_prompt_and_session_state_to_llm(db, monkeypatch):
     assert calls[-1]["context"]["tool_results"]["splitik.get_recent_session_messages"]
 
 
+def test_splitik_prompt_requires_markdown_and_no_emoji(db, monkeypatch):
+    calls = _mock_llm(monkeypatch)
+    seed_event(db)
+
+    splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(mode="general", message="привет"),
+        USER_A,
+    )
+
+    system_prompt = calls[-1]["system_prompt"]
+    assert "Markdown" in system_prompt
+    assert "emoji" in system_prompt
+    assert "без emoji" in system_prompt
+    assert "короткие абзацы" in system_prompt
+    assert "маркированные списки" in system_prompt
+
+
+def test_splitik_strips_emoji_from_llm_reply(db, monkeypatch):
+    def fake_reply(*, system_prompt, user_message, context):
+        return "Привет! 👋\n\n- Создам черновик 🙂\n- Попрошу подтвердить"
+
+    monkeypatch.setattr(splitik_llm, "generate_splitik_reply", fake_reply)
+    seed_event(db)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(mode="general", message="привет"),
+        USER_A,
+    )
+
+    assert response["assistant_message"] == "Привет!\n\n- Создам черновик\n- Попрошу подтвердить"
+
+
 def test_splitik_new_session_does_not_reuse_previous_active_draft(db, monkeypatch):
     calls = _mock_llm(monkeypatch)
     seed_event(db)

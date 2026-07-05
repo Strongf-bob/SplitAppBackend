@@ -45,6 +45,22 @@ _UNSAFE_MODEL_PRIVATE_SPENDING_MARKERS = (
     "траты друга",
     "вне ваших общих событий",
 )
+_EMOJI_PATTERN = re.compile(
+    "["
+    "\U0001f1e6-\U0001f1ff"
+    "\U0001f300-\U0001f5ff"
+    "\U0001f600-\U0001f64f"
+    "\U0001f680-\U0001f6ff"
+    "\U0001f700-\U0001f77f"
+    "\U0001f780-\U0001f7ff"
+    "\U0001f800-\U0001f8ff"
+    "\U0001f900-\U0001f9ff"
+    "\U0001fa70-\U0001faff"
+    "\u2600-\u26ff"
+    "\u2700-\u27bf"
+    "\ufe0f"
+    "]+"
+)
 
 
 def _contains_any(message: str, markers: tuple[str, ...]) -> bool:
@@ -71,6 +87,11 @@ def sanitize_message(message: str) -> str:
         flags=re.IGNORECASE,
     )
     return sanitized
+
+
+def strip_disallowed_emoji(message: str) -> str:
+    without_emoji = _EMOJI_PATTERN.sub("", message)
+    return "\n".join(line.rstrip() for line in without_emoji.splitlines()).strip()
 
 
 def evaluate_user_message(message: str, *, context_scope: str = "general") -> dict:

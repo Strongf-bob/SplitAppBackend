@@ -29,7 +29,7 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v5/);
+  assert.match(sw, /splitapp-next-pwa-v6/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
@@ -108,4 +108,11 @@ test("authenticated startup refreshes expired access tokens instead of showing a
   assert.match(page, /handleInitialDataError/);
   assert.match(page, /Сессия истекла\. Войдите через Яндекс еще раз\./);
   assert.doesNotMatch(page, /Backend недоступен, показан локальный срез PWA\./);
+});
+
+test("Splitik assistant replies render safe Markdown instead of a flattened text blob", () => {
+  assert.match(page, /function MarkdownMessage/);
+  assert.match(page, /parseMarkdownMessage/);
+  assert.match(page, /<MarkdownMessage text=\{item\.text\} \/>/);
+  assert.doesNotMatch(page, /\{item\.text\}\s*<\/div>/);
 });
