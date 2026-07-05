@@ -9,6 +9,13 @@ export type SplitAppTokens = {
   user?: UserProfile;
 };
 
+type RefreshTokensResponse = {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+};
+
 export type UserProfile = {
   id: string;
   name: string;
@@ -131,12 +138,35 @@ export async function handleYandexOAuthCallback(): Promise<SplitAppTokens | null
 }
 
 export async function api<T>(path: string, tokens: SplitAppTokens | null, init: RequestInit = {}): Promise<T> {
+  const response = await fetchWithAuth(path, tokens, init);
+  if (response.ok) return (await response.json()) as T;
+
+  if (response.status === 401 && tokens?.refresh_token) {
+    const refreshedTokens = await refreshAccessToken(tokens.refresh_token);
+    saveTokens({ ...tokens, ...refreshedTokens });
+    const retry = await fetchWithAuth(path, { ...tokens, ...refreshedTokens }, init);
+    if (retry.ok) return (await retry.json()) as T;
+    throw new ApiError(retry.status, await responseErrorMessage(retry));
+  }
+
+  throw new ApiError(response.status, await responseErrorMessage(response));
+}
+
+async function fetchWithAuth(path: string, tokens: SplitAppTokens | null, init: RequestInit) {
   const headers = new Headers(init.headers);
   if (tokens?.access_token) headers.set("Authorization", `Bearer ${tokens.access_token}`);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  const response = await fetch(path, { ...init, headers });
+  return fetch(path, { ...init, headers });
+}
+
+async function refreshAccessToken(refreshToken: string): Promise<RefreshTokensResponse> {
+  const response = await fetch("/api/refresh", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken })
+  });
   if (!response.ok) throw new ApiError(response.status, await responseErrorMessage(response));
-  return (await response.json()) as T;
+  return (await response.json()) as RefreshTokensResponse;
 }
 
 async function responseErrorMessage(response: Response): Promise<string> {

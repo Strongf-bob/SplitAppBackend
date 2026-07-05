@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -135,6 +135,20 @@ export default function SplitAppPage() {
   const [isSplitikSending, setIsSplitikSending] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
+  const handleInitialDataError = useCallback((error: unknown) => {
+    setEvents(fallbackEvents);
+    if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+      clearTokens();
+      setTokens(null);
+      setCurrentUser(null);
+      setSummary(null);
+      setMessage("Сессия истекла. Войдите через Яндекс еще раз.");
+      return;
+    }
+    const detail = error instanceof Error ? error.message : "неизвестная ошибка";
+    setMessage(`Не удалось синхронизировать данные: ${detail}`);
+  }, []);
+
   useEffect(() => {
     const storedTokens = loadTokens();
     setTokens(storedTokens);
@@ -181,11 +195,8 @@ export default function SplitAppPage() {
         setCurrentUser(user);
         setEvents(eventPage.items.length ? eventPage.items.map(normalizeEvent) : fallbackEvents);
       })
-      .catch(() => {
-        setEvents(fallbackEvents);
-        setMessage("Backend недоступен, показан локальный срез PWA.");
-      });
-  }, [tokens]);
+      .catch(handleInitialDataError);
+  }, [handleInitialDataError, tokens]);
 
   useEffect(() => {
     if (!message) return;
