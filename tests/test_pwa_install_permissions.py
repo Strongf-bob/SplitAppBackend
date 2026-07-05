@@ -11,7 +11,10 @@ def test_next_pwa_requests_device_permissions_from_active_client() -> None:
     page_source = (ROOT / "web" / "src" / "app" / "page.tsx").read_text()
 
     assert "isIosDevice" in page_source
-    assert "Add to Home Screen" in page_source
+    assert "min-h-dvh" in page_source
+    assert "Покрутить приложение" not in page_source
+    assert "9:41" not in page_source
+    assert "Wi-Fi" not in page_source
     assert "navigator.mediaDevices.getUserMedia" in page_source
     assert "Notification.requestPermission" in page_source
     assert "serviceWorker.ready" in page_source
