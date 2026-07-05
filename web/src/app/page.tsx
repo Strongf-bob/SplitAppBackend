@@ -34,7 +34,8 @@ import {
   ReceiptSummary,
   SplitikMessageResponse,
   SplitAppTokens,
-  startYandexLogin
+  startYandexLogin,
+  UserProfile
 } from "@/lib/splitapp-api";
 import { cn } from "@/lib/utils";
 
@@ -116,6 +117,7 @@ export default function SplitAppPage() {
   const [eventTab, setEventTab] = useState<EventTab>("active");
   const [notificationTab, setNotificationTab] = useState<NotificationTab>("incoming");
   const [summary, setSummary] = useState<HomeSummary | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [events, setEvents] = useState<EventSummary[]>(fallbackEvents);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [eventReceipts, setEventReceipts] = useState<EventReceipts>({});
@@ -133,7 +135,9 @@ export default function SplitAppPage() {
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    setTokens(loadTokens());
+    const storedTokens = loadTokens();
+    setTokens(storedTokens);
+    setCurrentUser(storedTokens?.user ?? null);
 
     const hashView = parseHashView(window.location.hash);
     if (hashView) setView(hashView);
@@ -153,6 +157,7 @@ export default function SplitAppPage() {
       .then((nextTokens) => {
         if (nextTokens) {
           setTokens(nextTokens);
+          setCurrentUser(nextTokens.user ?? null);
           setMessage("Вы вошли через Яндекс.");
         }
       })
@@ -167,10 +172,12 @@ export default function SplitAppPage() {
     if (!tokens) return;
     Promise.all([
       api<HomeSummary>("/api/home/summary", tokens),
-      api<EventPage>("/api/events", tokens)
+      api<EventPage>("/api/events", tokens),
+      api<UserProfile>("/api/users/me", tokens)
     ])
-      .then(([nextSummary, eventPage]) => {
+      .then(([nextSummary, eventPage, user]) => {
         setSummary(nextSummary);
+        setCurrentUser(user);
         setEvents(eventPage.items.length ? eventPage.items.map(normalizeEvent) : fallbackEvents);
       })
       .catch(() => {
@@ -200,6 +207,7 @@ export default function SplitAppPage() {
   const logout = () => {
     clearTokens();
     setTokens(null);
+    setCurrentUser(null);
     setSummary(null);
     setMessage("Вы вышли. Локальная сессия очищена.");
   };
@@ -437,6 +445,7 @@ export default function SplitAppPage() {
             onNotificationTab={setNotificationTab}
             owedToMe={owedToMe}
             iOwe={iOwe}
+            currentUser={currentUser}
             permissionState={permissionState}
             onPermission={requestPermission}
             chatMessages={chatMessages}
@@ -623,6 +632,7 @@ function WorkspaceScreen({
   onNotificationTab,
   owedToMe,
   iOwe,
+  currentUser,
   permissionState,
   onPermission,
   chatMessages,
@@ -650,6 +660,7 @@ function WorkspaceScreen({
   onNotificationTab: (tab: NotificationTab) => void;
   owedToMe: number;
   iOwe: number;
+  currentUser: UserProfile | null;
   permissionState: PermissionState;
   onPermission: (id: PermissionId) => void;
   chatMessages: ChatMessage[];
@@ -675,7 +686,7 @@ function WorkspaceScreen({
         ) : null}
         {view === "people" ? <PeopleScreen /> : null}
         {view === "profile" ? (
-          <ProfileScreen owedToMe={owedToMe} iOwe={iOwe} permissionState={permissionState} onPermission={onPermission} />
+          <ProfileScreen currentUser={currentUser} owedToMe={owedToMe} iOwe={iOwe} permissionState={permissionState} onPermission={onPermission} />
         ) : null}
         {view === "events" ? (
           <EventsScreen
@@ -958,22 +969,42 @@ function NotificationsScreen({
 }
 
 function ProfileScreen({
+  currentUser,
   owedToMe,
   iOwe,
   permissionState,
   onPermission
 }: {
+  currentUser: UserProfile | null;
   owedToMe: number;
   iOwe: number;
   permissionState: PermissionState;
   onPermission: (id: PermissionId) => void;
 }) {
+  const profileName = currentUser?.name || "Профиль";
+  const profileEmail = currentUser?.email || currentUser?.phone_number || "Войдите через Яндекс";
+  const initials = profileName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "S";
+
   return (
     <div className="grid gap-4">
       <div className="-mx-3 -mt-3 grid justify-items-center rounded-b-[24px] bg-[#1f3d8f] px-5 pb-8 pt-4 text-white">
-        <div className="grid h-28 w-28 place-items-center rounded-full bg-[#bbb2d5] text-6xl font-black text-[#654da1]">A</div>
+        <div className="grid h-28 w-28 place-items-center overflow-hidden rounded-full bg-[#bbb2d5] text-4xl font-black text-[#654da1]">
+          {currentUser?.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={currentUser.avatar_url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initials
+          )}
+        </div>
       </div>
-      <ContentPanel title="Анна">
+      <ContentPanel title={profileName}>
+        <ProfileRow label="Аккаунт" value={profileEmail} tone="text-slate-700" />
         <ProfileRow label="Мне должны" value={money(owedToMe)} tone="text-emerald-600" />
         <ProfileRow label="Я должен" value={money(iOwe)} tone="text-red-600" />
         <ProfileRow label="Активных событий" value="3" tone="text-[#1f3d8f]" />

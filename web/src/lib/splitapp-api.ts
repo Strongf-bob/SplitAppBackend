@@ -6,6 +6,17 @@ const productionYandexRedirectUri = "https://split-app.ru/app";
 export type SplitAppTokens = {
   access_token: string;
   refresh_token?: string;
+  user?: UserProfile;
+};
+
+export type UserProfile = {
+  id: string;
+  name: string;
+  phone_number?: string;
+  email?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  avatar_url?: string | null;
 };
 
 export type EventSummary = {

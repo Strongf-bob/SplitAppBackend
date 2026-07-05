@@ -69,7 +69,7 @@ from app.services.receipts import (
 )
 from app.services.reports import build_event_csv_export, list_receipt_categories
 from app.services import splitik_attachments
-from app.services.users import get_current_user_financial_stats, list_users, search_users
+from app.services.users import get_current_user, get_current_user_financial_stats, list_users, search_users
 
 __all__ = [
     "add_participants",
@@ -101,6 +101,7 @@ __all__ = [
     "finalize_allocation_session",
     "get_event",
     "get_allocation_session",
+    "get_current_user",
     "get_current_user_financial_stats",
     "get_event_close_confirmation_summary",
     "get_event_balance_explanations",

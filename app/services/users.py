@@ -119,6 +119,11 @@ def list_users(db: Database, actor_user_id: str, *, limit: int, offset: int) -> 
     }
 
 
+@track_service_operation("users.get_current")
+def get_current_user(db: Database, actor_user_id: str) -> dict:
+    return _user_to_visible_api_dict(db, get_user_or_404(db, actor_user_id), actor_user_id)
+
+
 @track_service_operation("users.financial_stats")
 def get_current_user_financial_stats(db: Database, actor_user_id: str) -> dict:
     get_user_or_404(db, actor_user_id)

@@ -82,3 +82,10 @@ test("toast messages are transient and not shown on initial load", () => {
   assert.match(page, /setTimeout\(\(\) => setMessage\(""\), 3200\)/);
   assert.doesNotMatch(page, /useState\("Готов к работе"\)/);
 });
+
+test("profile screen shows the authenticated Yandex user instead of a hardcoded profile", () => {
+  assert.match(page, /\/api\/users\/me/);
+  assert.match(page, /currentUser/);
+  assert.doesNotMatch(page, /ContentPanel title="Анна"/);
+  assert.doesNotMatch(page, />A<\/div>/);
+});
