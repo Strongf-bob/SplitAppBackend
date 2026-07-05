@@ -38,6 +38,14 @@ export type EventSummary = {
   token?: string;
 };
 
+export type EventInvite = {
+  id: string;
+  event_id: string;
+  token: string;
+  status: string;
+  expires_at?: string;
+};
+
 export type HomeSummary = {
   confirmed?: { owed_kopecks?: number; receivable_kopecks?: number };
   pending?: { owed_kopecks?: number; receivable_kopecks?: number };

@@ -29,7 +29,7 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v9/);
+  assert.match(sw, /splitapp-next-pwa-v10/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
@@ -155,4 +155,38 @@ test("Splitik composer is fixed above the bottom nav and keyboard viewport", () 
   assert.match(page, /fixed inset-x-4 bottom-\[calc\(86px\+env\(safe-area-inset-bottom\)\)\]/);
   assert.match(page, /pb-\[112px\]/);
   assert.match(page, /max-w-\[calc\(100vw-2rem\)\]/);
+});
+
+test("event cards navigate into a detail screen instead of expanding with plus icons", () => {
+  assert.match(page, /function EventDetailScreen/);
+  assert.match(page, /data-testid="event-detail-screen"/);
+  assert.match(page, /selectedEvent \? \(/);
+  assert.doesNotMatch(page, /selectedEventId === event\.id \? "−" : "\+"/);
+});
+
+test("event detail exposes invite code, participants, receipts and add actions", () => {
+  for (const expected of ["Код события", "Добавить друзей", "Добавить чек", "Участники", "Чеки"]) {
+    assert.match(page, new RegExp(expected), `missing event detail copy: ${expected}`);
+  }
+  assert.match(page, /createEventInvite/);
+  assert.match(page, /startReceiptFromEvent/);
+  assert.match(page, /setChatDraft\(`Добавь чек в событие/);
+  assert.match(page, /navigate\("splitik"\)/);
+  assert.match(page, /\/api\/events\/\$\{event\.id\}\/invites/);
+  assert.match(page, /Чеков пока нет/);
+  assert.doesNotMatch(page, /Загружаем чеки\.\.\.<\/p>/);
+});
+
+test("home add action opens a dedicated event creation screen", () => {
+  assert.match(page, /function EventCreateScreen/);
+  assert.match(page, /data-testid="event-create-screen"/);
+  assert.match(page, /Создание события/);
+  assert.match(page, /Добавить участников/);
+  assert.match(page, /onCreateEventOpen/);
+});
+
+test("friends screen exposes add-by-code affordance", () => {
+  assert.match(page, /Добавить друга по коду/);
+  assert.match(page, /friend-code-input/);
+  assert.match(page, /Мой код/);
 });

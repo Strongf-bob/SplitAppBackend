@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   api,
   clearTokens,
+  EventInvite,
   EventPage,
   EventSummary,
   handleYandexOAuthCallback,
@@ -48,6 +49,7 @@ type PermissionStatus = "pending" | "granted" | "unsupported" | "denied" | "skip
 type PermissionState = Record<PermissionId, { status: PermissionStatus; detail: string }>;
 type ChatMessage = { id: string; from: "user" | "splitik"; text: string };
 type EventReceipts = Record<string, { loading: boolean; items: ReceiptSummary[] }>;
+type EventInviteTokens = Record<string, { loading: boolean; token?: string; url?: string }>;
 type MarkdownBlock = { type: "paragraph"; text: string } | { type: "list"; items: string[] };
 
 declare global {
@@ -123,6 +125,7 @@ export default function SplitAppPage() {
   const [events, setEvents] = useState<EventSummary[]>(fallbackEvents);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [eventReceipts, setEventReceipts] = useState<EventReceipts>({});
+  const [eventInvites, setEventInvites] = useState<EventInviteTokens>({});
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [newEventName, setNewEventName] = useState("");
   const [message, setMessage] = useState("");
@@ -350,7 +353,7 @@ export default function SplitAppPage() {
   };
 
   const openEvent = async (event: EventSummary) => {
-    setSelectedEventId((current) => (current === event.id ? null : event.id));
+    setSelectedEventId(event.id);
     if (!tokens || event.status === "invite" || eventReceipts[event.id]) return;
     setEventReceipts((current) => ({ ...current, [event.id]: { loading: true, items: [] } }));
     try {
@@ -360,6 +363,39 @@ export default function SplitAppPage() {
       setEventReceipts((current) => ({ ...current, [event.id]: { loading: false, items: [] } }));
       setMessage("Не удалось загрузить чеки события.");
     }
+  };
+
+  const closeEvent = () => {
+    setSelectedEventId(null);
+  };
+
+  const createEventInvite = async (event: EventSummary) => {
+    if (!tokens || !isUuid(event.id)) {
+      setEventInvites((current) => ({
+        ...current,
+        [event.id]: { loading: false, token: demoInviteCode(event.id), url: "https://split-app.ru/app#events" }
+      }));
+      return;
+    }
+    setEventInvites((current) => ({ ...current, [event.id]: { ...current[event.id], loading: true } }));
+    try {
+      const invite = await authedApi<EventInvite>(`/api/events/${event.id}/invites`, {
+        method: "POST",
+        body: JSON.stringify({})
+      });
+      const url = `https://split-app.ru/app?invite=${invite.token}`;
+      setEventInvites((current) => ({ ...current, [event.id]: { loading: false, token: invite.token, url } }));
+      setMessage("Код приглашения создан.");
+    } catch (error) {
+      setEventInvites((current) => ({ ...current, [event.id]: { ...current[event.id], loading: false } }));
+      setMessage(error instanceof Error ? `Не удалось создать код: ${error.message}` : "Не удалось создать код приглашения.");
+    }
+  };
+
+  const startReceiptFromEvent = (event: EventSummary) => {
+    setSelectedEventId(event.id);
+    setChatDraft(`Добавь чек в событие "${eventTitle(event)}": `);
+    navigate("splitik");
   };
 
   const createEvent = async (event?: FormEvent<HTMLFormElement>) => {
@@ -377,6 +413,7 @@ export default function SplitAppPage() {
       setEventTab("active");
       setSelectedEventId(created.id);
       setMessage("Событие создано.");
+      void openEvent(normalizeEvent(created));
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         clearExpiredSession();
@@ -399,7 +436,7 @@ export default function SplitAppPage() {
     }
     if (!tokens) return;
     try {
-      await api(`/api/invites/${event.token}/${decision}`, tokens, { method: "POST" });
+      await authedApi(`/api/invites/${event.token}/${decision}`, { method: "POST" });
       setEvents((current) => current.filter((item) => item.id !== event.id));
       setSelectedEventId(null);
       setMessage(decision === "accept" ? "Приглашение принято." : "Приглашение отклонено.");
@@ -464,17 +501,23 @@ export default function SplitAppPage() {
             onEventTab={setEventTab}
             selectedEventId={selectedEventId}
             eventReceipts={eventReceipts}
+            eventInvites={eventInvites}
             onOpenEvent={openEvent}
+            onCloseEvent={closeEvent}
             onInviteDecision={decideInvite}
+            onCreateEventInvite={createEventInvite}
+            onAddReceipt={startReceiptFromEvent}
             isCreatingEvent={isCreatingEvent}
             newEventName={newEventName}
             onCreateEventOpen={() => {
               setIsCreatingEvent(true);
+              setSelectedEventId(null);
               setEventTab("active");
               navigate("events");
             }}
             onNewEventName={setNewEventName}
             onCreateEvent={createEvent}
+            onCancelCreateEvent={() => setIsCreatingEvent(false)}
             notificationTab={notificationTab}
             onNotificationTab={setNotificationTab}
             owedToMe={owedToMe}
@@ -657,13 +700,18 @@ function WorkspaceScreen({
   onEventTab,
   selectedEventId,
   eventReceipts,
+  eventInvites,
   onOpenEvent,
+  onCloseEvent,
   onInviteDecision,
+  onCreateEventInvite,
+  onAddReceipt,
   isCreatingEvent,
   newEventName,
   onCreateEventOpen,
   onNewEventName,
   onCreateEvent,
+  onCancelCreateEvent,
   notificationTab,
   onNotificationTab,
   owedToMe,
@@ -685,13 +733,18 @@ function WorkspaceScreen({
   onEventTab: (tab: EventTab) => void;
   selectedEventId: string | null;
   eventReceipts: EventReceipts;
+  eventInvites: EventInviteTokens;
   onOpenEvent: (event: EventSummary) => void;
+  onCloseEvent: () => void;
   onInviteDecision: (event: EventSummary, decision: "accept" | "decline") => void;
+  onCreateEventInvite: (event: EventSummary) => void;
+  onAddReceipt: (event: EventSummary) => void;
   isCreatingEvent: boolean;
   newEventName: string;
   onCreateEventOpen: () => void;
   onNewEventName: (value: string) => void;
   onCreateEvent: (event?: FormEvent<HTMLFormElement>) => void;
+  onCancelCreateEvent: () => void;
   notificationTab: NotificationTab;
   onNotificationTab: (tab: NotificationTab) => void;
   owedToMe: number;
@@ -731,12 +784,17 @@ function WorkspaceScreen({
             onTab={onEventTab}
             selectedEventId={selectedEventId}
             eventReceipts={eventReceipts}
+            eventInvites={eventInvites}
             onOpenEvent={onOpenEvent}
+            onCloseEvent={onCloseEvent}
             onInviteDecision={onInviteDecision}
+            onCreateEventInvite={onCreateEventInvite}
+            onAddReceipt={onAddReceipt}
             isCreatingEvent={isCreatingEvent}
             newEventName={newEventName}
             onNewEventName={onNewEventName}
             onCreateEvent={onCreateEvent}
+            onCancelCreateEvent={onCancelCreateEvent}
           />
         ) : null}
         {view === "notifications" ? (
@@ -825,10 +883,31 @@ function QuickAction({ icon: Icon, label, onClick }: { icon: React.ElementType; 
 
 function PeopleScreen() {
   const [friendSearch, setFriendSearch] = useState("");
+  const [friendCode, setFriendCode] = useState("");
   const visibleFriends = friends.filter((friend) => friend.name.toLowerCase().includes(friendSearch.trim().toLowerCase()));
 
   return (
     <div className="grid gap-4">
+      <div className="grid gap-2 rounded-2xl bg-white p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-black">Добавить друга по коду</p>
+            <p className="text-xs font-semibold text-slate-500">Введите код друга или покажите свой.</p>
+          </div>
+          <span className="rounded-xl bg-[#eef1f7] px-3 py-2 text-xs font-black text-[#1f3d8f]">Мой код</span>
+        </div>
+        <div className="flex gap-2">
+          <input
+            aria-label="Код друга"
+            data-testid="friend-code-input"
+            value={friendCode}
+            onChange={(event) => setFriendCode(event.target.value)}
+            className="min-h-11 flex-1 rounded-xl border border-slate-200 px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
+            placeholder="Например, ILYA-4821"
+          />
+          <button type="button" className="min-h-11 rounded-xl bg-[#1f3d8f] px-4 text-sm font-black text-white">Добавить</button>
+        </div>
+      </div>
       <div className="flex items-center gap-2 rounded-2xl bg-white p-2">
         <Search className="ml-2 h-5 w-5 text-[#1f3d8f]" />
         <input
@@ -866,24 +945,34 @@ function EventsScreen({
   onTab,
   selectedEventId,
   eventReceipts,
+  eventInvites,
   onOpenEvent,
+  onCloseEvent,
   onInviteDecision,
+  onCreateEventInvite,
+  onAddReceipt,
   isCreatingEvent,
   newEventName,
   onNewEventName,
-  onCreateEvent
+  onCreateEvent,
+  onCancelCreateEvent
 }: {
   events: EventSummary[];
   activeTab: EventTab;
   onTab: (tab: EventTab) => void;
   selectedEventId: string | null;
   eventReceipts: EventReceipts;
+  eventInvites: EventInviteTokens;
   onOpenEvent: (event: EventSummary) => void;
+  onCloseEvent: () => void;
   onInviteDecision: (event: EventSummary, decision: "accept" | "decline") => void;
+  onCreateEventInvite: (event: EventSummary) => void;
+  onAddReceipt: (event: EventSummary) => void;
   isCreatingEvent: boolean;
   newEventName: string;
   onNewEventName: (value: string) => void;
   onCreateEvent: (event?: FormEvent<HTMLFormElement>) => void;
+  onCancelCreateEvent: () => void;
 }) {
   const filtered = (events ?? fallbackEvents).filter((event) => {
     if (activeTab === "active") return !event.is_closed && event.status !== "closed" && event.status !== "invite";
@@ -891,22 +980,31 @@ function EventsScreen({
     return event.status === "invite";
   });
   const visible = filtered.length ? filtered : activeTab === "closed" ? [fallbackEvents[2]] : [fallbackEvents[1]];
+  const selectedEvent = selectedEventId ? (events ?? fallbackEvents).find((event) => event.id === selectedEventId) : null;
 
-  return (
+  if (isCreatingEvent) {
+    return (
+      <EventCreateScreen
+        name={newEventName}
+        onName={onNewEventName}
+        onSubmit={onCreateEvent}
+        onCancel={onCancelCreateEvent}
+      />
+    );
+  }
+
+  return selectedEvent ? (
+    <EventDetailScreen
+      event={selectedEvent}
+      receipts={eventReceipts[selectedEvent.id]}
+      invite={eventInvites[selectedEvent.id]}
+      onBack={onCloseEvent}
+      onInviteDecision={onInviteDecision}
+      onCreateEventInvite={onCreateEventInvite}
+      onAddReceipt={onAddReceipt}
+    />
+  ) : (
     <div className="grid gap-4">
-      {isCreatingEvent ? (
-        <form onSubmit={onCreateEvent} className="grid gap-2 rounded-2xl bg-white p-3">
-          <label className="text-xs font-black text-slate-500" htmlFor="event-name">Новое событие</label>
-          <input
-            id="event-name"
-            value={newEventName}
-            onChange={(event) => onNewEventName(event.target.value)}
-            className="min-h-12 rounded-xl border border-slate-200 px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
-            placeholder="Например, ужин или поездка"
-          />
-          <button type="submit" className="min-h-12 rounded-xl bg-[#1f3d8f] px-4 text-sm font-black text-white">Создать событие</button>
-        </form>
-      ) : null}
       <SegmentedControl
         name="event-tab"
         items={[
@@ -922,36 +1020,141 @@ function EventsScreen({
           <button type="button" onClick={() => onOpenEvent(event)} className="grid min-h-[98px] w-full gap-3 p-4 text-left">
             <span className="flex items-center justify-between gap-3">
               <span className="text-lg font-black">{eventTitle(event)}</span>
-              <span className="text-xl text-slate-400">{selectedEventId === event.id ? "−" : "+"}</span>
+              <span className="rounded-full bg-[#eef1f7] px-3 py-1 text-[11px] font-black text-[#1f3d8f]">Открыть</span>
             </span>
             <span className="text-xs text-slate-500">
               {event.participants_count ?? event.participants?.length ?? 0} участника · {money(event.total_kopecks ?? 0)}
             </span>
           </button>
-          {selectedEventId === event.id ? (
-            <div className="grid gap-2 border-t border-slate-100 p-3">
-              {activeTab === "invites" ? (
-                <>
-                  <p className="text-sm font-semibold text-slate-600">Предпросмотр приглашения: участники, сумма и событие будут открыты после принятия.</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => onInviteDecision(event, "decline")} className="min-h-11 rounded-xl bg-slate-100 text-sm font-black text-slate-700">Отказаться</button>
-                    <button type="button" onClick={() => onInviteDecision(event, "accept")} className="min-h-11 rounded-xl bg-[#1f3d8f] text-sm font-black text-white">Согласиться</button>
-                  </div>
-                </>
-              ) : (
-                <EventReceiptList receipts={eventReceipts[event.id]} />
-              )}
-            </div>
-          ) : null}
         </div>
       ))}
     </div>
   );
 }
 
+function EventCreateScreen({
+  name,
+  onName,
+  onSubmit,
+  onCancel
+}: {
+  name: string;
+  onName: (value: string) => void;
+  onSubmit: (event?: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <form data-testid="event-create-screen" onSubmit={onSubmit} className="grid gap-4">
+      <div className="rounded-2xl bg-white p-4">
+        <p className="text-2xl font-black">Создание события</p>
+        <p className="mt-1 text-sm font-semibold text-slate-500">Название, участники и правила делёжки в одном месте.</p>
+      </div>
+      <div className="grid gap-2 rounded-2xl bg-white p-3">
+        <label className="text-xs font-black text-slate-500" htmlFor="event-name">Название события</label>
+        <input
+          id="event-name"
+          value={name}
+          onChange={(event) => onName(event.target.value)}
+          className="min-h-12 rounded-xl border border-slate-200 px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
+          placeholder="Например, ужин с друзьями"
+        />
+      </div>
+      <div className="grid gap-3 rounded-2xl bg-white p-3">
+        <p className="text-sm font-black">Добавить участников</p>
+        <div className="grid gap-2">
+          {friends.slice(0, 3).map((friend) => (
+            <label key={friend.name} className="flex min-h-12 items-center gap-3 rounded-xl bg-[#f5f5f7] px-3">
+              <input type="checkbox" className="h-5 w-5 accent-[#1f3d8f]" />
+              <Avatar>{friend.initials}</Avatar>
+              <span className="text-sm font-bold">{friend.name}</span>
+            </label>
+          ))}
+        </div>
+        <button type="button" className="min-h-11 rounded-xl border border-[#c6cbdc] text-sm font-black text-[#1f3d8f]">Пригласить по коду после создания</button>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={onCancel} className="min-h-12 rounded-xl bg-white text-sm font-black text-slate-700">Отмена</button>
+        <button type="submit" className="min-h-12 rounded-xl bg-[#1f3d8f] px-4 text-sm font-black text-white">Создать событие</button>
+      </div>
+    </form>
+  );
+}
+
+function EventDetailScreen({
+  event,
+  receipts,
+  invite,
+  onBack,
+  onInviteDecision,
+  onCreateEventInvite,
+  onAddReceipt
+}: {
+  event: EventSummary;
+  receipts?: { loading: boolean; items: ReceiptSummary[] };
+  invite?: { loading: boolean; token?: string; url?: string };
+  onBack: () => void;
+  onInviteDecision: (event: EventSummary, decision: "accept" | "decline") => void;
+  onCreateEventInvite: (event: EventSummary) => void;
+  onAddReceipt: (event: EventSummary) => void;
+}) {
+  const participantCount = event.participants_count ?? event.participants?.length ?? 1;
+  const inviteCode = invite?.token ?? event.token ?? demoInviteCode(event.id);
+
+  if (event.status === "invite") {
+    return (
+      <div data-testid="event-detail-screen" className="grid gap-4">
+        <button type="button" onClick={onBack} className="w-fit rounded-xl bg-white px-3 py-2 text-sm font-black text-[#1f3d8f]">Назад к событиям</button>
+        <div className="grid gap-3 rounded-2xl bg-white p-4">
+          <p className="text-2xl font-black">{eventTitle(event)}</p>
+          <p className="text-sm font-semibold text-slate-500">Предпросмотр приглашения. После принятия событие появится в активных.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => onInviteDecision(event, "decline")} className="min-h-11 rounded-xl bg-slate-100 text-sm font-black text-slate-700">Отказаться</button>
+            <button type="button" onClick={() => onInviteDecision(event, "accept")} className="min-h-11 rounded-xl bg-[#1f3d8f] text-sm font-black text-white">Согласиться</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div data-testid="event-detail-screen" className="grid gap-4">
+      <button type="button" onClick={onBack} className="w-fit rounded-xl bg-white px-3 py-2 text-sm font-black text-[#1f3d8f]">Назад к событиям</button>
+      <div className="grid gap-3 rounded-2xl bg-white p-4">
+        <div>
+          <p className="text-2xl font-black">{eventTitle(event)}</p>
+          <p className="text-sm font-semibold text-slate-500">{participantCount} участника · {money(event.total_kopecks ?? 0)}</p>
+        </div>
+        <div className="grid gap-2 rounded-2xl bg-[#eef1f7] p-3">
+          <span className="text-xs font-black uppercase text-slate-500">Код события</span>
+          <span className="text-2xl font-black tracking-[0.18em] text-[#1f3d8f]">{invite?.loading ? "..." : inviteCode}</span>
+          <button type="button" onClick={() => onCreateEventInvite(event)} className="min-h-11 rounded-xl bg-white text-sm font-black text-[#1f3d8f]">Создать / обновить код</button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => onCreateEventInvite(event)} className="min-h-12 rounded-xl bg-[#1f3d8f] text-sm font-black text-white">Добавить друзей</button>
+          <button type="button" onClick={() => onAddReceipt(event)} className="min-h-12 rounded-xl bg-[#111111] text-sm font-black text-white">Добавить чек</button>
+        </div>
+      </div>
+      <ContentPanel title="Участники">
+        {friends.slice(0, Math.max(1, Math.min(participantCount, friends.length))).map((friend) => (
+          <div key={friend.name} className="grid grid-cols-[40px_1fr] items-center gap-2 rounded-xl bg-[#f5f5f7] p-2">
+            <Avatar>{friend.initials}</Avatar>
+            <div>
+              <p className="text-sm font-black">{friend.name}</p>
+              <p className="text-xs text-slate-500">участник</p>
+            </div>
+          </div>
+        ))}
+      </ContentPanel>
+      <ContentPanel title="Чеки">
+        <EventReceiptList receipts={receipts} />
+      </ContentPanel>
+    </div>
+  );
+}
+
 function EventReceiptList({ receipts }: { receipts?: { loading: boolean; items: ReceiptSummary[] } }) {
   if (!receipts || receipts.loading) {
-    return <p className="py-3 text-sm font-semibold text-slate-500">Загружаем чеки...</p>;
+    return <p className="py-3 text-sm font-semibold text-slate-500">Обновляем чеки...</p>;
   }
   if (!receipts.items.length) {
     return <p className="py-3 text-sm font-semibold text-slate-500">Чеков пока нет. Добавьте первый чек через Сплитика или событие.</p>;
@@ -1284,6 +1487,10 @@ function parseHashView(hash: string): View | null {
 
 function isUuid(value: string | null): value is string {
   return Boolean(value?.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i));
+}
+
+function demoInviteCode(eventId: string) {
+  return `SPLIT-${eventId.replace(/[^a-z0-9]/gi, "").slice(-4).toUpperCase().padStart(4, "0")}`;
 }
 
 function normalizeEvent(event: EventSummary): EventSummary {
