@@ -48,6 +48,7 @@ type PermissionStatus = "pending" | "granted" | "unsupported" | "denied" | "skip
 type PermissionState = Record<PermissionId, { status: PermissionStatus; detail: string }>;
 type ChatMessage = { id: string; from: "user" | "splitik"; text: string };
 type EventReceipts = Record<string, { loading: boolean; items: ReceiptSummary[] }>;
+type MarkdownBlock = { type: "paragraph"; text: string } | { type: "list"; items: string[] };
 
 declare global {
   interface Navigator {
@@ -1086,11 +1087,11 @@ function SplitikScreen({
           <div
             key={item.id}
             className={cn(
-              "max-w-[86%] rounded-2xl px-3 py-2 text-sm font-semibold leading-5",
-              item.from === "user" ? "ml-auto bg-[#1f3d8f] text-white" : "mr-auto bg-[#eef1f7] text-slate-900"
+              "max-w-[86%] rounded-2xl px-3 py-2 text-[15px] leading-6",
+              item.from === "user" ? "ml-auto bg-[#1f3d8f] font-bold text-white" : "mr-auto bg-[#eef1f7] font-medium text-slate-900"
             )}
           >
-            {item.text}
+            {item.from === "splitik" ? <MarkdownMessage text={item.text} /> : item.text}
           </div>
         ))}
       </div>
@@ -1114,6 +1115,72 @@ function SplitikScreen({
       </form>
     </div>
   );
+}
+
+function MarkdownMessage({ text }: { text: string }) {
+  return (
+    <div className="space-y-2">
+      {parseMarkdownMessage(text).map((block, index) => {
+        if (block.type === "list") {
+          return (
+            <ul key={index} className="ml-4 list-disc space-y-1">
+              {block.items.map((item, itemIndex) => (
+                <li key={itemIndex}>{renderInlineMarkdown(item)}</li>
+              ))}
+            </ul>
+          );
+        }
+        return <p key={index}>{renderInlineMarkdown(block.text)}</p>;
+      })}
+    </div>
+  );
+}
+
+function parseMarkdownMessage(text: string): MarkdownBlock[] {
+  const blocks: MarkdownBlock[] = [];
+  let paragraph: string[] = [];
+  let listItems: string[] = [];
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    blocks.push({ type: "paragraph", text: paragraph.join(" ") });
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!listItems.length) return;
+    blocks.push({ type: "list", items: listItems });
+    listItems = [];
+  };
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+    if (line.startsWith("- ")) {
+      flushParagraph();
+      listItems.push(line.slice(2).trim());
+      continue;
+    }
+    flushList();
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  flushList();
+  return blocks.length ? blocks : [{ type: "paragraph", text }];
+}
+
+function renderInlineMarkdown(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
 }
 
 function SegmentedControl({

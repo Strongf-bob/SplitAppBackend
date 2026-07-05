@@ -21,6 +21,7 @@ from app.services.splitik_guardrails import (
     evaluate_assistant_message,
     evaluate_user_message,
     sanitize_message,
+    strip_disallowed_emoji,
 )
 from app.services.splitik_interactions import log_interaction
 from app.services import splitik_attachments, splitik_tools
@@ -44,6 +45,18 @@ _SYSTEM_PROMPT = """
 Не проси секреты, платежные данные, пароли, токены или приватные данные вне
 контекста SplitApp. Не раскрывай личные траты другого пользователя вне общего
 события и разрешенного backend-контекста.
+
+Стиль ответа:
+- Пиши спокойно и по делу, без маркетингового тона и самопрезентации.
+- Строго без emoji, смайликов, эмотиконов и декоративных символов.
+- Используй Markdown, который удобно читать в мобильном чате.
+- Делай короткие абзацы по 1-2 предложения.
+- Для вариантов действий используй маркированные списки через "- ".
+- Выделяй важные статусы и суммы через **жирный текст**, но не делай весь ответ жирным.
+- Если данных нет, скажи это прямо и предложи 1-2 следующих действия.
+- Не начинай каждый ответ с приветствия, если пользователь уже находится в диалоге.
+- Не используй английские технические слова вроде commit, если можно сказать "подтверждение".
+- В конце не добавляй лишние вопросы, если уже дал понятный следующий шаг.
 """.strip()
 
 
@@ -762,6 +775,7 @@ def send_splitik_message(
             user_message=payload.message,
             context=context,
         )
+        reply = strip_disallowed_emoji(reply)
         stage = "guardrail.assistant"
         post_guardrail_decision = evaluate_assistant_message(
             reply,
