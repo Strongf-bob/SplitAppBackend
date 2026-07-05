@@ -38,6 +38,19 @@ test("local preview does not send Yandex OAuth to an unregistered loopback callb
 });
 
 test("auth screen leads with app preview before external OAuth", () => {
-  assert.match(page, /Покрутить приложение/);
-  assert.match(page, /Яндекс доступен только на зарегистрированном домене/);
+  assert.match(page, /Войти через Яндекс/);
+  assert.doesNotMatch(page, /Покрутить приложение/);
+  assert.doesNotMatch(page, /Яндекс доступен только на зарегистрированном домене/);
+});
+
+test("real mobile app shell does not draw a fake phone around the app", () => {
+  for (const fakeDeviceMarker of ["9:41", "Wi-Fi", "rounded-[38px]", "max-w-[430px]", "iPhone: Share"]) {
+    assert.doesNotMatch(page, new RegExp(fakeDeviceMarker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+});
+
+test("Yandex callback posts the backend login schema", () => {
+  assert.match(api, /body: JSON\.stringify\(\{ yandex_token: accessToken \}\)/);
+  assert.doesNotMatch(api, /provider: "yandex"/);
+  assert.doesNotMatch(api, /\{\s*token: accessToken\s*\}/);
 });

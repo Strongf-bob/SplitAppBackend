@@ -206,7 +206,8 @@ def test_public_root_is_install_landing_page():
     assert package_json["dependencies"]["lucide-react"]
     assert "tailwindcss" in package_json["devDependencies"]
     assert components_json["style"] == "new-york"
-    assert "Установить SplitApp" in app_page
+    assert "Split." in app_page
+    assert "Делите счета поровну" in app_page
     assert "Войти через Яндекс" in app_page
     assert "motion" in app_page
 

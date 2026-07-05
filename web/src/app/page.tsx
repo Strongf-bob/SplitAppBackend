@@ -16,14 +16,11 @@ import {
   Plus,
   Search,
   Send,
-  Share2,
-  Smartphone,
   User,
   Users
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   api,
   clearTokens,
@@ -113,11 +110,7 @@ export default function SplitAppPage() {
   const [eventTab, setEventTab] = useState<EventTab>("active");
   const [notificationTab, setNotificationTab] = useState<NotificationTab>("incoming");
   const [summary, setSummary] = useState<HomeSummary | null>(null);
-  const [isOnline, setIsOnline] = useState(true);
   const [message, setMessage] = useState("Готов к работе");
-  const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
-  const [isIos, setIsIos] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
   const [permissionState, setPermissionState] = useState<PermissionState>(initialPermissionState);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { id: "hello", from: "splitik", text: "Привет! Я Сплитик, чем могу помочь?" },
@@ -128,31 +121,16 @@ export default function SplitAppPage() {
 
   useEffect(() => {
     setTokens(loadTokens());
-    setIsOnline(navigator.onLine);
-    setIsIos(isIosDevice());
-    setIsStandalone(isStandalonePwa());
 
     const hashView = parseHashView(window.location.hash);
     if (hashView) setView(hashView);
 
-    const onOnline = () => setIsOnline(true);
-    const onOffline = () => setIsOnline(false);
     const onHashChange = () => {
       const nextView = parseHashView(window.location.hash);
       if (nextView) setView(nextView);
     };
-    const onBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event);
-    };
 
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
     window.addEventListener("hashchange", onHashChange);
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-    window.matchMedia?.("(display-mode: standalone)").addEventListener?.("change", () => {
-      setIsStandalone(isStandalonePwa());
-    });
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
@@ -168,10 +146,7 @@ export default function SplitAppPage() {
       .catch((error) => setMessage(error instanceof Error ? error.message : "Не удалось войти."));
 
     return () => {
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
       window.removeEventListener("hashchange", onHashChange);
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
     };
   }, []);
 
@@ -197,24 +172,6 @@ export default function SplitAppPage() {
 
   const goBack = () => navigate(previousView === view ? "home" : previousView);
   const goHome = () => navigate("home");
-
-  const runInstall = async () => {
-    if (!installPrompt) {
-      setMessage("На iPhone нажмите Share -> Add to Home Screen, затем откройте SplitApp с ярлыка.");
-      return;
-    }
-    const prompt = installPrompt as Event & { prompt?: () => Promise<void>; userChoice?: Promise<unknown> };
-    await prompt.prompt?.();
-    await prompt.userChoice;
-    setInstallPrompt(null);
-  };
-
-  const enableDemo = () => {
-    const demoTokens = { access_token: "demo-pwa-token" };
-    setTokens(demoTokens);
-    setSummary({ events: fallbackEvents });
-    setMessage("Открыт кликабельный демо-режим PWA.");
-  };
 
   const logout = () => {
     clearTokens();
@@ -267,7 +224,7 @@ export default function SplitAppPage() {
       return;
     }
     if (isIosDevice() && !isStandalonePwa()) {
-      updatePermission("notifications", "skipped", "На iPhone сначала добавьте SplitApp: Share -> Add to Home Screen, потом откройте ярлык.");
+      updatePermission("notifications", "skipped", "Откройте SplitApp с ярлыка на домашнем экране, чтобы включить уведомления.");
       return;
     }
 
@@ -301,7 +258,7 @@ export default function SplitAppPage() {
 
   const requestContactsPermission = async () => {
     if (!navigator.contacts?.select) {
-      updatePermission("contacts", "unsupported", "iPhone Safari обычно не дает Web Contacts API. Используем ручное добавление/инвайт.");
+      updatePermission("contacts", "unsupported", "Браузер не дает Web Contacts API. Используем ручное добавление или инвайт.");
       return;
     }
 
@@ -335,65 +292,46 @@ export default function SplitAppPage() {
   };
 
   return (
-    <main className="min-h-dvh bg-[#1e1e1e] text-slate-950">
-      <section className="mx-auto grid min-h-dvh w-full max-w-7xl place-items-center px-3 py-4 sm:px-6">
-        <div className="grid w-full gap-4 lg:grid-cols-[420px_minmax(0,1fr)] lg:items-center">
-          <aside className="hidden text-white lg:block">
-            <p className="text-sm uppercase tracking-[0.36em] text-white/50">SplitApp PWA</p>
-            <h1 className="mt-4 text-5xl font-bold leading-tight">Дизайн из SVG, собранный в рабочее приложение</h1>
-            <p className="mt-4 max-w-sm text-base leading-7 text-white/64">
-              Синий мобильный shell, карточки событий, друзья, входящие, профиль и доработанный Сплитик.
-            </p>
-          </aside>
-
-          <div className="mx-auto w-full max-w-[430px]">
-            <PhoneShell
-              view={tokens ? view : "home"}
-              title={tokens ? viewTitle(view) : "Split."}
-              isOnline={isOnline}
-              onBack={goBack}
-              onHome={goHome}
-              showBack={Boolean(tokens && view !== "home")}
-              onNotifications={() => navigate("notifications")}
-              onLogout={logout}
-              loggedIn={Boolean(tokens)}
-            >
-              {!tokens ? (
-                <AuthScreen
-                  isIos={isIos}
-                  isStandalone={isStandalone}
-                  onLogin={startYandexLogin}
-                  onDemo={enableDemo}
-                  onInstall={runInstall}
-                  onPermission={requestPermission}
-                  permissionState={permissionState}
-                  galleryInputRef={galleryInputRef}
-                  onGalleryPicked={(picked) =>
-                    updatePermission("gallery", picked ? "granted" : "skipped", picked ? "Фото выбрано из галереи." : "Выбор фото отменен.")
-                  }
-                />
-              ) : (
-                <WorkspaceScreen
-                  view={view}
-                  events={events}
-                  eventTab={eventTab}
-                  onEventTab={setEventTab}
-                  notificationTab={notificationTab}
-                  onNotificationTab={setNotificationTab}
-                  owedToMe={owedToMe}
-                  iOwe={iOwe}
-                  chatMessages={chatMessages}
-                  chatDraft={chatDraft}
-                  onChatDraft={setChatDraft}
-                  onSendChat={sendSplitikMessage}
-                  onNavigate={navigate}
-                  onMessage={setMessage}
-                />
-              )}
-            </PhoneShell>
-          </div>
-        </div>
-      </section>
+    <main className="min-h-dvh bg-[#1f3d8f] text-slate-950">
+      {!tokens ? (
+        <AuthScreen
+          onLogin={startYandexLogin}
+          galleryInputRef={galleryInputRef}
+          onGalleryPicked={(picked) =>
+            updatePermission("gallery", picked ? "granted" : "skipped", picked ? "Фото выбрано из галереи." : "Выбор фото отменен.")
+          }
+        />
+      ) : (
+        <PhoneShell
+          view={view}
+          title={viewTitle(view)}
+          onBack={goBack}
+          onHome={goHome}
+          showBack={view !== "home"}
+          onNotifications={() => navigate("notifications")}
+          onLogout={logout}
+          loggedIn={Boolean(tokens)}
+        >
+          <WorkspaceScreen
+            view={view}
+            events={events}
+            eventTab={eventTab}
+            onEventTab={setEventTab}
+            notificationTab={notificationTab}
+            onNotificationTab={setNotificationTab}
+            owedToMe={owedToMe}
+            iOwe={iOwe}
+            permissionState={permissionState}
+            onPermission={requestPermission}
+            chatMessages={chatMessages}
+            chatDraft={chatDraft}
+            onChatDraft={setChatDraft}
+            onSendChat={sendSplitikMessage}
+            onNavigate={navigate}
+            onMessage={setMessage}
+          />
+        </PhoneShell>
+      )}
 
       <div className="fixed bottom-4 left-1/2 z-50 w-[min(92vw,420px)] -translate-x-1/2" aria-live="polite">
         <AnimatePresence>
@@ -416,7 +354,6 @@ export default function SplitAppPage() {
 function PhoneShell({
   view,
   title,
-  isOnline,
   loggedIn,
   showBack,
   children,
@@ -427,7 +364,6 @@ function PhoneShell({
 }: {
   view: View;
   title: string;
-  isOnline: boolean;
   loggedIn: boolean;
   showBack: boolean;
   children: React.ReactNode;
@@ -437,69 +373,62 @@ function PhoneShell({
   onLogout: () => void;
 }) {
   return (
-    <div className="rounded-[38px] bg-[#101010] p-2 shadow-[0_26px_80px_rgba(0,0,0,0.7)]">
-      <div className="relative min-h-[812px] overflow-hidden rounded-[30px] bg-[#1f3d8f]">
-        <div className="absolute left-1/2 top-2 z-30 h-7 w-24 -translate-x-1/2 rounded-full bg-black" />
-        <header className="relative z-20 flex h-[92px] items-end justify-between px-4 pb-4 text-white">
-          <div className="absolute left-4 top-4 text-[11px] font-bold">9:41</div>
-          <div className="absolute right-4 top-4 text-[11px] font-bold text-white/80">◢ Wi-Fi</div>
-          <div className="flex items-center gap-2">
+    <div className="min-h-dvh bg-[#1f3d8f]">
+      {loggedIn ? (
+        <header className="sticky top-0 z-30 flex items-end justify-between gap-2 bg-[#1f3d8f] px-4 pb-4 pt-[max(env(safe-area-inset-top),16px)] text-white">
+          <div className="flex min-w-0 items-center gap-2">
             {showBack ? (
               <button
                 type="button"
                 aria-label="Назад"
                 onClick={onBack}
-                className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/14 text-white"
               >
                 <ArrowLeft className="h-5 w-5" />
               </button>
             ) : null}
-            <h2 className="text-3xl font-black tracking-normal">{title}</h2>
+            <h2 className="truncate text-3xl font-black tracking-normal">{title}</h2>
           </div>
-          {loggedIn ? (
-            <div className="flex gap-2">
-              <button
-                type="button"
-                aria-label="На главную"
-                onClick={onHome}
-                className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white"
-              >
-                <Home className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                aria-label="Входящие"
-                onClick={onNotifications}
-                className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white"
-              >
-                <Inbox className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                aria-label="Выйти"
-                onClick={onLogout}
-                className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white"
-              >
-                <LogOut className="h-5 w-5" />
-              </button>
-            </div>
-          ) : (
-            <Badge className="bg-white/16 text-white">{isOnline ? "online" : "offline"}</Badge>
-          )}
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              aria-label="На главную"
+              onClick={onHome}
+              className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white"
+            >
+              <Home className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              aria-label="Входящие"
+              onClick={onNotifications}
+              className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white"
+            >
+              <Inbox className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              aria-label="Выйти"
+              onClick={onLogout}
+              className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
+          </div>
         </header>
+      ) : null}
 
-        <section className={cn("relative z-10 min-h-[720px]", loggedIn && "pb-[92px]")}>{children}</section>
+      <section className={cn("relative z-10", loggedIn && "pb-[calc(92px+env(safe-area-inset-bottom))]")}>{children}</section>
 
-        {loggedIn ? (
-          <nav className="absolute inset-x-3 bottom-5 z-30 rounded-[24px] bg-[#6f7888]/96 p-1.5 shadow-[0_14px_40px_rgba(15,23,42,0.25)]">
-            <div className="grid grid-cols-5 gap-1">
-              {navItems.map((item) => (
-                <BottomNavButton key={item.id} item={item} active={view === item.id} />
-              ))}
-            </div>
-          </nav>
-        ) : null}
-      </div>
+      {loggedIn ? (
+        <nav className="fixed inset-x-3 bottom-0 z-30 rounded-t-[24px] bg-[#6f7888]/96 p-1.5 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_14px_40px_rgba(15,23,42,0.25)] backdrop-blur">
+          <div className="grid grid-cols-5 gap-1">
+            {navItems.map((item) => (
+              <BottomNavButton key={item.id} item={item} active={view === item.id} />
+            ))}
+          </div>
+        </nav>
+      ) : null}
     </div>
   );
 }
@@ -521,99 +450,32 @@ function BottomNavButton({ item, active }: { item: { id: View; label: string; ic
 }
 
 function AuthScreen({
-  isIos,
-  isStandalone,
   onLogin,
-  onDemo,
-  onInstall,
-  onPermission,
-  permissionState,
   galleryInputRef,
   onGalleryPicked
 }: {
-  isIos: boolean;
-  isStandalone: boolean;
   onLogin: () => void;
-  onDemo: () => void;
-  onInstall: () => void;
-  onPermission: (id: PermissionId) => void;
-  permissionState: PermissionState;
   galleryInputRef: React.RefObject<HTMLInputElement | null>;
   onGalleryPicked: (picked: boolean) => void;
 }) {
   return (
-    <div className="grid min-h-[720px] content-between px-5 pb-7 pt-16 text-white">
-      <div className="grid gap-4">
+    <section className="grid min-h-dvh content-between bg-[#1f3d8f] px-6 pb-[max(env(safe-area-inset-bottom),28px)] pt-[max(env(safe-area-inset-top),72px)] text-white">
+      <div className="grid content-center gap-4 pt-[18dvh]">
         <div>
-          <h1 className="text-6xl font-black leading-none tracking-normal">Split.</h1>
-          <p className="mt-3 text-sm font-bold text-[#d2daec]">Делите счета поровну</p>
+          <h1 className="text-7xl font-black leading-none tracking-normal">Split.</h1>
+          <p className="mt-3 text-base font-bold text-[#d2daec]">Делите счета поровну</p>
         </div>
-        <div className="rounded-[22px] bg-white p-4 text-[#111111] shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
-          <div className="rounded-2xl bg-[#111111] p-4 text-white">
-            <p className="text-xs font-bold text-white/58">Сегодня</p>
-            <p className="mt-1 text-2xl font-black">4 250 ₽</p>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-bold">
-              <span className="rounded-xl bg-emerald-400/18 px-3 py-2 text-emerald-200">вам должны</span>
-              <span className="rounded-xl bg-rose-400/18 px-3 py-2 text-rose-200">вы должны</span>
-            </div>
-          </div>
-          <div className="mt-3 grid gap-2">
-            <div className="flex items-center justify-between rounded-xl bg-[#f5f5f7] px-3 py-2 text-xs font-black">
-              <span>Поездка в Карпаты</span>
-              <span>38 400 ₽</span>
-            </div>
-            <div className="flex items-center justify-between rounded-xl bg-[#f5f5f7] px-3 py-2 text-xs font-black">
-              <span>Сплитик готовит чек</span>
-              <span className="text-[#1f3d8f]">черновик</span>
-            </div>
-          </div>
-        </div>
-        {isIos && !isStandalone ? (
-          <div className="rounded-2xl bg-white/12 p-3 text-xs leading-5 text-white">
-            <Share2 className="mb-2 h-4 w-4" />
-            iPhone: Share {"->"} Add to Home Screen. После запуска с ярлыка будут доступны PWA-разрешения.
-          </div>
-        ) : null}
       </div>
 
       <div className="grid gap-3">
-        <button type="button" onClick={onDemo} className="min-h-14 rounded-2xl bg-white px-4 text-sm font-black text-[#111111]">
-          Покрутить приложение
-        </button>
         <button
           type="button"
           onClick={onLogin}
-          className="min-h-12 rounded-2xl border border-white/20 bg-white/10 px-4 text-sm font-black text-white"
+          className="min-h-14 rounded-2xl bg-white px-4 text-sm font-black text-[#111111] shadow-[0_18px_40px_rgba(0,0,0,0.18)]"
         >
           Войти через Яндекс
         </button>
-        <p className="text-center text-[11px] font-semibold leading-4 text-white/62">
-          Яндекс доступен только на зарегистрированном домене. В локальном preview сначала смотрим приложение.
-        </p>
-        <div className="grid grid-cols-4 gap-2">
-          {permissions.map((item) => {
-            const Icon = item.icon;
-            const status = permissionState[item.id].status;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onPermission(item.id)}
-                aria-label={item.label}
-                className="grid min-h-[54px] place-items-center rounded-2xl bg-white/12 text-white"
-                title={status === "pending" ? item.detail : permissionState[item.id].detail}
-              >
-                <Icon className="h-5 w-5" />
-              </button>
-            );
-          })}
-        </div>
-        <div>
-          <Button className="w-full" variant="secondary" onClick={onInstall}>
-            <Smartphone className="h-4 w-4" />
-            Установить SplitApp
-          </Button>
-        </div>
+        <p className="text-center text-[11px] font-semibold leading-4 text-white/62">Войдите, чтобы открыть события, друзей, чеки и Сплитика.</p>
       </div>
 
       <input
@@ -626,7 +488,7 @@ function AuthScreen({
           event.currentTarget.value = "";
         }}
       />
-    </div>
+    </section>
   );
 }
 
@@ -639,6 +501,8 @@ function WorkspaceScreen({
   onNotificationTab,
   owedToMe,
   iOwe,
+  permissionState,
+  onPermission,
   chatMessages,
   chatDraft,
   onChatDraft,
@@ -654,6 +518,8 @@ function WorkspaceScreen({
   onNotificationTab: (tab: NotificationTab) => void;
   owedToMe: number;
   iOwe: number;
+  permissionState: PermissionState;
+  onPermission: (id: PermissionId) => void;
   chatMessages: ChatMessage[];
   chatDraft: string;
   onChatDraft: (value: string) => void;
@@ -665,7 +531,7 @@ function WorkspaceScreen({
     <AnimatePresence mode="wait">
       <motion.div
         key={view}
-        className="min-h-[720px] rounded-t-[24px] bg-[#f5f5f7] px-3 pb-5 pt-3"
+        className="min-h-[calc(100dvh-74px)] rounded-t-[24px] bg-[#f5f5f7] px-3 pb-5 pt-3"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10 }}
@@ -675,7 +541,9 @@ function WorkspaceScreen({
           <HomeScreen events={events} owedToMe={owedToMe} iOwe={iOwe} onNavigate={onNavigate} onMessage={onMessage} />
         ) : null}
         {view === "people" ? <PeopleScreen /> : null}
-        {view === "profile" ? <ProfileScreen owedToMe={owedToMe} iOwe={iOwe} /> : null}
+        {view === "profile" ? (
+          <ProfileScreen owedToMe={owedToMe} iOwe={iOwe} permissionState={permissionState} onPermission={onPermission} />
+        ) : null}
         {view === "events" ? <EventsScreen events={events} activeTab={eventTab} onTab={onEventTab} /> : null}
         {view === "notifications" ? (
           <NotificationsScreen activeTab={notificationTab} onTab={onNotificationTab} />
@@ -860,7 +728,17 @@ function NotificationsScreen({
   );
 }
 
-function ProfileScreen({ owedToMe, iOwe }: { owedToMe: number; iOwe: number }) {
+function ProfileScreen({
+  owedToMe,
+  iOwe,
+  permissionState,
+  onPermission
+}: {
+  owedToMe: number;
+  iOwe: number;
+  permissionState: PermissionState;
+  onPermission: (id: PermissionId) => void;
+}) {
   return (
     <div className="grid gap-4">
       <div className="-mx-3 -mt-3 grid justify-items-center rounded-b-[24px] bg-[#1f3d8f] px-5 pb-8 pt-4 text-white">
@@ -870,6 +748,31 @@ function ProfileScreen({ owedToMe, iOwe }: { owedToMe: number; iOwe: number }) {
         <ProfileRow label="Мне должны" value={money(owedToMe)} tone="text-emerald-600" />
         <ProfileRow label="Я должен" value={money(iOwe)} tone="text-red-600" />
         <ProfileRow label="Активных событий" value="3" tone="text-[#1f3d8f]" />
+      </ContentPanel>
+      <ContentPanel title="Разрешения">
+        {permissions.map((item) => {
+          const Icon = item.icon;
+          const state = permissionState[item.id];
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onPermission(item.id)}
+              className="grid grid-cols-[40px_1fr_auto] items-center gap-2 rounded-xl bg-white p-3 text-left"
+            >
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-[#d2daec] text-[#1f3d8f]">
+                <Icon className="h-5 w-5" />
+              </span>
+              <span>
+                <span className="block text-sm font-black">{item.label}</span>
+                <span className="block text-xs text-slate-500">{state.status === "pending" ? item.detail : state.detail}</span>
+              </span>
+              <Badge variant="outline" className="text-[10px]">
+                {permissionLabel(state.status)}
+              </Badge>
+            </button>
+          );
+        })}
       </ContentPanel>
     </div>
   );
@@ -1001,6 +904,17 @@ function splitikAnswer(text: string) {
     return "По долгам сейчас вижу баланс: зеленое вам должны, красное должны вы. Нажмите Входящие для подтверждений.";
   }
   return "Понял. Могу открыть событие, разобрать чек или подготовить сообщение участникам.";
+}
+
+function permissionLabel(status: PermissionStatus) {
+  const labels: Record<PermissionStatus, string> = {
+    pending: "запросить",
+    granted: "разрешено",
+    unsupported: "недоступно",
+    denied: "запрещено",
+    skipped: "позже"
+  };
+  return labels[status];
 }
 
 function isIosDevice() {
