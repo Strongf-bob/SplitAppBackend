@@ -542,11 +542,31 @@ function AuthScreen({
   onGalleryPicked: (picked: boolean) => void;
 }) {
   return (
-    <div className="grid min-h-[720px] content-between px-5 pb-7 pt-20 text-white">
+    <div className="grid min-h-[720px] content-between px-5 pb-7 pt-16 text-white">
       <div className="grid gap-4">
         <div>
           <h1 className="text-6xl font-black leading-none tracking-normal">Split.</h1>
           <p className="mt-3 text-sm font-bold text-[#d2daec]">Делите счета поровну</p>
+        </div>
+        <div className="rounded-[22px] bg-white p-4 text-[#111111] shadow-[0_18px_40px_rgba(0,0,0,0.18)]">
+          <div className="rounded-2xl bg-[#111111] p-4 text-white">
+            <p className="text-xs font-bold text-white/58">Сегодня</p>
+            <p className="mt-1 text-2xl font-black">4 250 ₽</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-bold">
+              <span className="rounded-xl bg-emerald-400/18 px-3 py-2 text-emerald-200">вам должны</span>
+              <span className="rounded-xl bg-rose-400/18 px-3 py-2 text-rose-200">вы должны</span>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2">
+            <div className="flex items-center justify-between rounded-xl bg-[#f5f5f7] px-3 py-2 text-xs font-black">
+              <span>Поездка в Карпаты</span>
+              <span>38 400 ₽</span>
+            </div>
+            <div className="flex items-center justify-between rounded-xl bg-[#f5f5f7] px-3 py-2 text-xs font-black">
+              <span>Сплитик готовит чек</span>
+              <span className="text-[#1f3d8f]">черновик</span>
+            </div>
+          </div>
         </div>
         {isIos && !isStandalone ? (
           <div className="rounded-2xl bg-white/12 p-3 text-xs leading-5 text-white">
@@ -557,7 +577,20 @@ function AuthScreen({
       </div>
 
       <div className="grid gap-3">
-        <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={onDemo} className="min-h-14 rounded-2xl bg-white px-4 text-sm font-black text-[#111111]">
+          Покрутить приложение
+        </button>
+        <button
+          type="button"
+          onClick={onLogin}
+          className="min-h-12 rounded-2xl border border-white/20 bg-white/10 px-4 text-sm font-black text-white"
+        >
+          Войти через Яндекс
+        </button>
+        <p className="text-center text-[11px] font-semibold leading-4 text-white/62">
+          Яндекс доступен только на зарегистрированном домене. В локальном preview сначала смотрим приложение.
+        </p>
+        <div className="grid grid-cols-4 gap-2">
           {permissions.map((item) => {
             const Icon = item.icon;
             const status = permissionState[item.id].status;
@@ -566,21 +599,17 @@ function AuthScreen({
                 key={item.id}
                 type="button"
                 onClick={() => onPermission(item.id)}
-                className="grid min-h-[76px] gap-1 rounded-2xl bg-white/12 p-3 text-left text-xs font-bold"
+                aria-label={item.label}
+                className="grid min-h-[54px] place-items-center rounded-2xl bg-white/12 text-white"
+                title={status === "pending" ? item.detail : permissionState[item.id].detail}
               >
-                <Icon className="h-4 w-4" />
-                <span>{item.label}</span>
-                <span className="text-[10px] text-white/62">{status === "pending" ? item.detail : permissionState[item.id].detail}</span>
+                <Icon className="h-5 w-5" />
               </button>
             );
           })}
         </div>
-        <button type="button" onClick={onLogin} className="min-h-14 rounded-2xl bg-white px-4 text-sm font-black text-[#111111]">
-          Войти через Яндекс
-        </button>
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="secondary" onClick={onDemo}>Открыть демо</Button>
-          <Button variant="secondary" onClick={onInstall}>
+        <div>
+          <Button className="w-full" variant="secondary" onClick={onInstall}>
             <Smartphone className="h-4 w-4" />
             Установить SplitApp
           </Button>
