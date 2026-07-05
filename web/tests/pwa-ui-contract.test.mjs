@@ -29,7 +29,7 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v13/);
+  assert.match(sw, /splitapp-next-pwa-v14/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
@@ -155,6 +155,14 @@ test("Splitik composer is fixed above the bottom nav and keyboard viewport", () 
   assert.match(page, /fixed inset-x-4 bottom-\[calc\(86px\+env\(safe-area-inset-bottom\)\)\]/);
   assert.match(page, /pb-\[112px\]/);
   assert.match(page, /max-w-\[calc\(100vw-2rem\)\]/);
+});
+
+test("Splitik chat uses a messenger-style bottom anchored message list", () => {
+  assert.match(page, /data-testid="splitik-chat-shell"/);
+  assert.match(page, /data-testid="splitik-message-list"/);
+  assert.match(page, /flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto/);
+  assert.doesNotMatch(page, /grid min-h-\[690px\] gap-3 pb-\[112px\]/);
+  assert.doesNotMatch(page, /grid content-end gap-3 overflow-hidden rounded-2xl bg-white p-3/);
 });
 
 test("event cards navigate into a detail screen instead of expanding with plus icons", () => {
