@@ -32,6 +32,7 @@ import {
   money,
   ReceiptPage,
   ReceiptSummary,
+  ApiError,
   SplitikMessageResponse,
   SplitAppTokens,
   startYandexLogin,
@@ -398,10 +399,10 @@ export default function SplitAppPage() {
         ...items,
         { id: response.message_id || `s-${Date.now()}`, from: "splitik", text: response.assistant_message }
       ]);
-    } catch {
+    } catch (error) {
       setChatMessages((items) => [
         ...items,
-        { id: `s-${Date.now()}`, from: "splitik", text: "Не смог достучаться до Сплитика. Попробуйте еще раз." }
+        { id: `s-${Date.now()}`, from: "splitik", text: splitikErrorMessage(error) }
       ]);
     } finally {
       setIsSplitikSending(false);
@@ -561,7 +562,7 @@ function PhoneShell({
       <section className={cn("relative z-10", loggedIn && "pb-[calc(120px+env(safe-area-inset-bottom))]")}>{children}</section>
 
       {loggedIn ? (
-        <nav className="fixed inset-x-3 bottom-0 z-30 rounded-t-[24px] bg-[#6f7888]/96 p-1.5 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_14px_40px_rgba(15,23,42,0.25)] backdrop-blur">
+        <nav className="fixed inset-x-3 bottom-0 z-30 rounded-t-[26px] border border-white/38 bg-white/44 p-1.5 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_18px_46px_rgba(31,61,143,0.22)] backdrop-blur-[22px]">
           <div className="grid grid-cols-5 gap-1">
             {navItems.map((item) => (
               <BottomNavButton key={item.id} item={item} active={view === item.id} />
@@ -579,8 +580,10 @@ function BottomNavButton({ item, active }: { item: { id: View; label: string; ic
     <a
       href={`#${item.id}`}
       className={cn(
-        "grid min-h-[54px] place-items-center rounded-[18px] px-1 text-[10px] font-bold text-white/86 transition-colors",
-        active && "bg-white/22 text-white"
+        "grid min-h-[54px] place-items-center rounded-[18px] px-1 text-[10px] font-bold text-[#1f3d8f]/62 transition-all duration-200 active:scale-[0.97]",
+        active
+          ? "bg-white/72 text-[#1f3d8f] shadow-[0_8px_22px_rgba(31,61,143,0.18)] ring-1 ring-white/90"
+          : "hover:bg-white/30 hover:text-[#1f3d8f]"
       )}
     >
       <Icon className={cn("h-5 w-5", item.id === "splitik" && "h-8 w-8")} />
@@ -1155,6 +1158,20 @@ function viewTitle(view: View) {
     splitik: "Сплитик"
   };
   return titles[view];
+}
+
+function splitikErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "Сессия истекла. Войдите через Яндекс еще раз.";
+    if (error.status === 503 && error.message.includes("Splitik LLM")) {
+      return "Сплитик не настроен на сервере: не хватает LLM-конфига или ключ отклонен.";
+    }
+    if (error.status === 502 && error.message.includes("Splitik LLM")) {
+      return "LLM-провайдер Сплитика сейчас вернул ошибку. Попробуйте еще раз чуть позже.";
+    }
+    return `Сплитик вернул ошибку: ${error.message}`;
+  }
+  return "Не смог достучаться до Сплитика. Проверьте сеть и попробуйте еще раз.";
 }
 
 function parseHashView(hash: string): View | null {

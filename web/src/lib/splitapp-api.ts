@@ -64,6 +64,16 @@ export type SplitikMessageResponse = {
   suggested_actions?: Array<{ type: string; label: string }>;
 };
 
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export function loadTokens(): SplitAppTokens | null {
   if (typeof window === "undefined") return null;
   try {
@@ -121,12 +131,22 @@ export async function handleYandexOAuthCallback(): Promise<SplitAppTokens | null
 }
 
 export async function api<T>(path: string, tokens: SplitAppTokens | null, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers();
+  const headers = new Headers(init.headers);
   if (tokens?.access_token) headers.set("Authorization", `Bearer ${tokens.access_token}`);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const response = await fetch(path, { ...init, headers });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (!response.ok) throw new ApiError(response.status, await responseErrorMessage(response));
   return (await response.json()) as T;
+}
+
+async function responseErrorMessage(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { detail?: unknown };
+    if (typeof body.detail === "string" && body.detail.trim()) return body.detail;
+  } catch {
+    // Fall through to the HTTP status when the backend did not return JSON.
+  }
+  return `HTTP ${response.status}`;
 }
 
 export function money(kopecks = 0) {
