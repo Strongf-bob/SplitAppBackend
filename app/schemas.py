@@ -85,6 +85,7 @@ class Friendship(BaseModel):
     requester_id: UUID
     addressee_id: UUID
     status: str
+    peer: User | None = None
     created_at: datetime
     updated_at: datetime
 

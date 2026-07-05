@@ -26,6 +26,25 @@ export type UserProfile = {
   avatar_url?: string | null;
 };
 
+export type Friendship = {
+  id: string;
+  requester_id: string;
+  addressee_id: string;
+  status: string;
+  peer?: UserProfile | null;
+};
+
+export type FriendshipPage = {
+  items: Friendship[];
+  total: number;
+};
+
+export type EventParticipant = {
+  user_id: string;
+  role: string;
+  status: string;
+};
+
 export type EventSummary = {
   id: string;
   title: string;
@@ -34,7 +53,7 @@ export type EventSummary = {
   is_closed?: boolean;
   total_kopecks?: number;
   participants_count?: number;
-  participants?: Array<unknown>;
+  participants?: EventParticipant[];
   token?: string;
 };
 

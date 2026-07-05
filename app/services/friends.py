@@ -4,15 +4,24 @@ from pymongo.database import Database
 from app import schemas
 from app.core.monitoring import record_domain_event, track_service_operation
 from app.services.access import get_user_or_404
-from app.services.common import active_filter, new_uuid, strip_mongo_id, utc_now
+from app.services.common import active_filter, new_uuid, strip_mongo_id, user_to_api_dict, utc_now
 
 
 def _pair_key(user_a: str, user_b: str) -> str:
     return ":".join(sorted([user_a, user_b]))
 
 
-def _friendship_to_api(friendship: dict) -> dict:
-    return strip_mongo_id(friendship)
+def _friendship_to_api(db: Database, friendship: dict, actor_user_id: str | None = None) -> dict:
+    cleaned = strip_mongo_id(friendship)
+    if actor_user_id:
+        peer_id = (
+            friendship["addressee_id"]
+            if friendship["requester_id"] == actor_user_id
+            else friendship["requester_id"]
+        )
+        peer = db.users.find_one({"id": peer_id})
+        cleaned["peer"] = user_to_api_dict(peer) if peer else None
+    return cleaned
 
 
 def _get_friendship_or_404(db: Database, friendship_id: str) -> dict:
@@ -40,7 +49,7 @@ def create_friend_request(
     pair_key = _pair_key(actor_user_id, target_user_id)
     existing = db.friends.find_one(active_filter({"pair_key": pair_key}))
     if existing and existing["status"] in {"requested", "accepted", "blocked"}:
-        return _friendship_to_api(existing)
+        return _friendship_to_api(db, existing, actor_user_id)
 
     now = utc_now()
     friendship = {
@@ -54,7 +63,7 @@ def create_friend_request(
     }
     db.friends.insert_one(friendship)
     record_domain_event("friends", "requested")
-    return _friendship_to_api(friendship)
+    return _friendship_to_api(db, friendship, actor_user_id)
 
 
 @track_service_operation("friends.list")
@@ -74,7 +83,7 @@ def list_friendships(
     total = db.friends.count_documents(query)
     cursor = db.friends.find(query).sort("updated_at", -1).skip(offset).limit(limit)
     return {
-        "items": [_friendship_to_api(friendship) for friendship in cursor],
+        "items": [_friendship_to_api(db, friendship, actor_user_id) for friendship in cursor],
         "limit": limit,
         "offset": offset,
         "total": total,
@@ -95,7 +104,7 @@ def accept_friend_request(db: Database, friendship_id: str, actor_user_id: str) 
         {"$set": {"status": "accepted", "accepted_at": now, "updated_at": now}},
     )
     record_domain_event("friends", "accepted")
-    return _friendship_to_api(_get_friendship_or_404(db, friendship_id))
+    return _friendship_to_api(db, _get_friendship_or_404(db, friendship_id), actor_user_id)
 
 
 @track_service_operation("friends.reject")
@@ -112,7 +121,7 @@ def reject_friend_request(db: Database, friendship_id: str, actor_user_id: str) 
         {"$set": {"status": "rejected", "rejected_at": now, "updated_at": now}},
     )
     record_domain_event("friends", "rejected")
-    return _friendship_to_api(_get_friendship_or_404(db, friendship_id))
+    return _friendship_to_api(db, _get_friendship_or_404(db, friendship_id), actor_user_id)
 
 
 @track_service_operation("friends.remove")
@@ -144,4 +153,4 @@ def block_friendship(db: Database, friendship_id: str, actor_user_id: str) -> di
         },
     )
     record_domain_event("friends", "blocked")
-    return _friendship_to_api(_get_friendship_or_404(db, friendship_id))
+    return _friendship_to_api(db, _get_friendship_or_404(db, friendship_id), actor_user_id)

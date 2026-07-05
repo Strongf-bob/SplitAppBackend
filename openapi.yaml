@@ -5846,6 +5846,16 @@
             "type": "string",
             "title": "Status"
           },
+          "peer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
