@@ -173,10 +173,24 @@ async function responseErrorMessage(response: Response): Promise<string> {
   try {
     const body = (await response.json()) as { detail?: unknown };
     if (typeof body.detail === "string" && body.detail.trim()) return body.detail;
+    if (Array.isArray(body.detail)) return formatValidationDetail(body.detail);
   } catch {
     // Fall through to the HTTP status when the backend did not return JSON.
   }
   return `HTTP ${response.status}`;
+}
+
+function formatValidationDetail(items: unknown[]) {
+  const messages = items
+    .map((item) => {
+      if (!item || typeof item !== "object") return "";
+      const detail = item as { loc?: unknown; msg?: unknown };
+      const location = Array.isArray(detail.loc) ? detail.loc.join(".") : "body";
+      const message = typeof detail.msg === "string" ? detail.msg : "Некорректное значение";
+      return `${location}: ${message}`;
+    })
+    .filter(Boolean);
+  return messages.length ? messages.join("; ") : "HTTP 422";
 }
 
 export function money(kopecks = 0) {
