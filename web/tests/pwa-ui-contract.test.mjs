@@ -29,7 +29,7 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v8/);
+  assert.match(sw, /splitapp-next-pwa-v9/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
@@ -148,4 +148,11 @@ test("refreshed tokens update React state, not only localStorage", () => {
   assert.match(page, /const authedApi = useCallback/);
   assert.match(page, /setTokens\(nextTokens\)/);
   assert.match(page, /api<T>\(path, tokens, init, \(nextTokens\) =>/);
+});
+
+test("Splitik composer is fixed above the bottom nav and keyboard viewport", () => {
+  assert.match(page, /data-testid="splitik-composer"/);
+  assert.match(page, /fixed inset-x-4 bottom-\[calc\(86px\+env\(safe-area-inset-bottom\)\)\]/);
+  assert.match(page, /pb-\[112px\]/);
+  assert.match(page, /max-w-\[calc\(100vw-2rem\)\]/);
 });
