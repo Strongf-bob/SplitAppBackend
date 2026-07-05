@@ -29,7 +29,7 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v12/);
+  assert.match(sw, /splitapp-next-pwa-v13/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
@@ -177,11 +177,12 @@ test("event detail exposes invite code, participants, receipts and add actions",
   assert.doesNotMatch(page, /Загружаем чеки\.\.\.<\/p>/);
 });
 
-test("event invite codes are displayed as compact six-character codes", () => {
+test("event invite codes are stable six-digit event codes", () => {
   assert.match(page, /function eventInviteDisplayCode/);
-  assert.match(page, /\.slice\(0, 6\)\.padEnd\(6, "0"\)/);
-  assert.match(page, /const inviteCode = eventInviteDisplayCode\(/);
+  assert.match(page, /return String\(numericCode\)\.padStart\(6, "0"\)/);
+  assert.match(page, /const inviteCode = eventInviteDisplayCode\(event\.id\)/);
   assert.doesNotMatch(page, /inviteCode = invite\?\.token \?\? event\.token \?\? demoInviteCode/);
+  assert.doesNotMatch(page, /Создать \/ обновить код/);
 });
 
 test("event creation adds every selected friend as a participant", () => {

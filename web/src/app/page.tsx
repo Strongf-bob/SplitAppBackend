@@ -51,7 +51,6 @@ type PermissionStatus = "pending" | "granted" | "unsupported" | "denied" | "skip
 type PermissionState = Record<PermissionId, { status: PermissionStatus; detail: string }>;
 type ChatMessage = { id: string; from: "user" | "splitik"; text: string };
 type EventReceipts = Record<string, { loading: boolean; items: ReceiptSummary[] }>;
-type EventInviteTokens = Record<string, { loading: boolean; token?: string; url?: string }>;
 type MarkdownBlock = { type: "paragraph"; text: string } | { type: "list"; items: string[] };
 type FriendOption = { id: string; initials: string; name: string; subtitle: string; amount: number; tone: string };
 
@@ -128,7 +127,6 @@ export default function SplitAppPage() {
   const [events, setEvents] = useState<EventSummary[]>(fallbackEvents);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [eventReceipts, setEventReceipts] = useState<EventReceipts>({});
-  const [eventInvites, setEventInvites] = useState<EventInviteTokens>({});
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [newEventName, setNewEventName] = useState("");
   const [friendships, setFriendships] = useState<Friendship[]>([]);
@@ -379,23 +377,17 @@ export default function SplitAppPage() {
 
   const createEventInvite = async (event: EventSummary) => {
     if (!tokens || !isUuid(event.id)) {
-      setEventInvites((current) => ({
-        ...current,
-        [event.id]: { loading: false, token: demoInviteCode(event.id), url: "https://split-app.ru/app#events" }
-      }));
+      setMessage(`Код события: ${eventInviteDisplayCode(event.id)}`);
       return;
     }
-    setEventInvites((current) => ({ ...current, [event.id]: { ...current[event.id], loading: true } }));
     try {
       const invite = await authedApi<EventInvite>(`/api/events/${event.id}/invites`, {
         method: "POST",
         body: JSON.stringify({})
       });
       const url = `https://split-app.ru/app?invite=${invite.token}`;
-      setEventInvites((current) => ({ ...current, [event.id]: { loading: false, token: invite.token, url } }));
-      setMessage("Код приглашения создан.");
+      setMessage(`Код события закреплен: ${eventInviteDisplayCode(event.id)}. Ссылка: ${url}`);
     } catch (error) {
-      setEventInvites((current) => ({ ...current, [event.id]: { ...current[event.id], loading: false } }));
       setMessage(error instanceof Error ? `Не удалось создать код: ${error.message}` : "Не удалось создать код приглашения.");
     }
   };
@@ -520,7 +512,6 @@ export default function SplitAppPage() {
             onEventTab={setEventTab}
             selectedEventId={selectedEventId}
             eventReceipts={eventReceipts}
-            eventInvites={eventInvites}
             onOpenEvent={openEvent}
             onCloseEvent={closeEvent}
             onInviteDecision={decideInvite}
@@ -722,7 +713,6 @@ function WorkspaceScreen({
   onEventTab,
   selectedEventId,
   eventReceipts,
-  eventInvites,
   onOpenEvent,
   onCloseEvent,
   onInviteDecision,
@@ -758,7 +748,6 @@ function WorkspaceScreen({
   onEventTab: (tab: EventTab) => void;
   selectedEventId: string | null;
   eventReceipts: EventReceipts;
-  eventInvites: EventInviteTokens;
   onOpenEvent: (event: EventSummary) => void;
   onCloseEvent: () => void;
   onInviteDecision: (event: EventSummary, decision: "accept" | "decline") => void;
@@ -812,7 +801,6 @@ function WorkspaceScreen({
             onTab={onEventTab}
             selectedEventId={selectedEventId}
             eventReceipts={eventReceipts}
-            eventInvites={eventInvites}
             onOpenEvent={onOpenEvent}
             onCloseEvent={onCloseEvent}
             onInviteDecision={onInviteDecision}
@@ -976,7 +964,6 @@ function EventsScreen({
   onTab,
   selectedEventId,
   eventReceipts,
-  eventInvites,
   onOpenEvent,
   onCloseEvent,
   onInviteDecision,
@@ -996,7 +983,6 @@ function EventsScreen({
   onTab: (tab: EventTab) => void;
   selectedEventId: string | null;
   eventReceipts: EventReceipts;
-  eventInvites: EventInviteTokens;
   onOpenEvent: (event: EventSummary) => void;
   onCloseEvent: () => void;
   onInviteDecision: (event: EventSummary, decision: "accept" | "decline") => void;
@@ -1037,7 +1023,6 @@ function EventsScreen({
       event={selectedEvent}
       friendOptions={friendOptions}
       receipts={eventReceipts[selectedEvent.id]}
-      invite={eventInvites[selectedEvent.id]}
       onBack={onCloseEvent}
       onInviteDecision={onInviteDecision}
       onCreateEventInvite={onCreateEventInvite}
@@ -1145,7 +1130,6 @@ function EventDetailScreen({
   event,
   friendOptions,
   receipts,
-  invite,
   onBack,
   onInviteDecision,
   onCreateEventInvite,
@@ -1154,7 +1138,6 @@ function EventDetailScreen({
   event: EventSummary;
   friendOptions: FriendOption[];
   receipts?: { loading: boolean; items: ReceiptSummary[] };
-  invite?: { loading: boolean; token?: string; url?: string };
   onBack: () => void;
   onInviteDecision: (event: EventSummary, decision: "accept" | "decline") => void;
   onCreateEventInvite: (event: EventSummary) => void;
@@ -1162,7 +1145,7 @@ function EventDetailScreen({
 }) {
   const participantItems = eventParticipants(event, friendOptions);
   const participantCount = event.participants_count ?? event.participants?.length ?? participantItems.length;
-  const inviteCode = eventInviteDisplayCode(invite?.token ?? event.token ?? demoInviteCode(event.id));
+  const inviteCode = eventInviteDisplayCode(event.id);
 
   if (event.status === "invite") {
     return (
@@ -1190,8 +1173,7 @@ function EventDetailScreen({
         </div>
         <div className="grid gap-2 rounded-2xl bg-[#eef1f7] p-3">
           <span className="text-xs font-black uppercase text-slate-500">Код события</span>
-          <span className="text-2xl font-black tracking-[0.18em] text-[#1f3d8f]">{invite?.loading ? "..." : inviteCode}</span>
-          <button type="button" onClick={() => onCreateEventInvite(event)} className="min-h-11 rounded-xl bg-white text-sm font-black text-[#1f3d8f]">Создать / обновить код</button>
+          <span className="text-2xl font-black tracking-[0.18em] text-[#1f3d8f]">{inviteCode}</span>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <button type="button" onClick={() => onCreateEventInvite(event)} className="min-h-12 rounded-xl bg-[#1f3d8f] text-sm font-black text-white">Добавить друзей</button>
@@ -1553,12 +1535,12 @@ function isUuid(value: string | null): value is string {
   return Boolean(value?.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i));
 }
 
-function demoInviteCode(eventId: string) {
-  return eventId.replace(/[^a-z0-9]/gi, "").slice(-6).toUpperCase().padStart(6, "0");
-}
-
 function eventInviteDisplayCode(rawCode: string) {
-  return rawCode.replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, 6).padEnd(6, "0");
+  let numericCode = 0;
+  for (const character of rawCode) {
+    numericCode = (numericCode * 31 + character.charCodeAt(0)) % 1000000;
+  }
+  return String(numericCode).padStart(6, "0");
 }
 
 function friendshipsToOptions(friendships: Friendship[]): FriendOption[] {
