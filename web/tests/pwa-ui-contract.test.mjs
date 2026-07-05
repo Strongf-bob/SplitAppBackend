@@ -29,7 +29,7 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v2/);
+  assert.match(sw, /splitapp-next-pwa-v3/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
@@ -53,4 +53,26 @@ test("Yandex callback posts the backend login schema", () => {
   assert.match(api, /body: JSON\.stringify\(\{ yandex_token: accessToken \}\)/);
   assert.doesNotMatch(api, /provider: "yandex"/);
   assert.doesNotMatch(api, /\{\s*token: accessToken\s*\}/);
+});
+
+test("authenticated app uses real backend actions instead of static cards", () => {
+  for (const endpoint of [
+    "/api/events",
+    "/api/events/${event.id}/receipts",
+    "/api/splitik/messages"
+  ]) {
+    assert.match(page, new RegExp(endpoint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing endpoint: ${endpoint}`);
+  }
+
+  assert.match(page, /createEvent/);
+  assert.match(page, /selectedEventId/);
+  assert.match(page, /friendSearch/);
+  assert.doesNotMatch(page, /const answer = splitikAnswer/);
+});
+
+test("mobile shell keeps the real app surface full-height and gallery input mounted", () => {
+  assert.match(page, /bg-\[#f5f5f7\]/);
+  assert.match(page, /pb-\[calc\(120px\+env\(safe-area-inset-bottom\)\)\]/);
+  assert.match(page, /galleryInputRef/);
+  assert.doesNotMatch(page, /bg-\[#1e1e1e\]/);
 });

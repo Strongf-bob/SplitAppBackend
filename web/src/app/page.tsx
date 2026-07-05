@@ -24,10 +24,15 @@ import { Badge } from "@/components/ui/badge";
 import {
   api,
   clearTokens,
+  EventPage,
+  EventSummary,
   handleYandexOAuthCallback,
   HomeSummary,
   loadTokens,
   money,
+  ReceiptPage,
+  ReceiptSummary,
+  SplitikMessageResponse,
   SplitAppTokens,
   startYandexLogin
 } from "@/lib/splitapp-api";
@@ -40,6 +45,7 @@ type PermissionId = "contacts" | "camera" | "gallery" | "notifications";
 type PermissionStatus = "pending" | "granted" | "unsupported" | "denied" | "skipped";
 type PermissionState = Record<PermissionId, { status: PermissionStatus; detail: string }>;
 type ChatMessage = { id: string; from: "user" | "splitik"; text: string };
+type EventReceipts = Record<string, { loading: boolean; items: ReceiptSummary[] }>;
 
 declare global {
   interface Navigator {
@@ -69,7 +75,7 @@ const navItems: Array<{ id: View; label: string; icon: React.ElementType }> = [
   { id: "profile", label: "Профиль", icon: User }
 ];
 
-const fallbackEvents = [
+const fallbackEvents: EventSummary[] = [
   { id: "demo-1", title: "Поездка в Карпаты", total_kopecks: 3840000, participants_count: 4, status: "active" },
   { id: "demo-2", title: "День рождения Кати", total_kopecks: 720000, participants_count: 5, status: "invite" },
   { id: "demo-3", title: "Новый год", total_kopecks: 295000, participants_count: 3, status: "closed" }
@@ -110,6 +116,11 @@ export default function SplitAppPage() {
   const [eventTab, setEventTab] = useState<EventTab>("active");
   const [notificationTab, setNotificationTab] = useState<NotificationTab>("incoming");
   const [summary, setSummary] = useState<HomeSummary | null>(null);
+  const [events, setEvents] = useState<EventSummary[]>(fallbackEvents);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [eventReceipts, setEventReceipts] = useState<EventReceipts>({});
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+  const [newEventName, setNewEventName] = useState("");
   const [message, setMessage] = useState("Готов к работе");
   const [permissionState, setPermissionState] = useState<PermissionState>(initialPermissionState);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -117,6 +128,8 @@ export default function SplitAppPage() {
     { id: "hint", from: "splitik", text: "Могу разобрать чек, спросить кто что ел или напомнить кому вернуть долг." }
   ]);
   const [chatDraft, setChatDraft] = useState("");
+  const [splitikSessionId, setSplitikSessionId] = useState<string | null>(null);
+  const [isSplitikSending, setIsSplitikSending] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -152,17 +165,22 @@ export default function SplitAppPage() {
 
   useEffect(() => {
     if (!tokens) return;
-    api<HomeSummary>("/api/home/summary", tokens)
-      .then(setSummary)
+    Promise.all([
+      api<HomeSummary>("/api/home/summary", tokens),
+      api<EventPage>("/api/events", tokens)
+    ])
+      .then(([nextSummary, eventPage]) => {
+        setSummary(nextSummary);
+        setEvents(eventPage.items.length ? eventPage.items.map(normalizeEvent) : fallbackEvents);
+      })
       .catch(() => {
-        setSummary({ events: fallbackEvents });
-        setMessage("Backend недоступен, показан демо-срез PWA.");
+        setEvents(fallbackEvents);
+        setMessage("Backend недоступен, показан локальный срез PWA.");
       });
   }, [tokens]);
 
-  const events = useMemo(() => (summary?.events?.length ? summary.events : fallbackEvents), [summary]);
-  const owedToMe = summary?.totals?.owed_to_me_kopecks ?? 720000;
-  const iOwe = summary?.totals?.i_owe_kopecks ?? 295000;
+  const owedToMe = summary?.confirmed?.receivable_kopecks ?? 720000;
+  const iOwe = summary?.confirmed?.owed_kopecks ?? 295000;
 
   const navigate = (nextView: View) => {
     setPreviousView(view);
@@ -210,17 +228,29 @@ export default function SplitAppPage() {
         updatePermission("gallery", files.length ? "granted" : "skipped", files.length ? "Фото выбрано из галереи." : "Выбор фото отменен.");
         return;
       } catch (error) {
+        if (galleryInputRef.current) {
+          galleryInputRef.current.click();
+          return;
+        }
         updatePermission("gallery", "skipped", permissionErrorMessage(error, "Выбор фото отменен."));
         return;
       }
     }
 
-    galleryInputRef.current?.click();
+    if (!galleryInputRef.current) {
+      updatePermission("gallery", "unsupported", "Поле выбора фото не готово. Перезагрузите приложение.");
+      return;
+    }
+    galleryInputRef.current.click();
   };
 
   const requestNotificationPermission = async () => {
     if (!("Notification" in window)) {
       updatePermission("notifications", "unsupported", "Этот браузер не поддерживает web-уведомления.");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      updatePermission("notifications", "denied", "Уведомления уже запрещены в настройках браузера или сайта. Разрешите их в настройках Safari/браузера.");
       return;
     }
     if (isIosDevice() && !isStandalonePwa()) {
@@ -280,27 +310,94 @@ export default function SplitAppPage() {
     void handlers[id]();
   };
 
-  const sendSplitikMessage = (event?: FormEvent<HTMLFormElement>) => {
+  const openEvent = async (event: EventSummary) => {
+    setSelectedEventId((current) => (current === event.id ? null : event.id));
+    if (!tokens || event.status === "invite" || eventReceipts[event.id]) return;
+    setEventReceipts((current) => ({ ...current, [event.id]: { loading: true, items: [] } }));
+    try {
+      const page = await api<ReceiptPage>(`/api/events/${event.id}/receipts`, tokens);
+      setEventReceipts((current) => ({ ...current, [event.id]: { loading: false, items: page.items } }));
+    } catch {
+      setEventReceipts((current) => ({ ...current, [event.id]: { loading: false, items: [] } }));
+      setMessage("Не удалось загрузить чеки события.");
+    }
+  };
+
+  const createEvent = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    const name = newEventName.trim();
+    if (!tokens || !name) return;
+    try {
+      const created = await api<EventSummary>("/api/events", tokens, {
+        method: "POST",
+        body: JSON.stringify({ name })
+      });
+      setEvents((current) => [normalizeEvent(created), ...current.filter((item) => !item.id.startsWith("demo-"))]);
+      setNewEventName("");
+      setIsCreatingEvent(false);
+      setEventTab("active");
+      setSelectedEventId(created.id);
+      setMessage("Событие создано.");
+    } catch {
+      setMessage("Не удалось создать событие.");
+    }
+  };
+
+  const decideInvite = async (event: EventSummary, decision: "accept" | "decline") => {
+    if (!event.token) {
+      setEvents((current) => current.filter((item) => item.id !== event.id));
+      setSelectedEventId(null);
+      setMessage(decision === "accept" ? "Приглашение принято." : "Приглашение отклонено.");
+      return;
+    }
+    if (!tokens) return;
+    try {
+      await api(`/api/invites/${event.token}/${decision}`, tokens, { method: "POST" });
+      setEvents((current) => current.filter((item) => item.id !== event.id));
+      setSelectedEventId(null);
+      setMessage(decision === "accept" ? "Приглашение принято." : "Приглашение отклонено.");
+    } catch {
+      setMessage("Не удалось обработать приглашение.");
+    }
+  };
+
+  const sendSplitikMessage = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
     const text = chatDraft.trim();
-    if (!text) return;
+    if (!text || !tokens || isSplitikSending) return;
     const userMessage = { id: `u-${Date.now()}`, from: "user" as const, text };
-    const answer = splitikAnswer(text);
-    setChatMessages((items) => [...items, userMessage, { id: `s-${Date.now()}`, from: "splitik", text: answer }]);
+    setChatMessages((items) => [...items, userMessage]);
     setChatDraft("");
-    setMessage("Сплитик ответил в чате.");
+    setIsSplitikSending(true);
+    try {
+      const response = await api<SplitikMessageResponse>("/api/splitik/messages", tokens, {
+        method: "POST",
+        body: JSON.stringify({
+          session_id: splitikSessionId,
+          mode: selectedEventId ? "event" : "general",
+          message: text,
+          entry_point: selectedEventId ? { type: "event", event_id: selectedEventId } : undefined
+        })
+      });
+      setSplitikSessionId(response.session_id);
+      setChatMessages((items) => [
+        ...items,
+        { id: response.message_id || `s-${Date.now()}`, from: "splitik", text: response.assistant_message }
+      ]);
+    } catch {
+      setChatMessages((items) => [
+        ...items,
+        { id: `s-${Date.now()}`, from: "splitik", text: "Не смог достучаться до Сплитика. Попробуйте еще раз." }
+      ]);
+    } finally {
+      setIsSplitikSending(false);
+    }
   };
 
   return (
-    <main className="min-h-dvh bg-[#1f3d8f] text-slate-950">
+    <main className="min-h-dvh bg-[#f5f5f7] text-slate-950">
       {!tokens ? (
-        <AuthScreen
-          onLogin={startYandexLogin}
-          galleryInputRef={galleryInputRef}
-          onGalleryPicked={(picked) =>
-            updatePermission("gallery", picked ? "granted" : "skipped", picked ? "Фото выбрано из галереи." : "Выбор фото отменен.")
-          }
-        />
+        <AuthScreen onLogin={startYandexLogin} />
       ) : (
         <PhoneShell
           view={view}
@@ -317,6 +414,19 @@ export default function SplitAppPage() {
             events={events}
             eventTab={eventTab}
             onEventTab={setEventTab}
+            selectedEventId={selectedEventId}
+            eventReceipts={eventReceipts}
+            onOpenEvent={openEvent}
+            onInviteDecision={decideInvite}
+            isCreatingEvent={isCreatingEvent}
+            newEventName={newEventName}
+            onCreateEventOpen={() => {
+              setIsCreatingEvent(true);
+              setEventTab("active");
+              navigate("events");
+            }}
+            onNewEventName={setNewEventName}
+            onCreateEvent={createEvent}
             notificationTab={notificationTab}
             onNotificationTab={setNotificationTab}
             owedToMe={owedToMe}
@@ -327,6 +437,7 @@ export default function SplitAppPage() {
             chatDraft={chatDraft}
             onChatDraft={setChatDraft}
             onSendChat={sendSplitikMessage}
+            isSplitikSending={isSplitikSending}
             onNavigate={navigate}
             onMessage={setMessage}
           />
@@ -347,6 +458,20 @@ export default function SplitAppPage() {
           ) : null}
         </AnimatePresence>
       </div>
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          updatePermission(
+            "gallery",
+            event.currentTarget.files?.length ? "granted" : "skipped",
+            event.currentTarget.files?.length ? "Фото выбрано из галереи." : "Выбор фото отменен."
+          );
+          event.currentTarget.value = "";
+        }}
+      />
     </main>
   );
 }
@@ -373,7 +498,7 @@ function PhoneShell({
   onLogout: () => void;
 }) {
   return (
-    <div className="min-h-dvh bg-[#1f3d8f]">
+    <div className="min-h-dvh bg-[#f5f5f7]">
       {loggedIn ? (
         <header className="sticky top-0 z-30 flex items-end justify-between gap-2 bg-[#1f3d8f] px-4 pb-4 pt-[max(env(safe-area-inset-top),16px)] text-white">
           <div className="flex min-w-0 items-center gap-2">
@@ -418,7 +543,7 @@ function PhoneShell({
         </header>
       ) : null}
 
-      <section className={cn("relative z-10", loggedIn && "pb-[calc(92px+env(safe-area-inset-bottom))]")}>{children}</section>
+      <section className={cn("relative z-10", loggedIn && "pb-[calc(120px+env(safe-area-inset-bottom))]")}>{children}</section>
 
       {loggedIn ? (
         <nav className="fixed inset-x-3 bottom-0 z-30 rounded-t-[24px] bg-[#6f7888]/96 p-1.5 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_14px_40px_rgba(15,23,42,0.25)] backdrop-blur">
@@ -449,15 +574,7 @@ function BottomNavButton({ item, active }: { item: { id: View; label: string; ic
   );
 }
 
-function AuthScreen({
-  onLogin,
-  galleryInputRef,
-  onGalleryPicked
-}: {
-  onLogin: () => void;
-  galleryInputRef: React.RefObject<HTMLInputElement | null>;
-  onGalleryPicked: (picked: boolean) => void;
-}) {
+function AuthScreen({ onLogin }: { onLogin: () => void }) {
   return (
     <section className="grid min-h-dvh content-between bg-[#1f3d8f] px-6 pb-[max(env(safe-area-inset-bottom),28px)] pt-[max(env(safe-area-inset-top),72px)] text-white">
       <div className="grid content-center gap-4 pt-[18dvh]">
@@ -478,16 +595,6 @@ function AuthScreen({
         <p className="text-center text-[11px] font-semibold leading-4 text-white/62">Войдите, чтобы открыть события, друзей, чеки и Сплитика.</p>
       </div>
 
-      <input
-        ref={galleryInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(event) => {
-          onGalleryPicked(Boolean(event.currentTarget.files?.length));
-          event.currentTarget.value = "";
-        }}
-      />
     </section>
   );
 }
@@ -497,6 +604,15 @@ function WorkspaceScreen({
   events,
   eventTab,
   onEventTab,
+  selectedEventId,
+  eventReceipts,
+  onOpenEvent,
+  onInviteDecision,
+  isCreatingEvent,
+  newEventName,
+  onCreateEventOpen,
+  onNewEventName,
+  onCreateEvent,
   notificationTab,
   onNotificationTab,
   owedToMe,
@@ -507,13 +623,23 @@ function WorkspaceScreen({
   chatDraft,
   onChatDraft,
   onSendChat,
+  isSplitikSending,
   onNavigate,
   onMessage
 }: {
   view: View;
-  events: HomeSummary["events"];
+  events: EventSummary[];
   eventTab: EventTab;
   onEventTab: (tab: EventTab) => void;
+  selectedEventId: string | null;
+  eventReceipts: EventReceipts;
+  onOpenEvent: (event: EventSummary) => void;
+  onInviteDecision: (event: EventSummary, decision: "accept" | "decline") => void;
+  isCreatingEvent: boolean;
+  newEventName: string;
+  onCreateEventOpen: () => void;
+  onNewEventName: (value: string) => void;
+  onCreateEvent: (event?: FormEvent<HTMLFormElement>) => void;
   notificationTab: NotificationTab;
   onNotificationTab: (tab: NotificationTab) => void;
   owedToMe: number;
@@ -524,6 +650,7 @@ function WorkspaceScreen({
   chatDraft: string;
   onChatDraft: (value: string) => void;
   onSendChat: (event?: FormEvent<HTMLFormElement>) => void;
+  isSplitikSending: boolean;
   onNavigate: (view: View) => void;
   onMessage: (message: string) => void;
 }) {
@@ -538,18 +665,32 @@ function WorkspaceScreen({
         transition={{ duration: 0.2 }}
       >
         {view === "home" ? (
-          <HomeScreen events={events} owedToMe={owedToMe} iOwe={iOwe} onNavigate={onNavigate} onMessage={onMessage} />
+          <HomeScreen events={events} owedToMe={owedToMe} iOwe={iOwe} onNavigate={onNavigate} onMessage={onMessage} onCreateEventOpen={onCreateEventOpen} />
         ) : null}
         {view === "people" ? <PeopleScreen /> : null}
         {view === "profile" ? (
           <ProfileScreen owedToMe={owedToMe} iOwe={iOwe} permissionState={permissionState} onPermission={onPermission} />
         ) : null}
-        {view === "events" ? <EventsScreen events={events} activeTab={eventTab} onTab={onEventTab} /> : null}
+        {view === "events" ? (
+          <EventsScreen
+            events={events}
+            activeTab={eventTab}
+            onTab={onEventTab}
+            selectedEventId={selectedEventId}
+            eventReceipts={eventReceipts}
+            onOpenEvent={onOpenEvent}
+            onInviteDecision={onInviteDecision}
+            isCreatingEvent={isCreatingEvent}
+            newEventName={newEventName}
+            onNewEventName={onNewEventName}
+            onCreateEvent={onCreateEvent}
+          />
+        ) : null}
         {view === "notifications" ? (
           <NotificationsScreen activeTab={notificationTab} onTab={onNotificationTab} />
         ) : null}
         {view === "splitik" ? (
-          <SplitikScreen messages={chatMessages} draft={chatDraft} onDraft={onChatDraft} onSend={onSendChat} />
+          <SplitikScreen messages={chatMessages} draft={chatDraft} onDraft={onChatDraft} onSend={onSendChat} isSending={isSplitikSending} />
         ) : null}
       </motion.div>
     </AnimatePresence>
@@ -561,13 +702,15 @@ function HomeScreen({
   owedToMe,
   iOwe,
   onNavigate,
-  onMessage
+  onMessage,
+  onCreateEventOpen
 }: {
-  events: HomeSummary["events"];
+  events: EventSummary[];
   owedToMe: number;
   iOwe: number;
   onNavigate: (view: View) => void;
   onMessage: (message: string) => void;
+  onCreateEventOpen: () => void;
 }) {
   const mainEvent = events?.[0] ?? fallbackEvents[0];
   return (
@@ -583,7 +726,7 @@ function HomeScreen({
           onClick={() => onNavigate("events")}
           className="mt-4 grid w-full gap-2 rounded-2xl bg-[#111111] p-4 text-left"
         >
-          <span className="font-black">{mainEvent.title}</span>
+          <span className="font-black">{eventTitle(mainEvent)}</span>
           <span className="flex items-center justify-between text-xs text-white/60">
             <span>{mainEvent.participants_count ?? 0} участника</span>
             <span>{money(mainEvent.total_kopecks ?? 0)}</span>
@@ -591,7 +734,7 @@ function HomeScreen({
         </button>
         <div className="mt-4 grid grid-cols-3 gap-3">
           <QuickAction icon={CheckCircle2} label="Синхрониз." onClick={() => onMessage("Данные синхронизированы.")} />
-          <QuickAction icon={Plus} label="Добавить" onClick={() => onNavigate("events")} />
+          <QuickAction icon={Plus} label="Добавить" onClick={onCreateEventOpen} />
           <QuickAction icon={Inbox} label="Входящие" onClick={() => onNavigate("notifications")} />
         </div>
       </section>
@@ -628,15 +771,23 @@ function QuickAction({ icon: Icon, label, onClick }: { icon: React.ElementType; 
 }
 
 function PeopleScreen() {
+  const [friendSearch, setFriendSearch] = useState("");
+  const visibleFriends = friends.filter((friend) => friend.name.toLowerCase().includes(friendSearch.trim().toLowerCase()));
+
   return (
     <div className="grid gap-4">
-      <div className="flex justify-end">
-        <button type="button" aria-label="Поиск друзей" className="grid h-12 w-12 place-items-center rounded-full bg-[#d2daec] text-[#1f3d8f]">
-          <Search className="h-5 w-5" />
-        </button>
+      <div className="flex items-center gap-2 rounded-2xl bg-white p-2">
+        <Search className="ml-2 h-5 w-5 text-[#1f3d8f]" />
+        <input
+          aria-label="Поиск друзей"
+          value={friendSearch}
+          onChange={(event) => setFriendSearch(event.target.value)}
+          className="min-h-11 flex-1 rounded-xl bg-[#f5f5f7] px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
+          placeholder="Найти друга"
+        />
       </div>
       <ContentPanel title="Друзья">
-        {friends.map((friend) => (
+        {visibleFriends.map((friend) => (
           <button
             key={friend.name}
             type="button"
@@ -650,6 +801,7 @@ function PeopleScreen() {
             <span className={cn("text-xs font-black", friend.tone)}>{friend.amount > 0 ? "+" : ""}{friend.amount} ₽</span>
           </button>
         ))}
+        {!visibleFriends.length ? <p className="py-4 text-center text-sm font-semibold text-slate-500">Ничего не найдено</p> : null}
       </ContentPanel>
     </div>
   );
@@ -658,21 +810,50 @@ function PeopleScreen() {
 function EventsScreen({
   events,
   activeTab,
-  onTab
+  onTab,
+  selectedEventId,
+  eventReceipts,
+  onOpenEvent,
+  onInviteDecision,
+  isCreatingEvent,
+  newEventName,
+  onNewEventName,
+  onCreateEvent
 }: {
-  events: HomeSummary["events"];
+  events: EventSummary[];
   activeTab: EventTab;
   onTab: (tab: EventTab) => void;
+  selectedEventId: string | null;
+  eventReceipts: EventReceipts;
+  onOpenEvent: (event: EventSummary) => void;
+  onInviteDecision: (event: EventSummary, decision: "accept" | "decline") => void;
+  isCreatingEvent: boolean;
+  newEventName: string;
+  onNewEventName: (value: string) => void;
+  onCreateEvent: (event?: FormEvent<HTMLFormElement>) => void;
 }) {
   const filtered = (events ?? fallbackEvents).filter((event) => {
-    if (activeTab === "active") return event.status !== "closed" && event.status !== "invite";
-    if (activeTab === "closed") return event.status === "closed";
+    if (activeTab === "active") return !event.is_closed && event.status !== "closed" && event.status !== "invite";
+    if (activeTab === "closed") return event.is_closed || event.status === "closed";
     return event.status === "invite";
   });
   const visible = filtered.length ? filtered : activeTab === "closed" ? [fallbackEvents[2]] : [fallbackEvents[1]];
 
   return (
     <div className="grid gap-4">
+      {isCreatingEvent ? (
+        <form onSubmit={onCreateEvent} className="grid gap-2 rounded-2xl bg-white p-3">
+          <label className="text-xs font-black text-slate-500" htmlFor="event-name">Новое событие</label>
+          <input
+            id="event-name"
+            value={newEventName}
+            onChange={(event) => onNewEventName(event.target.value)}
+            className="min-h-12 rounded-xl border border-slate-200 px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
+            placeholder="Например, ужин или поездка"
+          />
+          <button type="submit" className="min-h-12 rounded-xl bg-[#1f3d8f] px-4 text-sm font-black text-white">Создать событие</button>
+        </form>
+      ) : null}
       <SegmentedControl
         name="event-tab"
         items={[
@@ -684,12 +865,54 @@ function EventsScreen({
         onChange={(tab) => onTab(tab as EventTab)}
       />
       {visible.map((event) => (
-        <button key={event.id} type="button" className="grid min-h-[98px] gap-3 rounded-xl bg-white p-4 text-left shadow-sm">
-          <span className="text-lg font-black">{event.title}</span>
-          <span className="text-xs text-slate-500">
-            {event.participants_count ?? 0} участника · {money(event.total_kopecks ?? 0)}
+        <div key={event.id} className="overflow-hidden rounded-xl bg-white shadow-sm">
+          <button type="button" onClick={() => onOpenEvent(event)} className="grid min-h-[98px] w-full gap-3 p-4 text-left">
+            <span className="flex items-center justify-between gap-3">
+              <span className="text-lg font-black">{eventTitle(event)}</span>
+              <span className="text-xl text-slate-400">{selectedEventId === event.id ? "−" : "+"}</span>
+            </span>
+            <span className="text-xs text-slate-500">
+              {event.participants_count ?? event.participants?.length ?? 0} участника · {money(event.total_kopecks ?? 0)}
+            </span>
+          </button>
+          {selectedEventId === event.id ? (
+            <div className="grid gap-2 border-t border-slate-100 p-3">
+              {activeTab === "invites" ? (
+                <>
+                  <p className="text-sm font-semibold text-slate-600">Предпросмотр приглашения: участники, сумма и событие будут открыты после принятия.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => onInviteDecision(event, "decline")} className="min-h-11 rounded-xl bg-slate-100 text-sm font-black text-slate-700">Отказаться</button>
+                    <button type="button" onClick={() => onInviteDecision(event, "accept")} className="min-h-11 rounded-xl bg-[#1f3d8f] text-sm font-black text-white">Согласиться</button>
+                  </div>
+                </>
+              ) : (
+                <EventReceiptList receipts={eventReceipts[event.id]} />
+              )}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EventReceiptList({ receipts }: { receipts?: { loading: boolean; items: ReceiptSummary[] } }) {
+  if (!receipts || receipts.loading) {
+    return <p className="py-3 text-sm font-semibold text-slate-500">Загружаем чеки...</p>;
+  }
+  if (!receipts.items.length) {
+    return <p className="py-3 text-sm font-semibold text-slate-500">Чеков пока нет. Добавьте первый чек через Сплитика или событие.</p>;
+  }
+  return (
+    <div className="grid gap-2">
+      {receipts.items.map((receipt) => (
+        <div key={receipt.id} className="grid grid-cols-[1fr_auto] gap-2 rounded-xl bg-[#f5f5f7] p-3">
+          <span>
+            <span className="block text-sm font-black">{receipt.title || "Чек"}</span>
+            <span className="block text-xs text-slate-500">{receipt.category || receipt.status || "расход"}</span>
           </span>
-        </button>
+          <span className="text-sm font-black">{money(receipt.total_amount_kopecks ?? 0)}</span>
+        </div>
       ))}
     </div>
   );
@@ -791,12 +1014,14 @@ function SplitikScreen({
   messages,
   draft,
   onDraft,
-  onSend
+  onSend,
+  isSending
 }: {
   messages: ChatMessage[];
   draft: string;
   onDraft: (value: string) => void;
   onSend: (event?: FormEvent<HTMLFormElement>) => void;
+  isSending: boolean;
 }) {
   return (
     <div className="grid min-h-[690px] grid-rows-[1fr_auto] gap-3">
@@ -827,8 +1052,13 @@ function SplitikScreen({
           value={draft}
           onChange={(event) => onDraft(event.target.value)}
         />
-        <button type="submit" aria-label="Отправить Сплитику" className="grid h-12 w-12 place-items-center rounded-xl bg-[#1f3d8f] text-white">
-          <Send className="h-5 w-5" />
+        <button
+          type="submit"
+          aria-label="Отправить Сплитику"
+          disabled={isSending}
+          className="grid h-12 w-12 place-items-center rounded-xl bg-[#1f3d8f] text-white disabled:opacity-60"
+        >
+          {isSending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <Send className="h-5 w-5" />}
         </button>
       </form>
     </div>
@@ -895,15 +1125,17 @@ function parseHashView(hash: string): View | null {
   return validViews.includes(value as View) ? (value as View) : null;
 }
 
-function splitikAnswer(text: string) {
-  const normalized = text.toLowerCase();
-  if (normalized.includes("чек") || normalized.includes("receipt")) {
-    return "Загружайте фото чека: я соберу позиции, спрошу кто что ел и покажу черновик перед подтверждением.";
-  }
-  if (normalized.includes("долг") || normalized.includes("плат")) {
-    return "По долгам сейчас вижу баланс: зеленое вам должны, красное должны вы. Нажмите Входящие для подтверждений.";
-  }
-  return "Понял. Могу открыть событие, разобрать чек или подготовить сообщение участникам.";
+function normalizeEvent(event: EventSummary): EventSummary {
+  return {
+    ...event,
+    title: event.title || event.name || "Событие",
+    status: event.status || (event.is_closed ? "closed" : "active"),
+    participants_count: event.participants_count ?? event.participants?.length ?? 0
+  };
+}
+
+function eventTitle(event: EventSummary) {
+  return event.title || event.name || "Событие";
 }
 
 function permissionLabel(status: PermissionStatus) {

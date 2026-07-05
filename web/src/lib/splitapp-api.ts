@@ -11,17 +11,46 @@ export type SplitAppTokens = {
 export type EventSummary = {
   id: string;
   title: string;
+  name?: string;
   status?: string;
+  is_closed?: boolean;
   total_kopecks?: number;
   participants_count?: number;
+  participants?: Array<unknown>;
+  token?: string;
 };
 
 export type HomeSummary = {
-  events?: EventSummary[];
-  totals?: {
-    owed_to_me_kopecks?: number;
-    i_owe_kopecks?: number;
-  };
+  confirmed?: { owed_kopecks?: number; receivable_kopecks?: number };
+  pending?: { owed_kopecks?: number; receivable_kopecks?: number };
+  disputed?: { owed_kopecks?: number; receivable_kopecks?: number };
+};
+
+export type EventPage = {
+  items: EventSummary[];
+  total: number;
+};
+
+export type ReceiptSummary = {
+  id: string;
+  title?: string;
+  category?: string | null;
+  total_amount_kopecks?: number;
+  status?: string;
+  created_at?: string;
+};
+
+export type ReceiptPage = {
+  items: ReceiptSummary[];
+  total: number;
+};
+
+export type SplitikMessageResponse = {
+  session_id: string;
+  message_id: string;
+  assistant_message: string;
+  questions?: Array<{ id: string; text: string }>;
+  suggested_actions?: Array<{ type: string; label: string }>;
 };
 
 export function loadTokens(): SplitAppTokens | null {
@@ -80,10 +109,11 @@ export async function handleYandexOAuthCallback(): Promise<SplitAppTokens | null
   return tokens;
 }
 
-export async function api<T>(path: string, tokens: SplitAppTokens | null): Promise<T> {
+export async function api<T>(path: string, tokens: SplitAppTokens | null, init: RequestInit = {}): Promise<T> {
   const headers = new Headers();
   if (tokens?.access_token) headers.set("Authorization", `Bearer ${tokens.access_token}`);
-  const response = await fetch(path, { headers });
+  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const response = await fetch(path, { ...init, headers });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return (await response.json()) as T;
 }
