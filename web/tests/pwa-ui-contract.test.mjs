@@ -29,7 +29,7 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v3/);
+  assert.match(sw, /splitapp-next-pwa-v4/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
@@ -88,4 +88,16 @@ test("profile screen shows the authenticated Yandex user instead of a hardcoded 
   assert.match(page, /currentUser/);
   assert.doesNotMatch(page, /ContentPanel title="Анна"/);
   assert.doesNotMatch(page, />A<\/div>/);
+});
+
+test("bottom navigation active tab stays readable with a liquid glass state", () => {
+  assert.match(page, /backdrop-blur-\[22px\]/);
+  assert.match(page, /bg-white\/72 text-\[#1f3d8f\]/);
+  assert.doesNotMatch(page, /active && "bg-white\/22 text-white"/);
+});
+
+test("Splitik chat keeps backend error detail visible to diagnose LLM failures", () => {
+  assert.match(api, /class ApiError extends Error/);
+  assert.match(page, /splitikErrorMessage/);
+  assert.doesNotMatch(page, /catch \{\n      setChatMessages/);
 });
