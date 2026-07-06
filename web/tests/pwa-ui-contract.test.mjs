@@ -243,6 +243,19 @@ test("home add action opens a dedicated event creation screen", () => {
   assert.match(page, /onCreateEventOpen/);
 });
 
+test("home screen follows the Figma balance card and activity sheet composition", () => {
+  assert.match(page, /data-testid="home-balance-screen"/);
+  assert.match(page, /text-\[72px\]/);
+  assert.match(page, /ArrowUp/);
+  assert.match(page, /ArrowDown/);
+  assert.match(page, /data-testid="home-event-card"/);
+  assert.match(page, /function AvatarStack/);
+  assert.match(page, /Сканировать чек/);
+  assert.match(page, /Добавить платеж/);
+  assert.match(page, /rounded-t-\[28px\]/);
+  assert.doesNotMatch(page, /Синхрониз\./);
+});
+
 test("friends screen exposes add-by-code affordance", () => {
   assert.match(page, /Добавить друга по коду/);
   assert.match(page, /friend-code-input/);
