@@ -38,7 +38,9 @@ import {
   ApiError,
   SplitikMessageResponse,
   SplitAppTokens,
+  saveTokens,
   startYandexLogin,
+  UserPage,
   UserProfile
 } from "@/lib/splitapp-api";
 import { cn } from "@/lib/utils";
@@ -358,6 +360,84 @@ export default function SplitAppPage() {
     void handlers[id]();
   };
 
+  const showFriendCode = async () => {
+    if (!tokens || !currentUser) {
+      setMessage("Войдите, чтобы показать свой код друга.");
+      return;
+    }
+
+    try {
+      let user = currentUser;
+      if (!user.public_handle || !user.discovery_enabled) {
+        user = await authedApi<UserProfile>("/api/users/me", {
+          method: "PATCH",
+          body: JSON.stringify({
+            public_handle: user.public_handle || defaultFriendHandle(user),
+            discovery_enabled: true
+          })
+        });
+        setCurrentUser(user);
+        const nextTokens = { ...tokens, user };
+        setTokens(nextTokens);
+        saveTokens(nextTokens);
+      }
+
+      const code = friendCodeForUser(user);
+      const copied = await copyText(code);
+      setMessage(copied ? `Ваш код друга: ${code}. Код скопирован.` : `Ваш код друга: ${code}.`);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        clearExpiredSession();
+        return;
+      }
+      setMessage(error instanceof Error ? `Не удалось показать код: ${error.message}` : "Не удалось показать код друга.");
+    }
+  };
+
+  const addFriendByCode = async (rawCode: string) => {
+    if (!tokens) {
+      setMessage("Войдите, чтобы добавить друга.");
+      return false;
+    }
+    const code = normalizeFriendCode(rawCode);
+    if (code.length < 3) {
+      setMessage("Введите код друга.");
+      return false;
+    }
+
+    try {
+      const users = await authedApi<UserPage>(`/api/users/search?q=${encodeURIComponent(code)}&limit=10`);
+      const peer = users.items.find((user) => normalizeFriendCode(user.public_handle ?? "") === code);
+      if (!peer) {
+        setMessage("Пользователь с таким кодом не найден.");
+        return false;
+      }
+      if (peer.id === currentUser?.id) {
+        setMessage("Это ваш код. Отправьте его другу.");
+        return false;
+      }
+
+      const friendship = await authedApi<Friendship>("/api/friends", {
+        method: "POST",
+        body: JSON.stringify({ user_id: peer.id })
+      });
+      if (friendship.status === "accepted") {
+        setFriendships((current) => upsertFriendship(current, friendship));
+        setMessage(`${peer.name} уже у вас в друзьях.`);
+      } else {
+        setMessage(`Запрос дружбы отправлен: ${peer.name}.`);
+      }
+      return true;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        clearExpiredSession();
+        return false;
+      }
+      setMessage(error instanceof Error ? `Не удалось добавить друга: ${error.message}` : "Не удалось добавить друга.");
+      return false;
+    }
+  };
+
   const openEvent = async (event: EventSummary) => {
     setSelectedEventId(event.id);
     if (!tokens || event.status === "invite" || eventReceipts[event.id]) return;
@@ -542,6 +622,8 @@ export default function SplitAppPage() {
             onChatDraft={setChatDraft}
             onSendChat={sendSplitikMessage}
             isSplitikSending={isSplitikSending}
+            onShowFriendCode={showFriendCode}
+            onAddFriendByCode={addFriendByCode}
             onNavigate={navigate}
             onMessage={setMessage}
           />
@@ -738,6 +820,8 @@ function WorkspaceScreen({
   onChatDraft,
   onSendChat,
   isSplitikSending,
+  onShowFriendCode,
+  onAddFriendByCode,
   onNavigate,
   onMessage
 }: {
@@ -773,6 +857,8 @@ function WorkspaceScreen({
   onChatDraft: (value: string) => void;
   onSendChat: (event?: FormEvent<HTMLFormElement>) => void;
   isSplitikSending: boolean;
+  onShowFriendCode: () => void;
+  onAddFriendByCode: (code: string) => Promise<boolean>;
   onNavigate: (view: View) => void;
   onMessage: (message: string) => void;
 }) {
@@ -789,7 +875,9 @@ function WorkspaceScreen({
         {view === "home" ? (
           <HomeScreen events={events} owedToMe={owedToMe} iOwe={iOwe} onNavigate={onNavigate} onMessage={onMessage} onCreateEventOpen={onCreateEventOpen} />
         ) : null}
-        {view === "people" ? <PeopleScreen friendOptions={friendOptions} /> : null}
+        {view === "people" ? (
+          <PeopleScreen currentUser={currentUser} friendOptions={friendOptions} onShowFriendCode={onShowFriendCode} onAddFriendByCode={onAddFriendByCode} />
+        ) : null}
         {view === "profile" ? (
           <ProfileScreen currentUser={currentUser} owedToMe={owedToMe} iOwe={iOwe} permissionState={permissionState} onPermission={onPermission} />
         ) : null}
@@ -899,10 +987,32 @@ function QuickAction({ icon: Icon, label, onClick }: { icon: React.ElementType; 
   );
 }
 
-function PeopleScreen({ friendOptions }: { friendOptions: FriendOption[] }) {
+function PeopleScreen({
+  currentUser,
+  friendOptions,
+  onShowFriendCode,
+  onAddFriendByCode
+}: {
+  currentUser: UserProfile | null;
+  friendOptions: FriendOption[];
+  onShowFriendCode: () => void;
+  onAddFriendByCode: (code: string) => Promise<boolean>;
+}) {
   const [friendSearch, setFriendSearch] = useState("");
   const [friendCode, setFriendCode] = useState("");
+  const [isAddingFriend, setIsAddingFriend] = useState(false);
   const visibleFriends = (friendOptions.length ? friendOptions : fallbackFriends).filter((friend) => friend.name.toLowerCase().includes(friendSearch.trim().toLowerCase()));
+  const myCode = currentUser ? friendCodeForUser(currentUser) : "";
+  const addFriend = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsAddingFriend(true);
+    try {
+      const added = await onAddFriendByCode(friendCode);
+      if (added) setFriendCode("");
+    } finally {
+      setIsAddingFriend(false);
+    }
+  };
 
   return (
     <div className="grid gap-4">
@@ -910,21 +1020,35 @@ function PeopleScreen({ friendOptions }: { friendOptions: FriendOption[] }) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-black">Добавить друга по коду</p>
-            <p className="text-xs font-semibold text-slate-500">Введите код друга или покажите свой.</p>
+            <p className="text-xs font-semibold text-slate-500">
+              {myCode ? `Ваш код: ${myCode}` : "Введите код друга или покажите свой."}
+            </p>
           </div>
-          <span className="rounded-xl bg-[#eef1f7] px-3 py-2 text-xs font-black text-[#1f3d8f]">Мой код</span>
+          <button
+            type="button"
+            onClick={onShowFriendCode}
+            className="min-h-11 rounded-xl bg-[#eef1f7] px-3 py-2 text-xs font-black text-[#1f3d8f]"
+          >
+            Мой код
+          </button>
         </div>
-        <div className="flex gap-2">
+        <form className="flex gap-2" onSubmit={addFriend}>
           <input
             aria-label="Код друга"
             data-testid="friend-code-input"
             value={friendCode}
             onChange={(event) => setFriendCode(event.target.value)}
             className="min-h-11 flex-1 rounded-xl border border-slate-200 px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
-            placeholder="Например, ILYA-4821"
+            placeholder="Например, ilya_4821"
           />
-          <button type="button" className="min-h-11 rounded-xl bg-[#1f3d8f] px-4 text-sm font-black text-white">Добавить</button>
-        </div>
+          <button
+            type="submit"
+            disabled={isAddingFriend}
+            className="min-h-11 rounded-xl bg-[#1f3d8f] px-4 text-sm font-black text-white disabled:opacity-60"
+          >
+            {isAddingFriend ? "..." : "Добавить"}
+          </button>
+        </form>
       </div>
       <div className="flex items-center gap-2 rounded-2xl bg-white p-2">
         <Search className="ml-2 h-5 w-5 text-[#1f3d8f]" />
@@ -1550,6 +1674,30 @@ function friendshipsToOptions(friendships: Friendship[]): FriendOption[] {
       amount: 0,
       tone: "text-slate-500"
     }));
+}
+
+function normalizeFriendCode(code: string) {
+  return code.trim().replace(/^@+/, "").replace(/\s+/g, "_").toLowerCase();
+}
+
+function defaultFriendHandle(user: UserProfile) {
+  return `split_${user.id.replace(/-/g, "").slice(0, 8)}`;
+}
+
+function friendCodeForUser(user: UserProfile) {
+  return normalizeFriendCode(user.public_handle || defaultFriendHandle(user));
+}
+
+async function copyText(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return true;
+  }
+  return false;
+}
+
+function upsertFriendship(friendships: Friendship[], friendship: Friendship) {
+  return [friendship, ...friendships.filter((item) => item.id !== friendship.id)];
 }
 
 function eventWithAddedParticipants(event: EventSummary, userIds: string[]): EventSummary {
