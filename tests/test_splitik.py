@@ -489,6 +489,41 @@ def test_splitik_draft_does_not_change_state_until_commit(db, monkeypatch):
     assert db.events.count_documents({"name": "Ужин в Duo"}) == 1
 
 
+def test_splitik_event_draft_does_not_depend_on_llm_provider(db, monkeypatch):
+    seed_users(db)
+
+    def fake_reply(*, system_prompt, user_message, context):
+        raise HTTPException(status_code=502, detail="Splitik LLM provider returned an error.")
+
+    monkeypatch.setattr(splitik_llm, "generate_splitik_reply", fake_reply)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="general",
+            message="Создай событие. Мы с пашей ивановым ходили пить кофе в серф",
+        ),
+        USER_A,
+        request_id="req-draft-no-llm",
+    )
+
+    assert response["intent"] == "draft"
+    assert len(response["drafts"]) == 1
+    assert response["drafts"][0]["type"] == "create_event"
+    assert response["drafts"][0]["payload"]["name"] == (
+        "Мы с пашей ивановым ходили пить кофе в серф"
+    )
+    assert "черновик события" in response["assistant_message"].casefold()
+    assert db.events.count_documents({}) == 0
+
+    log = db.splitik_interactions.find_one({"request_id": "req-draft-no-llm"})
+    assert log is not None
+    assert log["status"] == "success"
+    assert log["intent"] == "draft"
+    assert log["model_ids"] == []
+    assert log["error"] is None
+
+
 def test_splitik_creates_receipt_draft_from_event_text_without_changing_money(db, monkeypatch):
     _mock_llm(monkeypatch)
     seed_event(db)
@@ -629,7 +664,7 @@ def test_splitik_sends_russian_prompt_and_session_state_to_llm(db, monkeypatch):
         schemas.SplitikMessageRequest(
             session_id=created["session_id"],
             mode="event",
-            message="Поменяй сумму на 1500 рублей",
+            message="Что сейчас в этом черновике?",
             entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
         ),
         USER_A,

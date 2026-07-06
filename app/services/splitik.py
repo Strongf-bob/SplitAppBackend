@@ -547,6 +547,43 @@ def _draft_questions(drafts: list[dict]) -> list[dict]:
     return questions
 
 
+def _draft_reply(drafts: list[dict]) -> str:
+    draft = drafts[0]
+    if draft["type"] == "create_event":
+        name = draft.get("payload", {}).get("name") or "новое событие"
+        return (
+            f"Создал черновик события **{name}**.\n\n"
+            "Проверь название и подтверди создание, когда все верно."
+        )
+    if draft["type"] == "create_receipt":
+        payload = draft.get("payload", {})
+        title = payload.get("title") or "чек"
+        amount_kopecks = int(payload.get("total_amount_kopecks") or 0)
+        amount_rubles = amount_kopecks / 100
+        reply = (
+            f"Создал черновик чека **{title}** на **{amount_rubles:g} ₽**.\n\n"
+            "Проверь участников, суммы и подтверди чек, когда все верно."
+        )
+        questions = _draft_questions(drafts)
+        if questions:
+            question_lines = "\n".join(f"- {question['text']}" for question in questions)
+            reply = f"{reply}\n\nНужно уточнить:\n{question_lines}"
+        return reply
+    return "Создал черновик. Проверь данные и подтверди, когда все верно."
+
+
+def _draft_suggested_actions(drafts: list[dict]) -> list[dict]:
+    return [
+        {
+            "type": "commit_draft",
+            "label": "Подтвердить",
+            "draft_id": draft["id"],
+        }
+        for draft in drafts
+        if draft.get("status") == "pending"
+    ]
+
+
 def _entry_point_summary(payload: schemas.SplitikMessageRequest) -> dict:
     entry_point = payload.entry_point
     if entry_point is None:
@@ -760,6 +797,76 @@ def send_splitik_message(
             mode=mode,
             tool_results=tool_results,
         )
+        if drafts:
+            reply = _draft_reply(drafts)
+            stage = "guardrail.assistant"
+            post_guardrail_decision = evaluate_assistant_message(
+                reply,
+                committed_resource=False,
+            )
+            if not post_guardrail_decision["allowed"]:
+                reply = post_guardrail_decision["message"]
+                guardrail_decision = post_guardrail_decision
+            now = utc_now()
+            intent = "draft"
+            if not guardrail_decision["allowed"]:
+                intent = "guardrail"
+            stage = "session.write"
+            db.splitik_sessions.update_one(
+                {"id": session["id"]},
+                {
+                    "$push": {
+                        "messages": {
+                            "id": message_id,
+                            "user_message": payload.message,
+                            "assistant_message": reply,
+                            "mode": mode,
+                            "created_at": now,
+                        }
+                    },
+                    "$set": {"updated_at": now, "mode": mode},
+                },
+            )
+            log_interaction(
+                db,
+                actor_user_id=actor_user_id,
+                session_id=session["id"],
+                message_id=message_id,
+                sanitized_user_message=payload.message,
+                intent=intent,
+                context_scope=mode,
+                assistant_message=reply,
+                guardrail_decision=guardrail_decision,
+                request_id=request_id,
+                status="success",
+                stage="completed",
+                model_ids=[],
+                context_summary=_context_summary(
+                    payload,
+                    mode=mode,
+                    context=context,
+                    tools=tools,
+                    drafts=drafts,
+                ),
+                tool_calls=[
+                    {"name": name, "status": "completed"} for name in context["tool_results"].keys()
+                ],
+                draft_ids=[str(draft["id"]) for draft in drafts],
+                latency_ms=round((time.monotonic() - started) * 1000, 2),
+            )
+            return {
+                "session_id": session["id"],
+                "message_id": message_id,
+                "assistant_message": reply,
+                "mode": mode,
+                "intent": intent,
+                "guardrail_decision": guardrail_decision,
+                "context_chips": chips,
+                "capabilities": capabilities,
+                "drafts": drafts,
+                "questions": questions,
+                "suggested_actions": _draft_suggested_actions(drafts),
+            }
         explanation_requested = _is_expense_explanation_request(payload.message)
         if explanation_requested:
             context["user_balance_summary"] = splitik_tools.read_user_balance_summary(
