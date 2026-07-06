@@ -552,6 +552,88 @@ def test_splitik_event_draft_uses_llm_candidate_instead_of_scripted_reply(db, mo
     assert log["error"] is None
 
 
+def test_splitik_event_draft_uses_recent_context_for_followup_creation(db, monkeypatch):
+    seed_users(db)
+    _mock_llm(monkeypatch)
+
+    first = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="general",
+            message="привет. мы с пашей ходили пить кофе в серф",
+        ),
+        USER_A,
+    )
+
+    candidate_calls = []
+
+    def fake_candidate(*, user_message, context):
+        candidate_calls.append({"user_message": user_message, "context": context})
+        return {
+            "model_role": "primary",
+            "model_id": "primary-model",
+            "content": {
+                "intent": "create_event",
+                "payload": {"name": "Кофе в Серф с Пашей"},
+                "assistant_message": (
+                    "Подготовил черновик события **Кофе в Серф с Пашей**.\n\n"
+                    "Чеки не добавляю. Проверь название и подтверди создание."
+                ),
+            },
+        }
+
+    monkeypatch.setattr(splitik_llm, "generate_event_draft_candidate", fake_candidate)
+
+    created = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            session_id=first["session_id"],
+            mode="general",
+            message="Ну ты просто создай событие. Не добавляй туда чеков",
+        ),
+        USER_A,
+    )
+
+    assert candidate_calls[0]["context"]["recent_messages"][0]["user_message"] == (
+        "привет. мы с пашей ходили пить кофе в серф"
+    )
+    assert created["intent"] == "draft"
+    assert created["drafts"][0]["payload"]["name"] == "Кофе в Серф с Пашей"
+    assert "Не добавляй туда чеков" not in created["drafts"][0]["payload"]["name"]
+    assert "Чеки не добавляю" in created["assistant_message"]
+
+
+def test_splitik_rejects_instruction_text_as_event_name(db, monkeypatch):
+    seed_users(db)
+    _mock_llm(monkeypatch)
+
+    def fake_candidate(*, user_message, context):
+        return {
+            "model_role": "primary",
+            "model_id": "primary-model",
+            "content": {
+                "intent": "create_event",
+                "payload": {"name": "Не добавляй туда чеков"},
+                "assistant_message": "Создал черновик события **Не добавляй туда чеков**.",
+            },
+        }
+
+    monkeypatch.setattr(splitik_llm, "generate_event_draft_candidate", fake_candidate)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="general",
+            message="Ну ты просто создай событие. Не добавляй туда чеков",
+        ),
+        USER_A,
+    )
+
+    assert response["intent"] == "chat"
+    assert response["drafts"] == []
+    assert db.splitik_drafts.count_documents({}) == 0
+
+
 def test_splitik_creates_receipt_draft_from_event_text_without_changing_money(db, monkeypatch):
     _mock_llm(monkeypatch)
     seed_event(db)
