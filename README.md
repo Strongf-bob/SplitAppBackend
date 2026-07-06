@@ -97,17 +97,20 @@ Grafana port и, если задан `GRAFANA_PUBLIC_DOMAIN`, public HTTPS proxy
 5. При необходимости изменить `GRAFANA_HOST_PORT`, если `3001` занят.
 6. Для публичной Grafana-ссылки указать `GRAFANA_PUBLIC_DOMAIN`, например
    `grafana.split-app.ru`, и направить DNS A/AAAA record на сервер.
-7. `COMPOSE_PROFILES=public-grafana docker compose up -d --build`, если нужен
-   публичный Grafana proxy; иначе `docker compose up -d --build`.
+7. Если на host уже есть reverse proxy на `443`, оставить
+   `GRAFANA_PUBLIC_PROXY_MODE=external` и проксировать домен на
+   `127.0.0.1:${GRAFANA_HOST_PORT:-3001}`. Если Compose должен сам владеть
+   `443`, поставить `GRAFANA_PUBLIC_PROXY_MODE=caddy` и запускать
+   `COMPOSE_PROFILES=public-grafana docker compose up -d --build`.
 8. `docker compose ps`
 
 API слушает `http://<server-ip>:${HOST_PORT:-8080}`. MongoDB data хранится в
 Docker volume `mongo-data` и не открывается наружу. Prometheus и Loki доступны
 только внутри Compose network. Grafana по умолчанию bind'ится на
 `127.0.0.1:${GRAFANA_HOST_PORT:-3001}`; используйте SSH tunnel или reverse proxy
-с auth вместо публикации observability ports. Public Grafana proxy публикует
-только `https://${GRAFANA_PUBLIC_DOMAIN}` и проксирует в контейнер Grafana; вход
-остается через `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`.
+с auth вместо публикации observability ports. Public Grafana доступ должен
+публиковать только `https://${GRAFANA_PUBLIC_DOMAIN}` и проксировать в Grafana;
+вход остается через `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`.
 
 Перед сменой портов на общем сервере проверьте listeners:
 
