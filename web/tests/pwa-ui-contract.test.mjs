@@ -49,6 +49,15 @@ test("real mobile app shell does not draw a fake phone around the app", () => {
   }
 });
 
+test("auth screen does not draw a fake iPhone notch or Dynamic Island", () => {
+  for (const fakeNotchMarker of ["Dynamic Island", "device-notch", "fake-notch", "notch", "aria-label=\"Dynamic Island\""]) {
+    assert.doesNotMatch(page, new RegExp(fakeNotchMarker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+  }
+
+  assert.doesNotMatch(page, /fixed\s+top-\d+\s+left-1\/2[^"]*rounded-full[^"]*(?:bg-black|bg-\[#000)/);
+  assert.doesNotMatch(page, /absolute\s+top-\d+\s+left-1\/2[^"]*rounded-full[^"]*(?:bg-black|bg-\[#000)/);
+});
+
 test("Yandex callback posts the backend login schema", () => {
   assert.match(api, /body: JSON\.stringify\(\{ yandex_token: accessToken \}\)/);
   assert.doesNotMatch(api, /provider: "yandex"/);
