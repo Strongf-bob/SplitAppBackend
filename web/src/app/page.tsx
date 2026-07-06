@@ -1037,12 +1037,22 @@ function AvatarStack({ count }: { count: number }) {
   );
 }
 
-function QuickAction({ icon: Icon, label, onClick }: { icon: React.ElementType; label: string; onClick: () => void }) {
+function QuickAction({
+  icon: Icon,
+  label,
+  onClick,
+  showBadge = false
+}: {
+  icon: React.ElementType;
+  label: string;
+  onClick: () => void;
+  showBadge?: boolean;
+}) {
   return (
     <Button type="button" onClick={onClick} variant="ghost" className="grid h-auto min-h-[132px] place-items-center rounded-2xl p-0 text-center text-[16px] font-bold leading-tight text-white hover:bg-white/10 hover:text-white">
       <span className="relative grid h-28 w-28 place-items-center rounded-full bg-[#111111]">
         <Icon className="h-12 w-12" strokeWidth={2.2} />
-        {label === "Входящие" ? <span className="absolute right-5 top-5 h-4 w-4 rounded-full bg-red-500" /> : null}
+        {showBadge ? <span className="absolute right-5 top-5 h-4 w-4 rounded-full bg-red-500" /> : null}
       </span>
       <span>{label}</span>
     </Button>
