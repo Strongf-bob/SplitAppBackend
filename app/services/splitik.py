@@ -288,6 +288,8 @@ def _event_draft_candidate(message: str, context: dict) -> dict | None:
     name = str(payload.get("name") or "").strip()
     if not name:
         return None
+    if _looks_like_invalid_event_name(name):
+        return None
     assistant_message = str(content.get("assistant_message") or "").strip()
     return {
         "name": name[:80],
@@ -313,6 +315,25 @@ def _looks_like_event_creation_request(message: str) -> bool:
         )
     )
     return has_event and has_create_verb
+
+
+def _looks_like_invalid_event_name(name: str) -> bool:
+    lowered = name.casefold()
+    instruction_markers = (
+        "не добавляй",
+        "не добавлять",
+        "не надо",
+        "просто создай",
+        "создай событие",
+        "добавь событие",
+    )
+    if any(marker in lowered for marker in instruction_markers):
+        return True
+    if "чек" in lowered and not any(
+        marker in lowered for marker in ("по чеку", "чекпоинт", "check")
+    ):
+        return True
+    return False
 
 
 def _receipt_clarifying_questions() -> list[dict]:
@@ -358,9 +379,18 @@ def _maybe_create_draft(
     if mode == "general":
         if not _looks_like_event_creation_request(payload.message):
             return []
+        recent_messages = splitik_tools.read_recent_session_messages(
+            db,
+            actor_user_id=actor_user_id,
+            session_id=session_id,
+            limit=6,
+        )
         event_candidate = _event_draft_candidate(
             payload.message,
-            context={"human_review_required": True},
+            context={
+                "human_review_required": True,
+                "recent_messages": recent_messages,
+            },
         )
         if not event_candidate:
             return []
