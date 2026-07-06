@@ -105,6 +105,27 @@ test("bottom navigation active tab stays readable with a liquid glass state", ()
   assert.doesNotMatch(page, /active && "bg-white\/22 text-white"/);
 });
 
+test("PWA surfaces are built on shadcn primitives instead of one-off controls", () => {
+  for (const primitive of [
+    /import \{ Button \} from "@\/components\/ui\/button"/,
+    /import \{ Card,\s*CardContent,\s*CardHeader,\s*CardTitle \} from "@\/components\/ui\/card"/,
+    /import \{ Input \} from "@\/components\/ui\/input"/
+  ]) {
+    assert.match(page, primitive);
+  }
+
+  assert.match(page, /<Button[^>]+onClick=\{onLogin\}/);
+  assert.match(page, /<Card[^>]+data-slot="content-panel"/);
+  assert.match(page, /<Input[^>]+data-testid="friend-code-input"/);
+});
+
+test("iOS mobile shell uses a safe-area glass tab bar instead of a generic nav slab", () => {
+  assert.match(page, /data-platform-nav="ios-tab-bar"/);
+  assert.match(page, /supports-\[backdrop-filter\]:bg-white\/62/);
+  assert.match(page, /pb-\[max\(env\(safe-area-inset-bottom\),12px\)\]/);
+  assert.doesNotMatch(page, /rounded-t-\[26px\]/);
+});
+
 test("Splitik chat keeps backend error detail visible to diagnose LLM failures", () => {
   assert.match(api, /class ApiError extends Error/);
   assert.match(page, /splitikErrorMessage/);

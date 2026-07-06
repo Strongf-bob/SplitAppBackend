@@ -21,6 +21,9 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   api,
   clearTokens,
@@ -732,7 +735,10 @@ function PhoneShell({
       <section className={cn("relative z-10", loggedIn && "pb-[calc(120px+env(safe-area-inset-bottom))]")}>{children}</section>
 
       {loggedIn ? (
-        <nav className="fixed inset-x-3 bottom-0 z-30 rounded-t-[26px] border border-white/38 bg-white/44 p-1.5 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_18px_46px_rgba(31,61,143,0.22)] backdrop-blur-[22px]">
+        <nav
+          data-platform-nav="ios-tab-bar"
+          className="fixed inset-x-3 bottom-0 z-30 rounded-[28px] border border-white/50 bg-white/72 p-1.5 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_18px_46px_rgba(31,61,143,0.22)] backdrop-blur-[22px] supports-[backdrop-filter]:bg-white/62"
+        >
           <div className="grid grid-cols-5 gap-1">
             {navItems.map((item) => (
               <BottomNavButton key={item.id} item={item} active={view === item.id} />
@@ -747,18 +753,21 @@ function PhoneShell({
 function BottomNavButton({ item, active }: { item: { id: View; label: string; icon: React.ElementType }; active: boolean }) {
   const Icon = item.icon;
   return (
-    <a
-      href={`#${item.id}`}
+    <Button
+      asChild
+      variant="ghost"
       className={cn(
-        "grid min-h-[54px] place-items-center rounded-[18px] px-1 text-[10px] font-bold text-[#1f3d8f]/62 transition-all duration-200 active:scale-[0.97]",
+        "grid min-h-[54px] place-items-center rounded-[18px] px-1 py-1 text-[10px] font-bold text-[#1f3d8f]/62 transition-all duration-200 active:scale-[0.97]",
         active
           ? "bg-white/72 text-[#1f3d8f] shadow-[0_8px_22px_rgba(31,61,143,0.18)] ring-1 ring-white/90"
           : "hover:bg-white/30 hover:text-[#1f3d8f]"
       )}
     >
-      <Icon className={cn("h-5 w-5", item.id === "splitik" && "h-8 w-8")} />
-      {item.id !== "splitik" ? <span>{item.label}</span> : null}
-    </a>
+      <a href={`#${item.id}`} aria-current={active ? "page" : undefined}>
+        <Icon className={cn("h-5 w-5", item.id === "splitik" && "h-8 w-8")} />
+        {item.id !== "splitik" ? <span>{item.label}</span> : null}
+      </a>
+    </Button>
   );
 }
 
@@ -773,13 +782,15 @@ function AuthScreen({ onLogin }: { onLogin: () => void }) {
       </div>
 
       <div className="grid gap-3">
-        <button
+        <Button
           type="button"
           onClick={onLogin}
-          className="min-h-14 rounded-2xl bg-white px-4 text-sm font-black text-[#111111] shadow-[0_18px_40px_rgba(0,0,0,0.18)]"
+          variant="secondary"
+          size="lg"
+          className="min-h-14 rounded-2xl bg-white px-4 text-sm font-black text-[#111111] shadow-[0_18px_40px_rgba(0,0,0,0.18)] hover:bg-white/92"
         >
           Войти через Яндекс
-        </button>
+        </Button>
         <p className="text-center text-[11px] font-semibold leading-4 text-white/62">Войдите, чтобы открыть события, друзей, чеки и Сплитика.</p>
       </div>
 
@@ -1033,12 +1044,12 @@ function PeopleScreen({
           </button>
         </div>
         <form className="flex gap-2" onSubmit={addFriend}>
-          <input
+          <Input
             aria-label="Код друга"
             data-testid="friend-code-input"
             value={friendCode}
             onChange={(event) => setFriendCode(event.target.value)}
-            className="min-h-11 flex-1 rounded-xl border border-slate-200 px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
+            className="min-h-11 flex-1 rounded-xl border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 focus-visible:ring-[#1f3d8f]"
             placeholder="Например, ilya_4821"
           />
           <button
@@ -1605,13 +1616,13 @@ function SegmentedControl({
 
 function ContentPanel({ title, action, children }: { title: string; action?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl bg-white p-3 shadow-sm">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-black">{title}</h3>
-        {action ? <span className="rounded-full bg-[#d2daec] px-3 py-1 text-[10px] font-black text-[#1f3d8f]">{action}</span> : null}
-      </div>
-      <div className="grid gap-2">{children}</div>
-    </section>
+    <Card data-slot="content-panel" className="rounded-2xl border-0 bg-white p-0 shadow-sm">
+      <CardHeader className="flex-row items-center justify-between gap-3 p-3 pb-2">
+        <CardTitle className="text-sm font-black">{title}</CardTitle>
+        {action ? <Badge className="rounded-full bg-[#d2daec] px-3 py-1 text-[10px] font-black text-[#1f3d8f]">{action}</Badge> : null}
+      </CardHeader>
+      <CardContent className="grid gap-2 p-3 pt-0">{children}</CardContent>
+    </Card>
   );
 }
 
