@@ -10,6 +10,7 @@ import {
   Bot,
   CalendarCheck,
   Camera,
+  ChevronDown,
   Home,
   Image as ImageIcon,
   Inbox,
@@ -782,25 +783,24 @@ function BottomNavButton({ item, active }: { item: { id: View; label: string; ic
 
 function AuthScreen({ onLogin }: { onLogin: () => void }) {
   return (
-    <section className="grid min-h-dvh content-between bg-[#1f3d8f] px-6 pb-[max(env(safe-area-inset-bottom),28px)] pt-[max(env(safe-area-inset-top),72px)] text-white">
-      <div className="grid content-center gap-4 pt-[18dvh]">
+    <section data-testid="svg-auth-screen" className="grid min-h-dvh bg-[#1f3d8f] px-6 pb-[max(env(safe-area-inset-bottom),32px)] pt-[max(env(safe-area-inset-top),24px)] text-white">
+      <div className="grid content-center gap-4 pb-[18dvh] pt-[20dvh]">
         <div>
-          <h1 className="text-7xl font-black leading-none tracking-normal">Split.</h1>
+          <h1 className="text-[76px] font-black leading-none tracking-normal sm:text-[88px]">Split.</h1>
           <p className="mt-3 text-base font-bold text-[#d2daec]">Делите счета поровну</p>
         </div>
       </div>
 
-      <div className="grid gap-3">
+      <div className="self-end">
         <Button
           type="button"
           onClick={onLogin}
           variant="secondary"
           size="lg"
-          className="min-h-14 rounded-2xl bg-white px-4 text-sm font-black text-[#111111] shadow-[0_18px_40px_rgba(0,0,0,0.18)] hover:bg-white/92"
+          className="min-h-16 w-full rounded-[26px] bg-white px-4 text-xl font-black text-[#111111] shadow-[0_18px_40px_rgba(0,0,0,0.18)] hover:bg-white/92"
         >
           Войти через Яндекс
         </Button>
-        <p className="text-center text-[11px] font-semibold leading-4 text-white/62">Войдите, чтобы открыть события, друзей, чеки и Сплитика.</p>
       </div>
 
     </section>
@@ -1063,6 +1063,40 @@ function ActivityAvatar({ children }: { children: React.ReactNode }) {
   return <span className="grid h-20 w-20 place-items-center rounded-full bg-[#c7cee0] text-[34px] font-black text-[#1f3d8f]">{children}</span>;
 }
 
+function SvgScreenFrame({
+  testId,
+  title,
+  action,
+  hero,
+  children,
+  sheetClassName
+}: {
+  testId: string;
+  title: string;
+  action?: React.ReactNode;
+  hero?: React.ReactNode;
+  children: React.ReactNode;
+  sheetClassName?: string;
+}) {
+  return (
+    <div data-testid={testId} className="-mx-3 -mt-3 grid min-h-[calc(100dvh-92px)] bg-[#1f3d8f] text-white">
+      <section className="grid gap-5 px-6 pb-8 pt-6">
+        <div className="flex min-h-12 items-center justify-between gap-4">
+          <h2 className="text-[32px] font-black leading-none tracking-normal">{title}</h2>
+          {action}
+        </div>
+        {hero}
+      </section>
+      <section
+        data-testid="svg-screen-sheet"
+        className={cn("min-h-[58dvh] rounded-t-[28px] bg-[#f5f5f7] px-5 pb-[calc(120px+env(safe-area-inset-bottom))] pt-7 text-slate-950", sheetClassName)}
+      >
+        {children}
+      </section>
+    </div>
+  );
+}
+
 function PeopleScreen({
   currentUser,
   friendOptions,
@@ -1076,6 +1110,7 @@ function PeopleScreen({
 }) {
   const [friendSearch, setFriendSearch] = useState("");
   const [friendCode, setFriendCode] = useState("");
+  const [isFriendCodeOpen, setIsFriendCodeOpen] = useState(false);
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const visibleFriends = (friendOptions.length ? friendOptions : fallbackFriends).filter((friend) => friend.name.toLowerCase().includes(friendSearch.trim().toLowerCase()));
   const myCode = currentUser ? friendCodeForUser(currentUser) : "";
@@ -1091,71 +1126,85 @@ function PeopleScreen({
   };
 
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-2 rounded-2xl bg-white p-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-black">Добавить друга по коду</p>
-            <p className="text-xs font-semibold text-slate-500">
-              {myCode ? `Ваш код: ${myCode}` : "Введите код друга или покажите свой."}
-            </p>
-          </div>
-          <Button
-            type="button"
-            onClick={onShowFriendCode}
-            variant="secondary"
-            className="min-h-11 rounded-xl bg-[#eef1f7] px-3 py-2 text-xs font-black text-[#1f3d8f] hover:bg-[#d2daec]"
-          >
-            Мой код
-          </Button>
-        </div>
-        <form className="flex gap-2" onSubmit={addFriend}>
+    <SvgScreenFrame
+      testId="friends-screen"
+      title="Друзья"
+      action={
+        <Button type="button" variant="ghost" className="grid h-14 w-14 place-items-center rounded-full bg-white/12 p-0 text-white hover:bg-white/20 hover:text-white">
+          <Search className="h-7 w-7" />
+        </Button>
+      }
+      hero={
+        <div className="flex items-center gap-2 rounded-[22px] bg-white/12 p-2 backdrop-blur">
+          <Search className="ml-3 h-5 w-5 text-white/80" />
           <Input
-            aria-label="Код друга"
-            data-testid="friend-code-input"
-            value={friendCode}
-            onChange={(event) => setFriendCode(event.target.value)}
-            className="min-h-11 flex-1 rounded-xl border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 focus-visible:ring-[#1f3d8f]"
-            placeholder="Например, ilya_4821"
+            aria-label="Поиск друзей"
+            value={friendSearch}
+            onChange={(event) => setFriendSearch(event.target.value)}
+            className="min-h-12 flex-1 rounded-2xl border-0 bg-white/0 px-2 text-base font-bold text-white placeholder:text-white/58 focus-visible:ring-white/40"
+            placeholder="Найти друга"
           />
-          <Button
-            type="submit"
-            disabled={isAddingFriend}
-            className="min-h-11 rounded-xl bg-[#1f3d8f] px-4 text-sm font-black text-white hover:bg-[#1f3d8f]/90 disabled:opacity-60"
-          >
-            {isAddingFriend ? "..." : "Добавить"}
-          </Button>
-        </form>
-      </div>
-      <div className="flex items-center gap-2 rounded-2xl bg-white p-2">
-        <Search className="ml-2 h-5 w-5 text-[#1f3d8f]" />
-        <Input
-          aria-label="Поиск друзей"
-          value={friendSearch}
-          onChange={(event) => setFriendSearch(event.target.value)}
-          className="min-h-11 flex-1 rounded-xl border-0 bg-[#f5f5f7] px-3 text-sm font-semibold text-slate-950 focus-visible:ring-[#1f3d8f]"
-          placeholder="Найти друга"
-        />
-      </div>
-      <ContentPanel title="Друзья">
+        </div>
+      }
+    >
+      <div className="grid gap-4">
+        <Button
+          data-testid="friend-code-toggle"
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            setIsFriendCodeOpen((open) => !open);
+            onShowFriendCode();
+          }}
+          className="flex min-h-12 w-fit items-center gap-2 justify-self-end rounded-full bg-[#d2d6e6] px-4 text-sm font-black text-[#1f3d8f] hover:bg-[#c5cadc]"
+        >
+          Добавить по коду
+          <ChevronDown className={cn("h-4 w-4 transition-transform", isFriendCodeOpen && "rotate-180")} />
+        </Button>
+        {isFriendCodeOpen ? (
+          <div data-testid="friend-code-panel" className="grid gap-3 rounded-[24px] bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-base font-black">Добавить друга по коду</p>
+                <p className="text-sm font-bold text-slate-500">{myCode ? `Ваш код: ${myCode}` : "Введите код друга или покажите свой."}</p>
+              </div>
+              <Badge className="rounded-full bg-[#eef1f7] px-3 py-2 text-xs font-black text-[#1f3d8f]">Мой код</Badge>
+            </div>
+            <form className="flex gap-2" onSubmit={addFriend}>
+              <Input
+                aria-label="Код друга"
+                data-testid="friend-code-input"
+                value={friendCode}
+                onChange={(event) => setFriendCode(event.target.value)}
+                className="min-h-12 flex-1 rounded-2xl border-slate-200 bg-white px-3 text-base font-bold text-slate-950 focus-visible:ring-[#1f3d8f]"
+                placeholder="Например, ILYA-4821"
+              />
+              <Button type="submit" disabled={isAddingFriend} className="min-h-12 rounded-2xl bg-[#1f3d8f] px-4 text-sm font-black text-white hover:bg-[#1f3d8f]/90 disabled:opacity-60">
+                {isAddingFriend ? "..." : "Добавить"}
+              </Button>
+            </form>
+          </div>
+        ) : null}
+        <div className="grid gap-0">
         {visibleFriends.map((friend) => (
           <Button
             key={friend.name}
             type="button"
             variant="outline"
-            className="grid h-auto w-full grid-cols-[40px_1fr_auto] items-center justify-stretch gap-2 rounded-xl border-[#c6cbdc] bg-white p-2 text-left hover:bg-[#f5f5f7]"
+            className="grid h-auto w-full grid-cols-[64px_1fr_auto] items-center justify-stretch gap-3 rounded-none border-0 border-b border-slate-200 bg-transparent px-0 py-5 text-left shadow-none hover:bg-white/45 last:border-b-0"
           >
             <Avatar>{friend.initials}</Avatar>
             <div>
-              <p className="text-sm font-black">{friend.name}</p>
-              <p className="text-xs text-slate-500">{friend.subtitle}</p>
+              <p className="text-[22px] font-black leading-tight">{friend.name}</p>
+              <p className="text-lg font-bold leading-tight text-slate-400">{friend.subtitle}</p>
             </div>
-            <span className={cn("text-xs font-black", friend.tone)}>{friend.amount > 0 ? "+" : ""}{friend.amount} ₽</span>
+            <span className={cn("text-[20px] font-black", friend.tone)}>{friend.amount > 0 ? "+" : ""}{friend.amount} ₽</span>
           </Button>
         ))}
-        {!visibleFriends.length ? <p className="py-4 text-center text-sm font-semibold text-slate-500">Ничего не найдено</p> : null}
-      </ContentPanel>
-    </div>
+          {!visibleFriends.length ? <p className="py-8 text-center text-base font-bold text-slate-500">Ничего не найдено</p> : null}
+        </div>
+      </div>
+    </SvgScreenFrame>
   );
 }
 
@@ -1231,7 +1280,13 @@ function EventsScreen({
       onAddReceipt={onAddReceipt}
     />
   ) : (
-    <div className="grid gap-4">
+    <SvgScreenFrame
+      testId="events-screen"
+      title="События"
+      action={
+        <Badge className="rounded-full bg-white/16 px-4 py-2 text-sm font-black text-white">{visible.length}</Badge>
+      }
+      hero={
       <SegmentedControl
         name="event-tab"
         items={[
@@ -1242,20 +1297,24 @@ function EventsScreen({
         active={activeTab}
         onChange={(tab) => onTab(tab as EventTab)}
       />
+      }
+    >
+      <div className="grid gap-3">
       {visible.map((event) => (
-        <Card key={event.id} className="overflow-hidden rounded-xl border-0 bg-white p-0 shadow-sm">
-          <Button type="button" variant="ghost" onClick={() => onOpenEvent(event)} className="grid h-auto min-h-[98px] w-full justify-stretch gap-3 rounded-xl p-4 text-left hover:bg-[#f5f5f7]">
+        <Card key={event.id} className="overflow-hidden rounded-[28px] border-0 bg-white p-0 shadow-sm">
+          <Button type="button" variant="ghost" onClick={() => onOpenEvent(event)} className="grid h-auto min-h-[112px] w-full justify-stretch gap-4 rounded-[28px] p-5 text-left hover:bg-white">
             <span className="flex items-center justify-between gap-3">
-              <span className="text-lg font-black">{eventTitle(event)}</span>
-              <span className="rounded-full bg-[#eef1f7] px-3 py-1 text-[11px] font-black text-[#1f3d8f]">Открыть</span>
+              <span className="text-[24px] font-black leading-tight">{eventTitle(event)}</span>
+              <span className="rounded-full bg-[#eef1f7] px-4 py-2 text-xs font-black text-[#1f3d8f]">Открыть</span>
             </span>
-            <span className="text-xs text-slate-500">
+            <span className="text-base font-bold text-slate-500">
               {event.participants_count ?? event.participants?.length ?? 0} участника · {money(event.total_kopecks ?? 0)}
             </span>
           </Button>
         </Card>
       ))}
-    </div>
+      </div>
+    </SvgScreenFrame>
   );
 }
 
@@ -1286,11 +1345,17 @@ function EventCreateScreen({
   };
 
   return (
-    <form data-testid="event-create-screen" onSubmit={onSubmit} className="grid gap-4">
+    <SvgScreenFrame
+      testId="event-create-screen"
+      title="Новое событие"
+      action={<BackPill onBack={onCancel} />}
+      hero={<p className="max-w-[280px] text-base font-bold leading-6 text-white/72">Название, участники и правила дележки в одном месте.</p>}
+    >
+    <form onSubmit={onSubmit} className="grid gap-4">
       <Card className="rounded-2xl border-0 bg-white p-0 shadow-sm">
         <CardHeader className="p-4">
           <CardTitle className="text-2xl font-black">Создание события</CardTitle>
-          <p className="mt-1 text-sm font-semibold text-slate-500">Название, участники и правила делёжки в одном месте.</p>
+          <p className="mt-1 text-sm font-semibold text-slate-500">Сразу добавьте друзей, которые участвуют в расходах.</p>
         </CardHeader>
       </Card>
       <Card className="grid gap-2 rounded-2xl border-0 bg-white p-3 shadow-sm">
@@ -1327,6 +1392,7 @@ function EventCreateScreen({
         <Button type="submit" className="min-h-12 rounded-xl bg-[#1f3d8f] px-4 text-sm font-black text-white hover:bg-[#1f3d8f]/90">Создать событие</Button>
       </div>
     </form>
+    </SvgScreenFrame>
   );
 }
 
@@ -1353,35 +1419,34 @@ function EventDetailScreen({
 
   if (event.status === "invite") {
     return (
-      <div data-testid="event-detail-screen" className="grid gap-4">
-        <Button type="button" variant="secondary" onClick={onBack} className="w-fit rounded-xl bg-white px-3 py-2 text-sm font-black text-[#1f3d8f] hover:bg-white/90">Назад к событиям</Button>
-        <Card className="grid gap-3 rounded-2xl border-0 bg-white p-4 shadow-sm">
-          <p className="text-2xl font-black">{eventTitle(event)}</p>
-          <p className="text-sm font-semibold text-slate-500">Предпросмотр приглашения. После принятия событие появится в активных.</p>
+      <SvgScreenFrame testId="event-detail-screen" title="Приглашение" action={<BackPill onBack={onBack} />}>
+        <Card className="grid gap-4 rounded-[28px] border-0 bg-white p-5 shadow-sm">
+          <p className="text-[28px] font-black leading-tight">{eventTitle(event)}</p>
+          <p className="text-base font-bold text-slate-500">Предпросмотр приглашения. После принятия событие появится в активных.</p>
           <div className="grid grid-cols-2 gap-2">
-            <Button type="button" variant="secondary" onClick={() => onInviteDecision(event, "decline")} className="min-h-11 rounded-xl bg-slate-100 text-sm font-black text-slate-700">Отказаться</Button>
-            <Button type="button" onClick={() => onInviteDecision(event, "accept")} className="min-h-11 rounded-xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90">Согласиться</Button>
+            <Button type="button" variant="secondary" onClick={() => onInviteDecision(event, "decline")} className="min-h-12 rounded-2xl bg-slate-100 text-sm font-black text-slate-700">Отказаться</Button>
+            <Button type="button" onClick={() => onInviteDecision(event, "accept")} className="min-h-12 rounded-2xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90">Согласиться</Button>
           </div>
         </Card>
-      </div>
+      </SvgScreenFrame>
     );
   }
 
   return (
-    <div data-testid="event-detail-screen" className="grid gap-4">
-      <Button type="button" variant="secondary" onClick={onBack} className="w-fit rounded-xl bg-white px-3 py-2 text-sm font-black text-[#1f3d8f] hover:bg-white/90">Назад к событиям</Button>
-      <Card className="grid gap-3 rounded-2xl border-0 bg-white p-4 shadow-sm">
+    <SvgScreenFrame testId="event-detail-screen" title="Событие" action={<BackPill onBack={onBack} />}>
+      <div className="grid gap-4">
+      <Card className="grid gap-4 rounded-[28px] border-0 bg-white p-5 shadow-sm">
         <div>
-          <p className="text-2xl font-black">{eventTitle(event)}</p>
-          <p className="text-sm font-semibold text-slate-500">{participantCount} участника · {money(event.total_kopecks ?? 0)}</p>
+          <p className="text-[28px] font-black leading-tight">{eventTitle(event)}</p>
+          <p className="text-base font-bold text-slate-500">{participantCount} участника · {money(event.total_kopecks ?? 0)}</p>
         </div>
-        <div className="grid gap-2 rounded-2xl bg-[#eef1f7] p-3">
+        <div className="grid gap-2 rounded-[24px] bg-[#eef1f7] p-4">
           <span className="text-xs font-black uppercase text-slate-500">Код события</span>
-          <span className="text-2xl font-black tracking-[0.18em] text-[#1f3d8f]">{inviteCode}</span>
+          <span className="text-[32px] font-black tracking-[0.18em] text-[#1f3d8f]">{inviteCode}</span>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <Button type="button" onClick={() => onCreateEventInvite(event)} className="min-h-12 rounded-xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90">Добавить друзей</Button>
-          <Button type="button" onClick={() => onAddReceipt(event)} className="min-h-12 rounded-xl bg-[#111111] text-sm font-black text-white hover:bg-[#111111]/90">Добавить чек</Button>
+          <Button type="button" onClick={() => onCreateEventInvite(event)} className="min-h-12 rounded-2xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90">Добавить друзей</Button>
+          <Button type="button" onClick={() => onAddReceipt(event)} className="min-h-12 rounded-2xl bg-[#111111] text-sm font-black text-white hover:bg-[#111111]/90">Добавить чек</Button>
         </div>
       </Card>
       <ContentPanel title="Участники">
@@ -1398,7 +1463,16 @@ function EventDetailScreen({
       <ContentPanel title="Чеки">
         <EventReceiptList receipts={receipts} />
       </ContentPanel>
-    </div>
+      </div>
+    </SvgScreenFrame>
+  );
+}
+
+function BackPill({ onBack }: { onBack: () => void }) {
+  return (
+    <Button type="button" variant="ghost" onClick={onBack} className="min-h-11 rounded-full bg-white/14 px-4 text-sm font-black text-white hover:bg-white/22 hover:text-white">
+      Назад
+    </Button>
   );
 }
 
@@ -1432,7 +1506,11 @@ function NotificationsScreen({
   onTab: (tab: NotificationTab) => void;
 }) {
   return (
-    <div className="grid gap-4">
+    <SvgScreenFrame
+      testId="notifications-screen"
+      title="Входящие"
+      action={<Badge className="rounded-full bg-white/16 px-4 py-2 text-sm font-black text-white">{notifications.incoming.length}</Badge>}
+      hero={
       <SegmentedControl
         name="notification-tab"
         items={[
@@ -1442,18 +1520,23 @@ function NotificationsScreen({
         active={activeTab}
         onChange={(tab) => onTab(tab as NotificationTab)}
       />
-      <ContentPanel title={activeTab === "incoming" ? "Новые действия" : "История"}>
+      }
+    >
+      <div className="grid gap-4">
+        <h3 className="text-[30px] font-black leading-none">{activeTab === "incoming" ? "Новые действия" : "История"}</h3>
+        <div className="grid gap-0 rounded-[28px] bg-white px-4 shadow-sm">
         {notifications[activeTab].map((item) => (
-          <div key={item.title} className="grid grid-cols-[1fr_auto] gap-2 rounded-xl bg-white p-3">
+          <div key={item.title} className="grid grid-cols-[1fr_auto] gap-4 border-b border-slate-200 py-5 last:border-b-0">
             <div>
-              <p className="text-sm font-black">{item.title}</p>
-              <p className="text-xs text-slate-500">{item.detail}</p>
+              <p className="text-[22px] font-black leading-tight">{item.title}</p>
+              <p className="text-lg font-bold leading-tight text-slate-400">{item.detail}</p>
             </div>
-            <Badge variant="outline">{item.badge}</Badge>
+            <Badge className="h-fit rounded-full bg-[#eef1f7] px-3 py-2 text-xs font-black text-[#1f3d8f]">{item.badge}</Badge>
           </div>
         ))}
-      </ContentPanel>
-    </div>
+        </div>
+      </div>
+    </SvgScreenFrame>
   );
 }
 
@@ -1481,8 +1564,11 @@ function ProfileScreen({
     .toUpperCase() || "S";
 
   return (
-    <div className="grid gap-4">
-      <div className="-mx-3 -mt-3 grid justify-items-center rounded-b-[24px] bg-[#1f3d8f] px-5 pb-8 pt-4 text-white">
+    <SvgScreenFrame
+      testId="profile-screen"
+      title="Профиль"
+      hero={
+      <div className="grid justify-items-center gap-4 py-2 text-center">
         <div className="grid h-28 w-28 place-items-center overflow-hidden rounded-full bg-[#bbb2d5] text-4xl font-black text-[#654da1]">
           {currentUser?.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -1491,8 +1577,15 @@ function ProfileScreen({
             initials
           )}
         </div>
+        <div>
+          <p className="text-[30px] font-black leading-tight">{profileName}</p>
+          <p className="text-base font-bold text-white/68">{profileEmail}</p>
+        </div>
       </div>
-      <ContentPanel title={profileName}>
+      }
+    >
+      <div className="grid gap-4">
+      <ContentPanel title="Баланс">
         <ProfileRow label="Аккаунт" value={profileEmail} tone="text-slate-700" />
         <ProfileRow label="Мне должны" value={money(owedToMe)} tone="text-emerald-600" />
         <ProfileRow label="Я должен" value={money(iOwe)} tone="text-red-600" />
@@ -1524,7 +1617,8 @@ function ProfileScreen({
           );
         })}
       </ContentPanel>
-    </div>
+      </div>
+    </SvgScreenFrame>
   );
 }
 
@@ -1551,9 +1645,30 @@ function SplitikScreen({
   isSending: boolean;
 }) {
   return (
-    <div data-testid="splitik-chat-shell" className="flex min-h-[calc(100dvh-190px)] flex-col pb-[112px]">
+    <SvgScreenFrame
+      testId="splitik-screen"
+      title="Сплитик"
+      sheetClassName="flex min-h-[calc(100dvh-148px)] flex-col pt-4"
+      hero={
+        <div className="grid justify-items-center py-1">
+          <div className="grid h-24 w-24 place-items-center rounded-[28px] border-4 border-white/90 bg-white/8 text-white">
+            <Bot className="h-12 w-12" strokeWidth={2.5} />
+          </div>
+        </div>
+      }
+    >
+      <div data-testid="splitik-chat-shell" className="flex min-h-0 flex-1 flex-col pb-[112px]">
       <div data-testid="splitik-message-list" className="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto px-1 pb-3 pt-2">
-        {messages.map((item) => (
+        <div data-testid="splitik-intro-card" className="mb-1 grid justify-items-center gap-3 rounded-[28px] bg-white px-4 py-5">
+          <div className="grid h-20 w-20 place-items-center rounded-[24px] border-4 border-[#111111] bg-[#f5f5f7] text-[#111111]">
+            <Bot className="h-10 w-10" strokeWidth={2.6} />
+          </div>
+          <div className="mr-auto grid gap-3">
+            <div className="w-fit max-w-[92%] rounded-[18px] bg-[#eef1f7] px-4 py-3 text-base font-black leading-6 text-slate-900">Привет! Я Сплитик, чем могу помочь?</div>
+            <div className="w-fit max-w-[92%] rounded-[18px] bg-[#eef1f7] px-4 py-3 text-base font-black leading-6 text-slate-900">Могу разобрать чек, спросить кто что ел или напомнить кому вернуть долг.</div>
+          </div>
+        </div>
+        {messages.slice(2).map((item) => (
           <div
             key={item.id}
             className={cn(
@@ -1588,6 +1703,7 @@ function SplitikScreen({
         </Button>
       </form>
     </div>
+    </SvgScreenFrame>
   );
 }
 

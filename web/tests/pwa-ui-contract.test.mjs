@@ -197,7 +197,7 @@ test("Splitik chat uses a messenger-style bottom anchored message list", () => {
 
 test("event cards navigate into a detail screen instead of expanding with plus icons", () => {
   assert.match(page, /function EventDetailScreen/);
-  assert.match(page, /data-testid="event-detail-screen"/);
+  assert.match(page, /testId="event-detail-screen"/);
   assert.match(page, /selectedEvent \? \(/);
   assert.doesNotMatch(page, /selectedEventId === event\.id \? "−" : "\+"/);
 });
@@ -237,7 +237,7 @@ test("event creation adds every selected friend as a participant", () => {
 
 test("home add action opens a dedicated event creation screen", () => {
   assert.match(page, /function EventCreateScreen/);
-  assert.match(page, /data-testid="event-create-screen"/);
+  assert.match(page, /testId="event-create-screen"/);
   assert.match(page, /Создание события/);
   assert.match(page, /Добавить участников/);
   assert.match(page, /onCreateEventOpen/);
@@ -271,4 +271,41 @@ test("friends screen exposes add-by-code affordance", () => {
   assert.match(page, /\/api\/users\/search\?q=/);
   assert.match(page, /\/api\/friends/);
   assert.match(page, /\/api\/users\/me/);
+});
+
+test("SVG auth screen is a clean first screen before Yandex OAuth", () => {
+  assert.match(page, /data-testid="svg-auth-screen"/);
+  assert.match(page, /grid min-h-dvh bg-\[#1f3d8f\]/);
+  assert.match(page, /text-\[76px\]/);
+  assert.match(page, /Делите счета поровну/);
+  assert.match(page, /Войти через Яндекс/);
+  assert.doesNotMatch(page, /Войдите, чтобы открыть события/);
+});
+
+test("shared SVG app screens use a blue header with a white bottom sheet", () => {
+  assert.match(page, /function SvgScreenFrame/);
+  for (const testId of [
+    "friends-screen",
+    "events-screen",
+    "notifications-screen",
+    "profile-screen",
+    "splitik-screen"
+  ]) {
+    assert.match(page, new RegExp(`testId="${testId}"`), `missing ${testId}`);
+  }
+  assert.match(page, /data-testid="svg-screen-sheet"/);
+  assert.match(page, /rounded-t-\[28px\]/);
+});
+
+test("friends add-by-code is a compact expandable control, not an always-open form", () => {
+  assert.match(page, /const \[isFriendCodeOpen, setIsFriendCodeOpen\] = useState\(false\)/);
+  assert.match(page, /data-testid="friend-code-toggle"/);
+  assert.match(page, /data-testid="friend-code-panel"/);
+  assert.match(page, /isFriendCodeOpen \? \(/);
+});
+
+test("Splitik keeps the SVG intro card while anchoring conversation to the composer", () => {
+  assert.match(page, /data-testid="splitik-intro-card"/);
+  assert.match(page, /flex min-h-0 flex-1 flex-col justify-end/);
+  assert.match(page, /fixed inset-x-4 bottom-\[calc\(86px\+env\(safe-area-inset-bottom\)\)\]/);
 });
