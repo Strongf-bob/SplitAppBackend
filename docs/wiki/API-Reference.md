@@ -178,6 +178,12 @@ Payment requests may include `deadline_at`; backend rejects deadlines less than 
 | --- | --- | --- | --- |
 | `GET` | `/api/events/{id}/activity` | Event activity/audit feed. | Paginated; виден active event members. |
 
+## Client reports
+
+| Method | Path | Назначение | Notes |
+| --- | --- | --- | --- |
+| `POST` | `/api/client-reports` | Принять PWA error/feedback report. | Endpoint доступен до полной авторизации; если Bearer token валиден, backend привязывает `actor_user_id`. Payload санитизируется и сохраняет только allowlist metadata без tokens/raw responses. |
+
 ## Health и operations
 
 | Method | Path | Назначение | Notes |

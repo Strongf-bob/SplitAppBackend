@@ -105,10 +105,45 @@ export type SplitikMessageResponse = {
   suggested_actions?: Array<{ type: string; label: string }>;
 };
 
+export type ClientReportScreen =
+  | "home"
+  | "events"
+  | "people"
+  | "notifications"
+  | "profile"
+  | "splitik"
+  | "receipts"
+  | "payments"
+  | "unknown";
+
+export type ClientReportPayload = {
+  kind: "automatic_error" | "manual_feedback";
+  severity?: "info" | "warning" | "error" | "critical";
+  screen?: ClientReportScreen;
+  message: string;
+  user_description?: string;
+  request_id?: string;
+  client_trace_id?: string;
+  app_version?: string;
+  url_path?: string;
+  user_agent?: string;
+  online?: boolean;
+  contact_allowed?: boolean;
+  contact?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type ClientReportResponse = {
+  id: string;
+  status: string;
+  friendly_message: string;
+};
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
-    message: string
+    message: string,
+    public readonly requestId?: string
   ) {
     super(message);
     this.name = "ApiError";
@@ -187,15 +222,16 @@ export async function api<T>(
     onTokensRefreshed?.(nextTokens);
     const retry = await fetchWithAuth(path, nextTokens, init);
     if (retry.ok) return (await retry.json()) as T;
-    throw new ApiError(retry.status, await responseErrorMessage(retry));
+    throw new ApiError(retry.status, await responseErrorMessage(retry), retry.headers.get("X-Request-ID") ?? undefined);
   }
 
-  throw new ApiError(response.status, await responseErrorMessage(response));
+  throw new ApiError(response.status, await responseErrorMessage(response), response.headers.get("X-Request-ID") ?? undefined);
 }
 
 async function fetchWithAuth(path: string, tokens: SplitAppTokens | null, init: RequestInit) {
   const headers = new Headers(init.headers);
   if (tokens?.access_token) headers.set("Authorization", `Bearer ${tokens.access_token}`);
+  if (!headers.has("X-Request-ID")) headers.set("X-Request-ID", crypto.randomUUID());
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   return fetch(path, { ...init, headers });
 }
@@ -206,8 +242,33 @@ async function refreshAccessToken(refreshToken: string): Promise<RefreshTokensRe
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refresh_token: refreshToken })
   });
-  if (!response.ok) throw new ApiError(response.status, await responseErrorMessage(response));
+  if (!response.ok) throw new ApiError(response.status, await responseErrorMessage(response), response.headers.get("X-Request-ID") ?? undefined);
   return (await response.json()) as RefreshTokensResponse;
+}
+
+export async function reportClientIssue(
+  payload: ClientReportPayload,
+  tokens: SplitAppTokens | null
+): Promise<ClientReportResponse> {
+  const client_trace_id = payload.client_trace_id || crypto.randomUUID();
+  const headers = new Headers({ "Content-Type": "application/json", "X-Request-ID": crypto.randomUUID() });
+  if (tokens?.access_token) headers.set("Authorization", `Bearer ${tokens.access_token}`);
+  const response = await fetch("/api/client-reports", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      ...payload,
+      client_trace_id,
+      url_path: payload.url_path ?? window.location.pathname + window.location.hash,
+      user_agent: payload.user_agent ?? navigator.userAgent,
+      online: payload.online ?? navigator.onLine,
+      metadata: sanitizeReportMetadata(payload.metadata ?? {})
+    })
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, await responseErrorMessage(response), response.headers.get("X-Request-ID") ?? undefined);
+  }
+  return (await response.json()) as ClientReportResponse;
 }
 
 async function responseErrorMessage(response: Response): Promise<string> {
@@ -219,6 +280,11 @@ async function responseErrorMessage(response: Response): Promise<string> {
     // Fall through to the HTTP status when the backend did not return JSON.
   }
   return `HTTP ${response.status}`;
+}
+
+function sanitizeReportMetadata(metadata: Record<string, unknown>) {
+  const allowed = new Set(["api_status", "api_path", "component", "screen_label", "action", "error_name"]);
+  return Object.fromEntries(Object.entries(metadata).filter(([key]) => allowed.has(key)));
 }
 
 function formatValidationDetail(items: unknown[]) {

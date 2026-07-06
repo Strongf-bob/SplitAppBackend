@@ -32,6 +32,19 @@ SettlementDeadlinePolicy = Literal[
 SafetyPolicy = Literal["explicit_review"]
 DisputeResourceType = Literal["receipt", "payment", "payment_request"]
 SplitikMode = Literal["general", "event", "receipt", "member"]
+ClientReportKind = Literal["automatic_error", "manual_feedback"]
+ClientReportSeverity = Literal["info", "warning", "error", "critical"]
+ClientReportScreen = Literal[
+    "home",
+    "events",
+    "people",
+    "notifications",
+    "profile",
+    "splitik",
+    "receipts",
+    "payments",
+    "unknown",
+]
 
 
 class User(BaseModel):
@@ -564,6 +577,52 @@ class AuditEventPage(BaseModel):
     limit: int
     offset: int
     total: int
+
+
+class ClientReportCreate(BaseModel):
+    kind: ClientReportKind
+    severity: ClientReportSeverity = "warning"
+    screen: ClientReportScreen = "unknown"
+    message: str = Field(min_length=1, max_length=500)
+    user_description: str | None = Field(default=None, max_length=2000)
+    request_id: str | None = Field(default=None, max_length=120)
+    client_trace_id: str | None = Field(default=None, max_length=120)
+    app_version: str | None = Field(default=None, max_length=80)
+    url_path: str | None = Field(default=None, max_length=240)
+    user_agent: str | None = Field(default=None, max_length=500)
+    online: bool | None = None
+    contact_allowed: bool = False
+    contact: str | None = Field(default=None, max_length=160)
+    metadata: dict = Field(default_factory=dict)
+
+
+class ClientReport(BaseModel):
+    id: UUID
+    kind: ClientReportKind
+    severity: ClientReportSeverity
+    screen: ClientReportScreen
+    message: str
+    user_description: str | None = None
+    request_id: str | None = None
+    client_trace_id: str | None = None
+    app_version: str | None = None
+    url_path: str | None = None
+    user_agent: str | None = None
+    online: bool | None = None
+    contact_allowed: bool
+    contact: str | None = None
+    metadata: dict
+    actor_user_id: UUID | None = None
+    client_ip: str | None = None
+    source: str
+    status: str
+    created_at: datetime
+
+
+class ClientReportCreateResponse(BaseModel):
+    id: UUID
+    status: str
+    friendly_message: str
 
 
 class EventBalance(BaseModel):

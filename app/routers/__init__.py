@@ -1,5 +1,6 @@
 from .audit import router as audit_router
 from .auth import router as auth_router
+from .client_reports import router as client_reports_router
 from .disputes import router as disputes_router
 from .events import router as events_router
 from .friends import router as friends_router
@@ -14,6 +15,7 @@ from .users import router as users_router
 __all__ = [
     "audit_router",
     "auth_router",
+    "client_reports_router",
     "disputes_router",
     "events_router",
     "friends_router",

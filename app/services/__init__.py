@@ -1,6 +1,7 @@
 from app.services.auth import login_with_yandex_oauth, rotate_refresh_token
 from app.services.audit import list_event_activity
 from app.services.balances import get_event_balance_explanations, get_event_balances
+from app.services.client_reports import create_client_report
 from app.services.contacts import import_user_contacts, list_user_contacts
 from app.services.disputes import create_dispute, list_event_disputes, resolve_dispute
 from app.services.events import (
@@ -91,6 +92,7 @@ __all__ = [
     "create_dispute",
     "create_event",
     "create_event_invite",
+    "create_client_report",
     "create_friend_request",
     "delete_event",
     "decline_event_invite",

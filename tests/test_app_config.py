@@ -7,12 +7,15 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from app import main as app_main
+from app.core import tokens
 from app.core.monitoring import metrics_response, monitor_db_operation, monitor_service_operation
 from app.core.monitoring import record_domain_event, refresh_database_metrics
-from app.dependencies import _is_internal_client, require_auth_token
+from app.dependencies import _is_internal_client, get_db, require_auth_token
 from app.main import configure_cors, configure_public_docs, configure_pwa, cors_allowed_origins
 from app.main import configure_exception_handlers, configure_request_logging
+from app.routers.client_reports import router as client_reports_router
 from app.routers.health import router as health_router
+from tests.conftest import USER_A
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -309,6 +312,71 @@ def test_pwa_uses_yandex_oauth_button_instead_of_manual_token_field():
     assert "access_token" in splitapp_api
     assert "POST" in splitapp_api
     assert "/api/login" in splitapp_api
+
+
+def test_pwa_contains_friendly_problem_report_surface():
+    app_page = (PROJECT_ROOT / "web" / "src" / "app" / "page.tsx").read_text()
+    splitapp_api = (PROJECT_ROOT / "web" / "src" / "lib" / "splitapp-api.ts").read_text()
+
+    assert "Сообщить о проблеме" in app_page
+    assert "Мы зафиксировали ошибку" in app_page
+    assert "Технические детали не показываются" not in app_page
+    assert "client_trace_id" in splitapp_api
+    assert "/api/client-reports" in splitapp_api
+
+
+def test_client_report_endpoint_accepts_guest_feedback(db):
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+    api.dependency_overrides[get_db] = lambda: db
+    api.include_router(client_reports_router)
+
+    client = TestClient(api)
+    response = client.post(
+        "/api/client-reports",
+        json={
+            "kind": "manual_feedback",
+            "severity": "warning",
+            "screen": "profile",
+            "message": "Пользователь отправил отзыв",
+            "user_description": "Не понял, где добавить чек.",
+            "metadata": {"screen_label": "Профиль", "Authorization": "Bearer secret"},
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "new"
+    assert body["friendly_message"] == "Спасибо. Мы получили сообщение и посмотрим его."
+    stored = db.client_feedback_reports.find_one({"id": body["id"]})
+    assert stored["actor_user_id"] is None
+    assert "Bearer secret" not in str(stored)
+
+
+def test_client_report_endpoint_links_authenticated_actor(db):
+    access_token, _ = tokens.create_access_token(USER_A)
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+    api.dependency_overrides[get_db] = lambda: db
+    api.include_router(client_reports_router)
+
+    client = TestClient(api)
+    response = client.post(
+        "/api/client-reports",
+        headers={"Authorization": f"Bearer {access_token}"},
+        json={
+            "kind": "automatic_error",
+            "severity": "error",
+            "screen": "events",
+            "message": "Не удалось синхронизировать данные.",
+            "request_id": "req-456",
+            "client_trace_id": "trace-456",
+            "metadata": {"api_status": 500, "api_path": "/api/events"},
+        },
+    )
+
+    assert response.status_code == 201
+    stored = db.client_feedback_reports.find_one({"id": response.json()["id"]})
+    assert stored["actor_user_id"] == USER_A
+    assert stored["request_id"] == "req-456"
 
 
 def test_operations_scrape_allows_private_and_loopback_clients():

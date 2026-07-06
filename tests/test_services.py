@@ -10,6 +10,7 @@ from app.services import (
     audit,
     auth,
     balances,
+    client_reports,
     contacts,
     disputes,
     events,
@@ -1953,6 +1954,72 @@ def test_event_delete_requires_transaction_support(db):
         raise AssertionError("Expected unsupported test transaction to fail")
 
     assert db.events.find_one({"id": EVENT_ID}) is not None
+
+
+def test_client_report_sanitizes_sensitive_metadata_and_stores_actor(db):
+    report = client_reports.create_client_report(
+        db,
+        schemas.ClientReportCreate(
+            kind="automatic_error",
+            severity="error",
+            screen="events",
+            message="Синхронизация не удалась",
+            user_description="Нажал создать событие и увидел ошибку.",
+            request_id="req-123",
+            client_trace_id="trace-123",
+            app_version="web-2026-07-07",
+            url_path="/app#events",
+            user_agent="Mozilla/5.0",
+            online=True,
+            metadata={
+                "api_status": 500,
+                "api_path": "/api/events",
+                "component": "EventsView",
+                "Authorization": "Bearer secret",
+                "access_token": "secret",
+                "raw_response": {"detail": "database password leaked"},
+            },
+        ),
+        actor_user_id=USER_A,
+        client_ip="127.0.0.1",
+    )
+
+    stored = db.client_feedback_reports.find_one({"id": report["id"]})
+
+    assert report["actor_user_id"] == USER_A
+    assert report["status"] == "new"
+    assert stored["metadata"] == {
+        "api_status": 500,
+        "api_path": "/api/events",
+        "component": "EventsView",
+    }
+    assert "Bearer secret" not in str(stored)
+    assert "database password leaked" not in str(stored)
+
+
+def test_client_report_supports_manual_guest_feedback_without_contact_leak(db):
+    report = client_reports.create_client_report(
+        db,
+        schemas.ClientReportCreate(
+            kind="manual_feedback",
+            severity="warning",
+            screen="profile",
+            message="Пользователь отправил отзыв",
+            user_description="Не понимаю, где добавить чек.",
+            contact_allowed=False,
+            contact="alice@example.com",
+            metadata={"screen_label": "Профиль"},
+        ),
+        actor_user_id=None,
+        client_ip="203.0.113.10",
+    )
+
+    stored = db.client_feedback_reports.find_one({"id": report["id"]})
+
+    assert stored["actor_user_id"] is None
+    assert stored["contact_allowed"] is False
+    assert stored["contact"] is None
+    assert stored["client_ip"] == "203.0.113.10"
 
 
 def test_refresh_token_rotation_issues_new_pair(db):
