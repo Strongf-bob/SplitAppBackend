@@ -692,42 +692,50 @@ function PhoneShell({
         <header className="sticky top-0 z-30 flex items-end justify-between gap-2 bg-[#1f3d8f] px-4 pb-4 pt-[max(env(safe-area-inset-top),16px)] text-white">
           <div className="flex min-w-0 items-center gap-2">
             {showBack ? (
-              <button
+              <Button
                 type="button"
                 aria-label="Назад"
                 onClick={onBack}
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/14 text-white"
+                variant="ghost"
+                size="sm"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/14 p-0 text-white hover:bg-white/20 hover:text-white"
               >
                 <ArrowLeft className="h-5 w-5" />
-              </button>
+              </Button>
             ) : null}
             <h2 className="truncate text-3xl font-black tracking-normal">{title}</h2>
           </div>
           <div className="flex shrink-0 gap-2">
-            <button
+            <Button
               type="button"
               aria-label="На главную"
               onClick={onHome}
-              className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white"
+              variant="ghost"
+              size="sm"
+              className="grid h-10 w-10 place-items-center rounded-full bg-white/14 p-0 text-white hover:bg-white/20 hover:text-white"
             >
               <Home className="h-5 w-5" />
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               aria-label="Входящие"
               onClick={onNotifications}
-              className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white"
+              variant="ghost"
+              size="sm"
+              className="grid h-10 w-10 place-items-center rounded-full bg-white/14 p-0 text-white hover:bg-white/20 hover:text-white"
             >
               <Inbox className="h-5 w-5" />
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               aria-label="Выйти"
               onClick={onLogout}
-              className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white"
+              variant="ghost"
+              size="sm"
+              className="grid h-10 w-10 place-items-center rounded-full bg-white/14 p-0 text-white hover:bg-white/20 hover:text-white"
             >
               <LogOut className="h-5 w-5" />
-            </button>
+            </Button>
           </div>
         </header>
       ) : null}
@@ -949,17 +957,17 @@ function HomeScreen({
           <span className="text-emerald-300">■ {money(owedToMe)}</span>
           <span className="text-rose-300">■ {money(iOwe)}</span>
         </div>
-        <button
+        <Button
           type="button"
           onClick={() => onNavigate("events")}
-          className="mt-4 grid w-full gap-2 rounded-2xl bg-[#111111] p-4 text-left"
+          className="mt-4 grid h-auto w-full justify-stretch gap-2 rounded-2xl bg-[#111111] p-4 text-left text-white hover:bg-[#111111]/90"
         >
           <span className="font-black">{eventTitle(mainEvent)}</span>
           <span className="flex items-center justify-between text-xs text-white/60">
             <span>{mainEvent.participants_count ?? 0} участника</span>
             <span>{money(mainEvent.total_kopecks ?? 0)}</span>
           </span>
-        </button>
+        </Button>
         <div className="mt-4 grid grid-cols-3 gap-3">
           <QuickAction icon={CheckCircle2} label="Синхрониз." onClick={() => onMessage("Данные синхронизированы.")} />
           <QuickAction icon={Plus} label="Добавить" onClick={onCreateEventOpen} />
@@ -989,12 +997,12 @@ function HomeScreen({
 
 function QuickAction({ icon: Icon, label, onClick }: { icon: React.ElementType; label: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="grid min-h-[74px] place-items-center rounded-2xl text-xs font-bold text-white">
+    <Button type="button" onClick={onClick} variant="ghost" className="grid min-h-[74px] place-items-center rounded-2xl text-xs font-bold text-white hover:bg-white/10 hover:text-white">
       <span className="grid h-11 w-11 place-items-center rounded-full bg-[#111111]">
         <Icon className="h-5 w-5" />
       </span>
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -1035,13 +1043,14 @@ function PeopleScreen({
               {myCode ? `Ваш код: ${myCode}` : "Введите код друга или покажите свой."}
             </p>
           </div>
-          <button
+          <Button
             type="button"
             onClick={onShowFriendCode}
-            className="min-h-11 rounded-xl bg-[#eef1f7] px-3 py-2 text-xs font-black text-[#1f3d8f]"
+            variant="secondary"
+            className="min-h-11 rounded-xl bg-[#eef1f7] px-3 py-2 text-xs font-black text-[#1f3d8f] hover:bg-[#d2daec]"
           >
             Мой код
-          </button>
+          </Button>
         </div>
         <form className="flex gap-2" onSubmit={addFriend}>
           <Input
@@ -1052,31 +1061,32 @@ function PeopleScreen({
             className="min-h-11 flex-1 rounded-xl border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 focus-visible:ring-[#1f3d8f]"
             placeholder="Например, ilya_4821"
           />
-          <button
+          <Button
             type="submit"
             disabled={isAddingFriend}
-            className="min-h-11 rounded-xl bg-[#1f3d8f] px-4 text-sm font-black text-white disabled:opacity-60"
+            className="min-h-11 rounded-xl bg-[#1f3d8f] px-4 text-sm font-black text-white hover:bg-[#1f3d8f]/90 disabled:opacity-60"
           >
             {isAddingFriend ? "..." : "Добавить"}
-          </button>
+          </Button>
         </form>
       </div>
       <div className="flex items-center gap-2 rounded-2xl bg-white p-2">
         <Search className="ml-2 h-5 w-5 text-[#1f3d8f]" />
-        <input
+        <Input
           aria-label="Поиск друзей"
           value={friendSearch}
           onChange={(event) => setFriendSearch(event.target.value)}
-          className="min-h-11 flex-1 rounded-xl bg-[#f5f5f7] px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
+          className="min-h-11 flex-1 rounded-xl border-0 bg-[#f5f5f7] px-3 text-sm font-semibold text-slate-950 focus-visible:ring-[#1f3d8f]"
           placeholder="Найти друга"
         />
       </div>
       <ContentPanel title="Друзья">
         {visibleFriends.map((friend) => (
-          <button
+          <Button
             key={friend.name}
             type="button"
-            className="grid w-full grid-cols-[40px_1fr_auto] items-center gap-2 rounded-xl border border-[#c6cbdc] bg-white p-2 text-left"
+            variant="outline"
+            className="grid h-auto w-full grid-cols-[40px_1fr_auto] items-center justify-stretch gap-2 rounded-xl border-[#c6cbdc] bg-white p-2 text-left hover:bg-[#f5f5f7]"
           >
             <Avatar>{friend.initials}</Avatar>
             <div>
@@ -1084,7 +1094,7 @@ function PeopleScreen({
               <p className="text-xs text-slate-500">{friend.subtitle}</p>
             </div>
             <span className={cn("text-xs font-black", friend.tone)}>{friend.amount > 0 ? "+" : ""}{friend.amount} ₽</span>
-          </button>
+          </Button>
         ))}
         {!visibleFriends.length ? <p className="py-4 text-center text-sm font-semibold text-slate-500">Ничего не найдено</p> : null}
       </ContentPanel>
@@ -1176,8 +1186,8 @@ function EventsScreen({
         onChange={(tab) => onTab(tab as EventTab)}
       />
       {visible.map((event) => (
-        <div key={event.id} className="overflow-hidden rounded-xl bg-white shadow-sm">
-          <button type="button" onClick={() => onOpenEvent(event)} className="grid min-h-[98px] w-full gap-3 p-4 text-left">
+        <Card key={event.id} className="overflow-hidden rounded-xl border-0 bg-white p-0 shadow-sm">
+          <Button type="button" variant="ghost" onClick={() => onOpenEvent(event)} className="grid h-auto min-h-[98px] w-full justify-stretch gap-3 rounded-xl p-4 text-left hover:bg-[#f5f5f7]">
             <span className="flex items-center justify-between gap-3">
               <span className="text-lg font-black">{eventTitle(event)}</span>
               <span className="rounded-full bg-[#eef1f7] px-3 py-1 text-[11px] font-black text-[#1f3d8f]">Открыть</span>
@@ -1185,8 +1195,8 @@ function EventsScreen({
             <span className="text-xs text-slate-500">
               {event.participants_count ?? event.participants?.length ?? 0} участника · {money(event.total_kopecks ?? 0)}
             </span>
-          </button>
-        </div>
+          </Button>
+        </Card>
       ))}
     </div>
   );
@@ -1220,21 +1230,23 @@ function EventCreateScreen({
 
   return (
     <form data-testid="event-create-screen" onSubmit={onSubmit} className="grid gap-4">
-      <div className="rounded-2xl bg-white p-4">
-        <p className="text-2xl font-black">Создание события</p>
-        <p className="mt-1 text-sm font-semibold text-slate-500">Название, участники и правила делёжки в одном месте.</p>
-      </div>
-      <div className="grid gap-2 rounded-2xl bg-white p-3">
+      <Card className="rounded-2xl border-0 bg-white p-0 shadow-sm">
+        <CardHeader className="p-4">
+          <CardTitle className="text-2xl font-black">Создание события</CardTitle>
+          <p className="mt-1 text-sm font-semibold text-slate-500">Название, участники и правила делёжки в одном месте.</p>
+        </CardHeader>
+      </Card>
+      <Card className="grid gap-2 rounded-2xl border-0 bg-white p-3 shadow-sm">
         <label className="text-xs font-black text-slate-500" htmlFor="event-name">Название события</label>
-        <input
+        <Input
           id="event-name"
           value={name}
           onChange={(event) => onName(event.target.value)}
-          className="min-h-12 rounded-xl border border-slate-200 px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
+          className="min-h-12 rounded-xl border-slate-200 bg-white px-3 text-sm font-semibold text-slate-950 focus-visible:ring-[#1f3d8f]"
           placeholder="Например, ужин с друзьями"
         />
-      </div>
-      <div className="grid gap-3 rounded-2xl bg-white p-3">
+      </Card>
+      <Card className="grid gap-3 rounded-2xl border-0 bg-white p-3 shadow-sm">
         <p className="text-sm font-black">Добавить участников</p>
         <div className="grid gap-2">
           {availableFriends.map((friend) => (
@@ -1251,11 +1263,11 @@ function EventCreateScreen({
           ))}
           {!availableFriends.length ? <p className="rounded-xl bg-[#f5f5f7] p-3 text-sm font-semibold text-slate-500">Пока нет друзей для добавления. Пригласите друга по коду после создания события.</p> : null}
         </div>
-        <button type="button" className="min-h-11 rounded-xl border border-[#c6cbdc] text-sm font-black text-[#1f3d8f]">Пригласить по коду после создания</button>
-      </div>
+        <Button type="button" variant="outline" className="min-h-11 rounded-xl border-[#c6cbdc] text-sm font-black text-[#1f3d8f]">Пригласить по коду после создания</Button>
+      </Card>
       <div className="grid grid-cols-2 gap-2">
-        <button type="button" onClick={onCancel} className="min-h-12 rounded-xl bg-white text-sm font-black text-slate-700">Отмена</button>
-        <button type="submit" className="min-h-12 rounded-xl bg-[#1f3d8f] px-4 text-sm font-black text-white">Создать событие</button>
+        <Button type="button" variant="secondary" onClick={onCancel} className="min-h-12 rounded-xl bg-white text-sm font-black text-slate-700 hover:bg-white/90">Отмена</Button>
+        <Button type="submit" className="min-h-12 rounded-xl bg-[#1f3d8f] px-4 text-sm font-black text-white hover:bg-[#1f3d8f]/90">Создать событие</Button>
       </div>
     </form>
   );
@@ -1285,23 +1297,23 @@ function EventDetailScreen({
   if (event.status === "invite") {
     return (
       <div data-testid="event-detail-screen" className="grid gap-4">
-        <button type="button" onClick={onBack} className="w-fit rounded-xl bg-white px-3 py-2 text-sm font-black text-[#1f3d8f]">Назад к событиям</button>
-        <div className="grid gap-3 rounded-2xl bg-white p-4">
+        <Button type="button" variant="secondary" onClick={onBack} className="w-fit rounded-xl bg-white px-3 py-2 text-sm font-black text-[#1f3d8f] hover:bg-white/90">Назад к событиям</Button>
+        <Card className="grid gap-3 rounded-2xl border-0 bg-white p-4 shadow-sm">
           <p className="text-2xl font-black">{eventTitle(event)}</p>
           <p className="text-sm font-semibold text-slate-500">Предпросмотр приглашения. После принятия событие появится в активных.</p>
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => onInviteDecision(event, "decline")} className="min-h-11 rounded-xl bg-slate-100 text-sm font-black text-slate-700">Отказаться</button>
-            <button type="button" onClick={() => onInviteDecision(event, "accept")} className="min-h-11 rounded-xl bg-[#1f3d8f] text-sm font-black text-white">Согласиться</button>
+            <Button type="button" variant="secondary" onClick={() => onInviteDecision(event, "decline")} className="min-h-11 rounded-xl bg-slate-100 text-sm font-black text-slate-700">Отказаться</Button>
+            <Button type="button" onClick={() => onInviteDecision(event, "accept")} className="min-h-11 rounded-xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90">Согласиться</Button>
           </div>
-        </div>
+        </Card>
       </div>
     );
   }
 
   return (
     <div data-testid="event-detail-screen" className="grid gap-4">
-      <button type="button" onClick={onBack} className="w-fit rounded-xl bg-white px-3 py-2 text-sm font-black text-[#1f3d8f]">Назад к событиям</button>
-      <div className="grid gap-3 rounded-2xl bg-white p-4">
+      <Button type="button" variant="secondary" onClick={onBack} className="w-fit rounded-xl bg-white px-3 py-2 text-sm font-black text-[#1f3d8f] hover:bg-white/90">Назад к событиям</Button>
+      <Card className="grid gap-3 rounded-2xl border-0 bg-white p-4 shadow-sm">
         <div>
           <p className="text-2xl font-black">{eventTitle(event)}</p>
           <p className="text-sm font-semibold text-slate-500">{participantCount} участника · {money(event.total_kopecks ?? 0)}</p>
@@ -1311,10 +1323,10 @@ function EventDetailScreen({
           <span className="text-2xl font-black tracking-[0.18em] text-[#1f3d8f]">{inviteCode}</span>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={() => onCreateEventInvite(event)} className="min-h-12 rounded-xl bg-[#1f3d8f] text-sm font-black text-white">Добавить друзей</button>
-          <button type="button" onClick={() => onAddReceipt(event)} className="min-h-12 rounded-xl bg-[#111111] text-sm font-black text-white">Добавить чек</button>
+          <Button type="button" onClick={() => onCreateEventInvite(event)} className="min-h-12 rounded-xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90">Добавить друзей</Button>
+          <Button type="button" onClick={() => onAddReceipt(event)} className="min-h-12 rounded-xl bg-[#111111] text-sm font-black text-white hover:bg-[#111111]/90">Добавить чек</Button>
         </div>
-      </div>
+      </Card>
       <ContentPanel title="Участники">
         {eventParticipants(event, friendOptions).map((participant) => (
           <div key={participant.id} className="grid grid-cols-[40px_1fr] items-center gap-2 rounded-xl bg-[#f5f5f7] p-2">
@@ -1434,11 +1446,12 @@ function ProfileScreen({
           const Icon = item.icon;
           const state = permissionState[item.id];
           return (
-            <button
+            <Button
               key={item.id}
               type="button"
               onClick={() => onPermission(item.id)}
-              className="grid grid-cols-[40px_1fr_auto] items-center gap-2 rounded-xl bg-white p-3 text-left"
+              variant="ghost"
+              className="grid h-auto w-full grid-cols-[40px_1fr_auto] items-center justify-stretch gap-2 rounded-xl bg-white p-3 text-left hover:bg-[#f5f5f7]"
             >
               <span className="grid h-10 w-10 place-items-center rounded-full bg-[#d2daec] text-[#1f3d8f]">
                 <Icon className="h-5 w-5" />
@@ -1450,7 +1463,7 @@ function ProfileScreen({
               <Badge variant="outline" className="text-[10px]">
                 {permissionLabel(state.status)}
               </Badge>
-            </button>
+            </Button>
           );
         })}
       </ContentPanel>
@@ -1500,22 +1513,22 @@ function SplitikScreen({
         data-testid="splitik-composer"
         className="fixed inset-x-4 bottom-[calc(86px+env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-[calc(100vw-2rem)] gap-2 rounded-2xl bg-white p-2 shadow-[0_14px_36px_rgba(15,23,42,0.18)]"
       >
-        <input
+        <Input
           aria-label="Сообщение Сплитику"
           data-testid="splitik-message-input"
-          className="min-h-12 flex-1 rounded-xl border border-slate-200 px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
+          className="min-h-12 flex-1 rounded-xl border-slate-200 bg-white px-3 text-sm text-slate-950 focus-visible:ring-[#1f3d8f]"
           placeholder="Напишите сообщение..."
           value={draft}
           onChange={(event) => onDraft(event.target.value)}
         />
-        <button
+        <Button
           type="submit"
           aria-label="Отправить Сплитику"
           disabled={isSending}
-          className="grid h-12 w-12 place-items-center rounded-xl bg-[#1f3d8f] text-white disabled:opacity-60"
+          className="grid h-12 w-12 place-items-center rounded-xl bg-[#1f3d8f] p-0 text-white hover:bg-[#1f3d8f]/90 disabled:opacity-60"
         >
           {isSending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <Send className="h-5 w-5" />}
-        </button>
+        </Button>
       </form>
     </div>
   );
@@ -1601,14 +1614,15 @@ function SegmentedControl({
   return (
     <div data-testid={name} className="grid grid-cols-[repeat(var(--items),minmax(0,1fr))] gap-1 rounded-2xl bg-white p-1" style={{ "--items": items.length } as CSSProperties}>
       {items.map(([id, label]) => (
-        <button
+        <Button
           key={id}
           type="button"
           onClick={() => onChange(id)}
-          className={cn("min-h-10 rounded-xl px-2 text-xs font-black text-slate-500", active === id && "bg-[#f5f5f7] text-[#111111] shadow-sm")}
+          variant="ghost"
+          className={cn("min-h-10 rounded-xl px-2 text-xs font-black text-slate-500 hover:bg-[#f5f5f7]", active === id && "bg-[#f5f5f7] text-[#111111] shadow-sm")}
         >
           {label}
-        </button>
+        </Button>
       ))}
     </div>
   );
