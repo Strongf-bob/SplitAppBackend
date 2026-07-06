@@ -158,11 +158,33 @@ services:
     networks:
       - backend
 
+  grafana-public-proxy:
+    image: caddy:2.8.4
+    container_name: splitapp-backend-grafana-public-proxy
+    restart: unless-stopped
+    profiles:
+      - public-grafana
+    environment:
+      GRAFANA_PUBLIC_DOMAIN: "${GRAFANA_PUBLIC_DOMAIN:-}"
+    ports:
+      - "${GRAFANA_PUBLIC_HTTP_PORT:-80}:80"
+      - "${GRAFANA_PUBLIC_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./deploy/observability/grafana/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - grafana
+    networks:
+      - backend
+
 volumes:
   mongo-data:
   prometheus-data:
   loki-data:
   grafana-data:
+  caddy-data:
+  caddy-config:
 
 networks:
   backend:

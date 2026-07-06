@@ -162,6 +162,10 @@ Grafana:
 - `GRAFANA_HOST_PORT` — default `3001`.
 - `GRAFANA_ADMIN_USER`.
 - `GRAFANA_ADMIN_PASSWORD` — required на сервере.
+- `GRAFANA_PUBLIC_DOMAIN` — optional public HTTPS hostname for Grafana, for
+  example `grafana.split-app.ru`.
+- `GRAFANA_PUBLIC_HTTP_PORT` / `GRAFANA_PUBLIC_HTTPS_PORT` — default `80` /
+  `443` for the public Grafana proxy.
 
 ## Metrics
 
@@ -172,15 +176,20 @@ Prometheus metrics:
 В Docker Compose Prometheus скрейпит endpoint внутри private network с
 `METRICS_ACCESS_TOKEN`. Prometheus и Loki не публикуются на host. Grafana
 публикуется только на `${GRAFANA_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_HOST_PORT:-3001}`.
+Если `GRAFANA_PUBLIC_DOMAIN` задан, дополнительно стартует Compose profile
+`public-grafana` с Caddy proxy: наружу публикуется только
+`https://${GRAFANA_PUBLIC_DOMAIN}`, а Prometheus, Loki и `/api/metrics` остаются
+доступны только внутри private network.
 
 Перед ручной сменой портов проверьте listeners:
 
 ```bash
-ss -ltnp | grep -E ':(${HOST_PORT:-8080}|${GRAFANA_HOST_PORT:-3001})'
+ss -ltnp | grep -E ':(${HOST_PORT:-8080}|${GRAFANA_HOST_PORT:-3001}|80|443)'
 ```
 
 Если нужен публичный доступ к Grafana, используйте reverse proxy с auth/TLS или
-SSH tunnel. Не публикуйте `/api/metrics`, Prometheus или Loki напрямую наружу.
+SSH tunnel. Встроенный public proxy использует Grafana login и TLS от Caddy. Не
+публикуйте `/api/metrics`, Prometheus или Loki напрямую наружу.
 
 Dashboard `SplitApp Backend` включает RPS, 5xx error ratio, p50/p95/p99 latency,
 slow endpoints, service/db operations и API logs через Loki.
