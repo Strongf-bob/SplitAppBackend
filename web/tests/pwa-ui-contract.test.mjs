@@ -217,4 +217,9 @@ test("friends screen exposes add-by-code affordance", () => {
   assert.match(page, /Добавить друга по коду/);
   assert.match(page, /friend-code-input/);
   assert.match(page, /Мой код/);
+  assert.match(page, /onShowFriendCode/);
+  assert.match(page, /onAddFriendByCode/);
+  assert.match(page, /\/api\/users\/search\?q=/);
+  assert.match(page, /\/api\/friends/);
+  assert.match(page, /\/api\/users\/me/);
 });

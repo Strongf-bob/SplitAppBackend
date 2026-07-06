@@ -24,6 +24,13 @@ export type UserProfile = {
   first_name?: string | null;
   last_name?: string | null;
   avatar_url?: string | null;
+  public_handle?: string | null;
+  discovery_enabled?: boolean;
+};
+
+export type UserPage = {
+  items: UserProfile[];
+  total: number;
 };
 
 export type Friendship = {
