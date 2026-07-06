@@ -4,16 +4,18 @@ import { CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useS
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft,
+  ArrowDown,
+  ArrowUp,
   Bell,
   Bot,
   CalendarCheck,
   Camera,
-  CheckCircle2,
   Home,
   Image as ImageIcon,
   Inbox,
   LogOut,
   Plus,
+  ScanLine,
   Search,
   Send,
   User,
@@ -628,7 +630,6 @@ export default function SplitAppPage() {
             onShowFriendCode={showFriendCode}
             onAddFriendByCode={addFriendByCode}
             onNavigate={navigate}
-            onMessage={setMessage}
           />
         </PhoneShell>
       )}
@@ -841,8 +842,7 @@ function WorkspaceScreen({
   isSplitikSending,
   onShowFriendCode,
   onAddFriendByCode,
-  onNavigate,
-  onMessage
+  onNavigate
 }: {
   view: View;
   events: EventSummary[];
@@ -879,7 +879,6 @@ function WorkspaceScreen({
   onShowFriendCode: () => void;
   onAddFriendByCode: (code: string) => Promise<boolean>;
   onNavigate: (view: View) => void;
-  onMessage: (message: string) => void;
 }) {
   return (
     <AnimatePresence mode="wait">
@@ -892,7 +891,7 @@ function WorkspaceScreen({
         transition={{ duration: 0.2 }}
       >
         {view === "home" ? (
-          <HomeScreen events={events} owedToMe={owedToMe} iOwe={iOwe} onNavigate={onNavigate} onMessage={onMessage} onCreateEventOpen={onCreateEventOpen} />
+          <HomeScreen events={events} owedToMe={owedToMe} iOwe={iOwe} onNavigate={onNavigate} onCreateEventOpen={onCreateEventOpen} />
         ) : null}
         {view === "people" ? (
           <PeopleScreen currentUser={currentUser} friendOptions={friendOptions} onShowFriendCode={onShowFriendCode} onAddFriendByCode={onAddFriendByCode} />
@@ -938,72 +937,120 @@ function HomeScreen({
   owedToMe,
   iOwe,
   onNavigate,
-  onMessage,
   onCreateEventOpen
 }: {
   events: EventSummary[];
   owedToMe: number;
   iOwe: number;
   onNavigate: (view: View) => void;
-  onMessage: (message: string) => void;
   onCreateEventOpen: () => void;
 }) {
   const mainEvent = events?.[0] ?? fallbackEvents[0];
+  const balance = (owedToMe || 0) - (iOwe || 0);
   return (
-    <div className="grid gap-4">
-      <section className="-mx-3 -mt-3 rounded-b-[24px] bg-[#1f3d8f] px-5 pb-5 pt-2 text-white">
-        <p className="text-center text-4xl font-black">{money((owedToMe || 0) - (iOwe || 0))}</p>
-        <div className="mt-2 flex justify-center gap-4 text-xs font-bold">
-          <span className="text-emerald-300">■ {money(owedToMe)}</span>
-          <span className="text-rose-300">■ {money(iOwe)}</span>
+    <div data-testid="home-balance-screen" className="-mx-3 -mt-3 grid min-h-[calc(100dvh-92px)] content-start bg-[#1f3d8f] text-white">
+      <section className="px-5 pb-9 pt-8">
+        <p className="text-center text-[72px] font-black leading-none tracking-normal">{money(balance)}</p>
+        <div className="mt-7 flex justify-center gap-5 text-[22px] font-black leading-none">
+          <span className="inline-flex items-center gap-2">
+            <span className="grid h-9 w-9 place-items-center rounded-md bg-emerald-600 text-emerald-300">
+              <ArrowUp className="h-7 w-7" strokeWidth={3.2} />
+            </span>
+            {money(owedToMe)}
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <span className="grid h-9 w-9 place-items-center rounded-md bg-red-700 text-red-500">
+              <ArrowDown className="h-7 w-7" strokeWidth={3.2} />
+            </span>
+            {money(iOwe)}
+          </span>
         </div>
         <Button
+          data-testid="home-event-card"
           type="button"
           onClick={() => onNavigate("events")}
-          className="mt-4 grid h-auto w-full justify-stretch gap-2 rounded-2xl bg-[#111111] p-4 text-left text-white hover:bg-[#111111]/90"
+          className="mt-8 grid h-auto min-h-[174px] w-full justify-stretch gap-4 rounded-[32px] bg-[#111111] px-9 py-7 text-left text-white hover:bg-[#111111]/92"
         >
-          <span className="font-black">{eventTitle(mainEvent)}</span>
-          <span className="flex items-center justify-between text-xs text-white/60">
-            <span>{mainEvent.participants_count ?? 0} участника</span>
-            <span>{money(mainEvent.total_kopecks ?? 0)}</span>
+          <span className="text-[28px] font-black leading-tight">{eventTitle(mainEvent)}</span>
+          <span className="flex items-end justify-between gap-3">
+            <AvatarStack count={mainEvent.participants_count ?? mainEvent.participants?.length ?? 0} />
+            <span className="pb-1 text-[26px] font-black text-white/38">{money(mainEvent.total_kopecks ?? 0)}</span>
           </span>
         </Button>
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <QuickAction icon={CheckCircle2} label="Синхрониз." onClick={() => onMessage("Данные синхронизированы.")} />
-          <QuickAction icon={Plus} label="Добавить" onClick={onCreateEventOpen} />
+        <div className="mt-12 grid grid-cols-3 gap-4">
+          <QuickAction icon={ScanLine} label="Сканировать чек" onClick={() => onNavigate("splitik")} />
+          <QuickAction icon={Plus} label="Добавить платеж" onClick={onCreateEventOpen} />
           <QuickAction icon={Inbox} label="Входящие" onClick={() => onNavigate("notifications")} />
         </div>
       </section>
 
-      <ContentPanel title="Активность" action="Все">
+      <section className="rounded-t-[28px] bg-[#f5f5f7] px-7 pb-[calc(120px+env(safe-area-inset-bottom))] pt-8 text-slate-950">
+        <div className="mb-7 flex items-center justify-between gap-4">
+          <h3 className="text-[30px] font-black leading-none">Активность</h3>
+          <Badge className="rounded-full bg-[#d2d6e6] px-5 py-1.5 text-lg font-black text-[#1f3d8f]">Все</Badge>
+        </div>
+        <div className="grid gap-0">
         {[
           ["Алина добавила Ужин", "Карпаты", "-1488 ₽", "text-red-600"],
           ["Максим вернул долг", "Перевод сегодня", "+650 ₽", "text-emerald-600"],
           ["Иван создал событие", "Новое событие 3 мин", "-", "text-slate-500"]
         ].map(([title, detail, amount, tone]) => (
-          <div key={title} className="grid grid-cols-[40px_1fr_auto] items-center gap-2 rounded-xl p-2">
-            <Avatar>{title[0]}</Avatar>
+          <div key={title} className="grid grid-cols-[92px_1fr_auto] items-center gap-3 border-b border-slate-200 py-4 last:border-b-0">
+            <ActivityAvatar>{title[0]}</ActivityAvatar>
             <div>
-              <p className="text-sm font-black">{title}</p>
-              <p className="text-xs text-slate-500">{detail}</p>
+              <p className="text-[24px] font-black leading-tight">{title}</p>
+              <p className="text-[21px] font-bold leading-tight text-slate-400">{detail}</p>
             </div>
-            <span className={cn("text-xs font-black", tone)}>{amount}</span>
+            <span className={cn("text-[24px] font-black", tone)}>{amount}</span>
           </div>
         ))}
-      </ContentPanel>
+        </div>
+      </section>
     </div>
+  );
+}
+
+function AvatarStack({ count }: { count: number }) {
+  const visible = fallbackFriends.slice(0, 3);
+  const overflow = Math.max(0, count - visible.length);
+  return (
+    <span className="flex items-center pl-1">
+      {visible.map((friend, index) => (
+        <span
+          key={friend.id}
+          className={cn(
+            "-ml-2 grid h-16 w-16 place-items-center rounded-full border-2 border-[#111111] text-[24px] font-black",
+            index === 0 && "ml-0 bg-[#bbb2d5] text-[#654da1]",
+            index === 1 && "bg-[#d8d9e4] text-[#1f3d8f]",
+            index === 2 && "bg-[#c9d0e2] text-[#0645d8]"
+          )}
+        >
+          {friend.initials}
+        </span>
+      ))}
+      {overflow ? (
+        <span className="-ml-2 grid h-16 w-16 place-items-center rounded-full border-2 border-[#111111] bg-slate-500 text-[22px] font-black text-white">
+          +{overflow}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
 function QuickAction({ icon: Icon, label, onClick }: { icon: React.ElementType; label: string; onClick: () => void }) {
   return (
-    <Button type="button" onClick={onClick} variant="ghost" className="grid min-h-[74px] place-items-center rounded-2xl text-xs font-bold text-white hover:bg-white/10 hover:text-white">
-      <span className="grid h-11 w-11 place-items-center rounded-full bg-[#111111]">
-        <Icon className="h-5 w-5" />
+    <Button type="button" onClick={onClick} variant="ghost" className="grid h-auto min-h-[132px] place-items-center rounded-2xl p-0 text-center text-[16px] font-bold leading-tight text-white hover:bg-white/10 hover:text-white">
+      <span className="relative grid h-28 w-28 place-items-center rounded-full bg-[#111111]">
+        <Icon className="h-12 w-12" strokeWidth={2.2} />
+        {label === "Входящие" ? <span className="absolute right-5 top-5 h-4 w-4 rounded-full bg-red-500" /> : null}
       </span>
-      {label}
+      <span>{label}</span>
     </Button>
   );
+}
+
+function ActivityAvatar({ children }: { children: React.ReactNode }) {
+  return <span className="grid h-20 w-20 place-items-center rounded-full bg-[#c7cee0] text-[34px] font-black text-[#1f3d8f]">{children}</span>;
 }
 
 function PeopleScreen({
