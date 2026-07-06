@@ -164,8 +164,7 @@ Grafana:
 - `GRAFANA_ADMIN_PASSWORD` — required на сервере.
 - `GRAFANA_PUBLIC_DOMAIN` — optional public HTTPS hostname for Grafana, for
   example `grafana.split-app.ru`.
-- `GRAFANA_PUBLIC_HTTP_PORT` / `GRAFANA_PUBLIC_HTTPS_PORT` — default `80` /
-  `443` for the public Grafana proxy.
+- `GRAFANA_PUBLIC_HTTPS_PORT` — default `443` for the public Grafana proxy.
 
 ## Metrics
 
@@ -184,7 +183,7 @@ Prometheus metrics:
 Перед ручной сменой портов проверьте listeners:
 
 ```bash
-ss -ltnp | grep -E ':(${HOST_PORT:-8080}|${GRAFANA_HOST_PORT:-3001}|80|443)'
+ss -ltnp | grep -E ':(${HOST_PORT:-8080}|${GRAFANA_HOST_PORT:-3001}|443)'
 ```
 
 Если нужен публичный доступ к Grafana, используйте reverse proxy с auth/TLS или
