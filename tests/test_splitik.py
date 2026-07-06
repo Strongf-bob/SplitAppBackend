@@ -31,6 +31,28 @@ def _mock_llm(monkeypatch):
     return calls
 
 
+def _mock_event_draft_candidate(monkeypatch, *, name="Кофе в Серф с Пашей"):
+    calls = []
+
+    def fake_candidate(*, user_message, context):
+        calls.append({"user_message": user_message, "context": context})
+        return {
+            "model_role": "primary",
+            "model_id": "primary-model",
+            "content": {
+                "intent": "create_event",
+                "payload": {"name": name},
+                "assistant_message": (
+                    f"Я подготовил черновик события **{name}**.\n\n"
+                    "Проверь участников и название перед подтверждением."
+                ),
+            },
+        }
+
+    monkeypatch.setattr(splitik_llm, "generate_event_draft_candidate", fake_candidate)
+    return calls
+
+
 class _FakeResponse:
     def __init__(self, status_code=200, body=None):
         self.status_code = status_code
@@ -467,7 +489,7 @@ def test_splitik_blocks_llm_private_friend_spending_leak(db, monkeypatch):
 
 
 def test_splitik_draft_does_not_change_state_until_commit(db, monkeypatch):
-    _mock_llm(monkeypatch)
+    _mock_event_draft_candidate(monkeypatch, name="Ужин в Duo")
     seed_users(db)
 
     response = splitik.send_splitik_message(
@@ -489,11 +511,12 @@ def test_splitik_draft_does_not_change_state_until_commit(db, monkeypatch):
     assert db.events.count_documents({"name": "Ужин в Duo"}) == 1
 
 
-def test_splitik_event_draft_does_not_depend_on_llm_provider(db, monkeypatch):
+def test_splitik_event_draft_uses_llm_candidate_instead_of_scripted_reply(db, monkeypatch):
     seed_users(db)
+    candidate_calls = _mock_event_draft_candidate(monkeypatch, name="Кофе в Серф с Пашей")
 
     def fake_reply(*, system_prompt, user_message, context):
-        raise HTTPException(status_code=502, detail="Splitik LLM provider returned an error.")
+        raise AssertionError("event draft should use the LLM event candidate response")
 
     monkeypatch.setattr(splitik_llm, "generate_splitik_reply", fake_reply)
 
@@ -507,20 +530,25 @@ def test_splitik_event_draft_does_not_depend_on_llm_provider(db, monkeypatch):
         request_id="req-draft-no-llm",
     )
 
+    assert candidate_calls[0]["user_message"] == (
+        "Создай событие. Мы с пашей ивановым ходили пить кофе в серф"
+    )
     assert response["intent"] == "draft"
     assert len(response["drafts"]) == 1
     assert response["drafts"][0]["type"] == "create_event"
-    assert response["drafts"][0]["payload"]["name"] == (
-        "Мы с пашей ивановым ходили пить кофе в серф"
+    assert response["drafts"][0]["payload"]["name"] == "Кофе в Серф с Пашей"
+    assert response["drafts"][0]["source"] == "llm"
+    assert response["assistant_message"] == (
+        "Я подготовил черновик события **Кофе в Серф с Пашей**.\n\n"
+        "Проверь участников и название перед подтверждением."
     )
-    assert "черновик события" in response["assistant_message"].casefold()
     assert db.events.count_documents({}) == 0
 
     log = db.splitik_interactions.find_one({"request_id": "req-draft-no-llm"})
     assert log is not None
     assert log["status"] == "success"
     assert log["intent"] == "draft"
-    assert log["model_ids"] == []
+    assert log["model_ids"] == ["primary-model"]
     assert log["error"] is None
 
 
@@ -745,7 +773,7 @@ def test_splitik_new_session_does_not_reuse_previous_active_draft(db, monkeypatc
 
 
 def test_splitik_rejects_foreign_draft_commit(db, monkeypatch):
-    _mock_llm(monkeypatch)
+    _mock_event_draft_candidate(monkeypatch, name="Поездка")
     seed_users(db)
     response = splitik.send_splitik_message(
         db,
@@ -760,7 +788,7 @@ def test_splitik_rejects_foreign_draft_commit(db, monkeypatch):
 
 
 def test_splitik_draft_read_update_is_owner_scoped(db, monkeypatch):
-    _mock_llm(monkeypatch)
+    _mock_event_draft_candidate(monkeypatch, name="Поездка")
     seed_users(db)
     response = splitik.send_splitik_message(
         db,
