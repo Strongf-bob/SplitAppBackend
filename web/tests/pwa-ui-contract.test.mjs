@@ -256,6 +256,12 @@ test("home screen follows the Figma balance card and activity sheet composition"
   assert.doesNotMatch(page, /Синхрониз\./);
 });
 
+test("home inbox action badge is conditional on unread incoming items", () => {
+  assert.match(page, /function QuickAction\(\{\s*icon: Icon,\s*label,\s*onClick,\s*showBadge = false\s*\}/);
+  assert.match(page, /showBadge \? <span className="absolute right-5 top-5 h-4 w-4 rounded-full bg-red-500" \/> : null/);
+  assert.doesNotMatch(page, /label === "Входящие" \?/);
+});
+
 test("friends screen exposes add-by-code affordance", () => {
   assert.match(page, /Добавить друга по коду/);
   assert.match(page, /friend-code-input/);
