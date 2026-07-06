@@ -1,0 +1,10 @@
+{$GRAFANA_PUBLIC_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+
+	reverse_proxy grafana:3000
+}
