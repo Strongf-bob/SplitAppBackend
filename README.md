@@ -111,7 +111,7 @@ Docker volume `mongo-data` и не открывается наружу. Promethe
 
 Перед сменой портов на общем сервере проверьте listeners:
 
-`ss -ltnp | grep -E ':(${HOST_PORT:-8080}|${GRAFANA_HOST_PORT:-3001}|80|443)'`
+`ss -ltnp | grep -E ':(${HOST_PORT:-8080}|${GRAFANA_HOST_PORT:-3001}|443)'`
 
 Receipt image endpoints требуют S3 settings в `.env`; без них эти endpoints
 вернут configuration error, но остальной API остается рабочим.
