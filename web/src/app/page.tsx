@@ -15,6 +15,7 @@ import {
   Image as ImageIcon,
   Inbox,
   LogOut,
+  MessageSquareWarning,
   Plus,
   ScanLine,
   Search,
@@ -42,6 +43,8 @@ import {
   ReceiptPage,
   ReceiptSummary,
   ApiError,
+  ClientReportScreen,
+  reportClientIssue,
   SplitikMessageResponse,
   SplitAppTokens,
   saveTokens,
@@ -61,6 +64,14 @@ type ChatMessage = { id: string; from: "user" | "splitik"; text: string };
 type EventReceipts = Record<string, { loading: boolean; items: ReceiptSummary[] }>;
 type MarkdownBlock = { type: "paragraph"; text: string } | { type: "list"; items: string[] };
 type FriendOption = { id: string; initials: string; name: string; subtitle: string; amount: number; tone: string };
+type ProblemReportState = {
+  open: boolean;
+  screen: ClientReportScreen;
+  message: string;
+  mode: "automatic_error" | "manual_feedback";
+  requestId?: string;
+  metadata?: Record<string, unknown>;
+};
 
 declare global {
   interface Navigator {
@@ -148,6 +159,9 @@ export default function SplitAppPage() {
   const [chatDraft, setChatDraft] = useState("");
   const [splitikSessionId, setSplitikSessionId] = useState<string | null>(null);
   const [isSplitikSending, setIsSplitikSending] = useState(false);
+  const [problemReport, setProblemReport] = useState<ProblemReportState | null>(null);
+  const [problemDraft, setProblemDraft] = useState("");
+  const [isProblemSending, setIsProblemSending] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   const navigate = useCallback((nextView: View) => {
@@ -172,15 +186,90 @@ export default function SplitAppPage() {
     });
   }, [tokens]);
 
+  const reportProblem = useCallback(
+    async ({
+      screen,
+      message: reportMessage,
+      mode = "automatic_error",
+      requestId,
+      metadata,
+      userDescription
+    }: {
+      screen: ClientReportScreen;
+      message: string;
+      mode?: "automatic_error" | "manual_feedback";
+      requestId?: string;
+      metadata?: Record<string, unknown>;
+      userDescription?: string;
+    }) => {
+      try {
+        await reportClientIssue(
+          {
+            kind: mode,
+            severity: mode === "automatic_error" ? "error" : "warning",
+            screen,
+            message: reportMessage,
+            user_description: userDescription,
+            request_id: requestId,
+            contact_allowed: Boolean(userDescription && currentUser?.email),
+            contact: currentUser?.email ?? currentUser?.phone_number,
+            metadata
+          },
+          tokens
+        );
+      } catch {
+        // Reporting must never block the user's main workflow or reveal internals.
+      }
+    },
+    [currentUser?.email, currentUser?.phone_number, tokens]
+  );
+
+  const notifyProblem = useCallback(
+    (error: unknown, screen: ClientReportScreen, fallbackMessage: string, metadata: Record<string, unknown> = {}) => {
+      const requestId = error instanceof ApiError ? error.requestId : undefined;
+      const errorName = error instanceof Error ? error.name : "UnknownError";
+      const reportMetadata = { ...metadata, error_name: errorName };
+      void reportProblem({
+        screen,
+        message: fallbackMessage,
+        mode: "automatic_error",
+        requestId,
+        metadata: reportMetadata
+      });
+      setProblemReport({
+        open: true,
+        screen,
+        mode: "automatic_error",
+        message: "Мы зафиксировали ошибку и отправили отчет.",
+        requestId,
+        metadata: reportMetadata
+      });
+      setMessage("Мы зафиксировали ошибку и отправили отчет. Исправим в ближайшее время.");
+    },
+    [reportProblem]
+  );
+
+  const openProblemReport = useCallback(
+    (screen: ClientReportScreen = viewToReportScreen(view), mode: "automatic_error" | "manual_feedback" = "manual_feedback") => {
+      setProblemReport({
+        open: true,
+        screen,
+        mode,
+        message: mode === "automatic_error" ? "Мы зафиксировали ошибку и отправили отчет." : "Расскажите, что пошло не так."
+      });
+      setProblemDraft("");
+    },
+    [view]
+  );
+
   const handleInitialDataError = useCallback((error: unknown) => {
     setEvents(fallbackEvents);
     if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
       clearExpiredSession();
       return;
     }
-    const detail = error instanceof Error ? error.message : "неизвестная ошибка";
-    setMessage(`Не удалось синхронизировать данные: ${detail}`);
-  }, [clearExpiredSession]);
+    notifyProblem(error, "home", "Не удалось синхронизировать данные.", { action: "initial_sync" });
+  }, [clearExpiredSession, notifyProblem]);
 
   useEffect(() => {
     const storedTokens = loadTokens();
@@ -196,6 +285,14 @@ export default function SplitAppPage() {
     };
 
     window.addEventListener("hashchange", onHashChange);
+    const onUnhandledError = (event: ErrorEvent) => {
+      notifyProblem(event.error ?? event.message, "unknown", "В приложении произошла ошибка.", { component: "window" });
+    };
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      notifyProblem(event.reason, "unknown", "В приложении произошла ошибка.", { component: "promise" });
+    };
+    window.addEventListener("error", onUnhandledError);
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
@@ -213,8 +310,10 @@ export default function SplitAppPage() {
 
     return () => {
       window.removeEventListener("hashchange", onHashChange);
+      window.removeEventListener("error", onUnhandledError);
+      window.removeEventListener("unhandledrejection", onUnhandledRejection);
     };
-  }, []);
+  }, [notifyProblem]);
 
   useEffect(() => {
     if (!tokens) return;
@@ -252,6 +351,27 @@ export default function SplitAppPage() {
     setCurrentUser(null);
     setSummary(null);
     setMessage("Вы вышли. Локальная сессия очищена.");
+  };
+
+  const submitProblemReport = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    if (!problemReport || isProblemSending) return;
+    setIsProblemSending(true);
+    try {
+      await reportProblem({
+        screen: problemReport.screen,
+        message: problemReport.message,
+        mode: problemReport.mode,
+        requestId: problemReport.requestId,
+        metadata: problemReport.metadata,
+        userDescription: problemDraft.trim() || undefined
+      });
+      setProblemReport(null);
+      setProblemDraft("");
+      setMessage("Спасибо. Мы получили сообщение и посмотрим его.");
+    } finally {
+      setIsProblemSending(false);
+    }
   };
 
   const updatePermission = (id: PermissionId, status: PermissionStatus, detail: string) => {
@@ -453,7 +573,7 @@ export default function SplitAppPage() {
       setEventReceipts((current) => ({ ...current, [event.id]: { loading: false, items: page.items } }));
     } catch {
       setEventReceipts((current) => ({ ...current, [event.id]: { loading: false, items: [] } }));
-      setMessage("Не удалось загрузить чеки события.");
+      notifyProblem(undefined, "receipts", "Не удалось загрузить чеки события.", { action: "load_receipts", component: "EventsScreen" });
     }
   };
 
@@ -474,7 +594,7 @@ export default function SplitAppPage() {
       const url = `https://split-app.ru/app?invite=${invite.token}`;
       setMessage(`Код события закреплен: ${eventInviteDisplayCode(event.id)}. Ссылка: ${url}`);
     } catch (error) {
-      setMessage(error instanceof Error ? `Не удалось создать код: ${error.message}` : "Не удалось создать код приглашения.");
+      notifyProblem(error, "events", "Не удалось создать код приглашения.", { action: "create_invite", component: "EventDetailScreen" });
     }
   };
 
@@ -515,11 +635,7 @@ export default function SplitAppPage() {
         clearExpiredSession();
         return;
       }
-      if (error instanceof ApiError) {
-        setMessage(`Не удалось создать событие: ${error.message}`);
-        return;
-      }
-      setMessage("Не удалось создать событие: неизвестная ошибка");
+      notifyProblem(error, "events", "Не удалось создать событие.", { action: "create_event", component: "EventCreateScreen" });
     }
   };
 
@@ -537,7 +653,7 @@ export default function SplitAppPage() {
       setSelectedEventId(null);
       setMessage(decision === "accept" ? "Приглашение принято." : "Приглашение отклонено.");
     } catch {
-      setMessage("Не удалось обработать приглашение.");
+      notifyProblem(undefined, "events", "Не удалось обработать приглашение.", { action: "decide_invite", component: "EventsScreen" });
     }
   };
 
@@ -566,6 +682,7 @@ export default function SplitAppPage() {
         { id: response.message_id || `s-${Date.now()}`, from: "splitik", text: response.assistant_message }
       ]);
     } catch (error) {
+      notifyProblem(error, "splitik", "Сплитик сейчас не смог ответить.", { action: "splitik_message", component: "SplitikScreen" });
       setChatMessages((items) => [
         ...items,
         { id: `s-${Date.now()}`, from: "splitik", text: splitikErrorMessage(error) }
@@ -623,6 +740,7 @@ export default function SplitAppPage() {
             currentUser={currentUser}
             permissionState={permissionState}
             onPermission={requestPermission}
+            onReportProblem={() => openProblemReport("profile", "manual_feedback")}
             chatMessages={chatMessages}
             chatDraft={chatDraft}
             onChatDraft={setChatDraft}
@@ -649,6 +767,14 @@ export default function SplitAppPage() {
           ) : null}
         </AnimatePresence>
       </div>
+      <ProblemReportSheet
+        state={problemReport}
+        draft={problemDraft}
+        isSending={isProblemSending}
+        onDraft={setProblemDraft}
+        onSubmit={submitProblemReport}
+        onClose={() => setProblemReport(null)}
+      />
       <input
         ref={galleryInputRef}
         type="file"
@@ -664,6 +790,78 @@ export default function SplitAppPage() {
         }}
       />
     </main>
+  );
+}
+
+function ProblemReportSheet({
+  state,
+  draft,
+  isSending,
+  onDraft,
+  onSubmit,
+  onClose
+}: {
+  state: ProblemReportState | null;
+  draft: string;
+  isSending: boolean;
+  onDraft: (value: string) => void;
+  onSubmit: (event?: FormEvent<HTMLFormElement>) => void;
+  onClose: () => void;
+}) {
+  return (
+    <AnimatePresence>
+      {state?.open ? (
+        <motion.div
+          className="fixed inset-0 z-[60] grid items-end bg-slate-950/28 px-3 pb-[max(env(safe-area-inset-bottom),12px)] backdrop-blur-[2px]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.form
+            onSubmit={onSubmit}
+            className="mx-auto grid w-full max-w-[440px] gap-4 rounded-[28px] bg-white p-5 shadow-[0_24px_70px_rgba(15,23,42,0.28)]"
+            initial={{ y: 24 }}
+            animate={{ y: 0 }}
+            exit={{ y: 24 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="flex items-start gap-3">
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#eef1f7] text-[#1f3d8f]">
+                <MessageSquareWarning className="h-6 w-6" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-xl font-black leading-tight">
+                  {state.mode === "automatic_error" ? "Мы зафиксировали ошибку" : "Сообщить о проблеме"}
+                </h2>
+                <p className="mt-1 text-sm font-semibold leading-5 text-slate-500">
+                  {state.mode === "automatic_error"
+                    ? "Отчет уже отправлен на сервер. Можно коротко описать, что вы делали перед этим."
+                    : "Напишите, что не сработало или что было непонятно. Мы посмотрим это на сервере."}
+                </p>
+              </div>
+            </div>
+            <label className="grid gap-2 text-sm font-black text-slate-700">
+              Описание
+              <textarea
+                value={draft}
+                onChange={(event) => onDraft(event.target.value)}
+                maxLength={2000}
+                className="min-h-[112px] resize-none rounded-2xl border border-slate-200 bg-[#f8fafc] px-3 py-3 text-base font-semibold leading-6 text-slate-950 outline-none transition focus:border-[#1f3d8f] focus:ring-2 focus:ring-[#1f3d8f]/20"
+                placeholder="Например: нажал создать событие, экран завис и данные не обновились"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant="secondary" onClick={onClose} className="min-h-12 rounded-2xl bg-[#eef1f7] text-sm font-black text-slate-700 hover:bg-[#e2e7f2]">
+                Закрыть
+              </Button>
+              <Button type="submit" disabled={isSending} className="min-h-12 rounded-2xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90 disabled:opacity-60">
+                {isSending ? "Отправляем..." : "Отправить"}
+              </Button>
+            </div>
+          </motion.form>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }
 
@@ -835,6 +1033,7 @@ function WorkspaceScreen({
   currentUser,
   permissionState,
   onPermission,
+  onReportProblem,
   chatMessages,
   chatDraft,
   onChatDraft,
@@ -871,6 +1070,7 @@ function WorkspaceScreen({
   currentUser: UserProfile | null;
   permissionState: PermissionState;
   onPermission: (id: PermissionId) => void;
+  onReportProblem: () => void;
   chatMessages: ChatMessage[];
   chatDraft: string;
   onChatDraft: (value: string) => void;
@@ -897,7 +1097,7 @@ function WorkspaceScreen({
           <PeopleScreen currentUser={currentUser} friendOptions={friendOptions} onShowFriendCode={onShowFriendCode} onAddFriendByCode={onAddFriendByCode} />
         ) : null}
         {view === "profile" ? (
-          <ProfileScreen currentUser={currentUser} owedToMe={owedToMe} iOwe={iOwe} permissionState={permissionState} onPermission={onPermission} />
+          <ProfileScreen currentUser={currentUser} owedToMe={owedToMe} iOwe={iOwe} permissionState={permissionState} onPermission={onPermission} onReportProblem={onReportProblem} />
         ) : null}
         {view === "events" ? (
           <EventsScreen
@@ -1545,13 +1745,15 @@ function ProfileScreen({
   owedToMe,
   iOwe,
   permissionState,
-  onPermission
+  onPermission,
+  onReportProblem
 }: {
   currentUser: UserProfile | null;
   owedToMe: number;
   iOwe: number;
   permissionState: PermissionState;
   onPermission: (id: PermissionId) => void;
+  onReportProblem: () => void;
 }) {
   const profileName = currentUser?.name || "Профиль";
   const profileEmail = currentUser?.email || currentUser?.phone_number || "Войдите через Яндекс";
@@ -1616,6 +1818,25 @@ function ProfileScreen({
             </Button>
           );
         })}
+      </ContentPanel>
+      <ContentPanel title="Помощь">
+        <Button
+          type="button"
+          onClick={onReportProblem}
+          variant="ghost"
+          className="grid h-auto w-full grid-cols-[40px_1fr_auto] items-center justify-stretch gap-2 rounded-xl bg-white p-3 text-left hover:bg-[#f5f5f7]"
+        >
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-[#d2daec] text-[#1f3d8f]">
+            <MessageSquareWarning className="h-5 w-5" />
+          </span>
+          <span>
+            <span className="block text-sm font-black">Сообщить о проблеме</span>
+            <span className="block text-xs text-slate-500">Опишите, что пошло не так. Мы получим экран и состояние приложения.</span>
+          </span>
+          <Badge variant="outline" className="text-[10px]">
+            Помощь
+          </Badge>
+        </Button>
       </ContentPanel>
       </div>
     </SvgScreenFrame>
@@ -1832,13 +2053,7 @@ function viewTitle(view: View) {
 function splitikErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
     if (error.status === 401) return "Сессия истекла. Войдите через Яндекс еще раз.";
-    if (error.status === 503 && error.message.includes("Splitik LLM")) {
-      return "Сплитик не настроен на сервере: не хватает LLM-конфига или ключ отклонен.";
-    }
-    if (error.status === 502 && error.message.includes("Splitik LLM")) {
-      return "LLM-провайдер Сплитика сейчас вернул ошибку. Попробуйте еще раз чуть позже.";
-    }
-    return `Сплитик вернул ошибку: ${error.message}`;
+    return "Сплитик сейчас не смог ответить. Мы уже получили отчет, попробуйте еще раз чуть позже.";
   }
   return "Не смог достучаться до Сплитика. Проверьте сеть и попробуйте еще раз.";
 }
@@ -1846,6 +2061,10 @@ function splitikErrorMessage(error: unknown) {
 function parseHashView(hash: string): View | null {
   const value = hash.replace("#", "");
   return validViews.includes(value as View) ? (value as View) : null;
+}
+
+function viewToReportScreen(view: View): ClientReportScreen {
+  return view;
 }
 
 function isUuid(value: string | null): value is string {

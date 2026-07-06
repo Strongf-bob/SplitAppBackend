@@ -278,6 +278,52 @@
         ]
       }
     },
+    "/api/client-reports": {
+      "post": {
+        "tags": [
+          "Client Reports"
+        ],
+        "summary": "Create Client Report",
+        "operationId": "create_client_report_api_client_reports_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientReportCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReportCreateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/disputes": {
       "post": {
         "tags": [
@@ -4532,6 +4578,186 @@
         },
         "type": "object",
         "title": "Body_upload_receipt_image_api_receipts__id__image_post"
+      },
+      "ClientReportCreate": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "automatic_error",
+              "manual_feedback"
+            ],
+            "title": "Kind"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "error",
+              "critical"
+            ],
+            "title": "Severity",
+            "default": "warning"
+          },
+          "screen": {
+            "type": "string",
+            "enum": [
+              "home",
+              "events",
+              "people",
+              "notifications",
+              "profile",
+              "splitik",
+              "receipts",
+              "payments",
+              "unknown"
+            ],
+            "title": "Screen",
+            "default": "unknown"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Message"
+          },
+          "user_description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Description"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "client_trace_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Trace Id"
+          },
+          "app_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Version"
+          },
+          "url_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 240
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url Path"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          },
+          "online": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Online"
+          },
+          "contact_allowed": {
+            "type": "boolean",
+            "title": "Contact Allowed",
+            "default": false
+          },
+          "contact": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "ClientReportCreate"
+      },
+      "ClientReportCreateResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "friendly_message": {
+            "type": "string",
+            "title": "Friendly Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "friendly_message"
+        ],
+        "title": "ClientReportCreateResponse"
       },
       "ConfirmationSummary": {
         "properties": {

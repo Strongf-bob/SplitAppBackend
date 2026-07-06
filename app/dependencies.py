@@ -29,6 +29,7 @@ UNAUTHENTICATED_PATHS = frozenset(
         "/api/ping",
         "/api/login",
         "/api/refresh",
+        "/api/client-reports",
     }
 )
 
