@@ -125,9 +125,10 @@ jobs:
             HOST_PORT=\$(sed -n 's/^HOST_PORT=//p' .env | tail -1); HOST_PORT=\${HOST_PORT:-8080}; \
             GRAFANA_HOST_PORT=\$(sed -n 's/^GRAFANA_HOST_PORT=//p' .env | tail -1); GRAFANA_HOST_PORT=\${GRAFANA_HOST_PORT:-3001}; \
             GRAFANA_PUBLIC_DOMAIN=\$(sed -n 's/^GRAFANA_PUBLIC_DOMAIN=//p' .env | tail -1); \
+            GRAFANA_PUBLIC_PROXY_MODE=\$(sed -n 's/^GRAFANA_PUBLIC_PROXY_MODE=//p' .env | tail -1); GRAFANA_PUBLIC_PROXY_MODE=\${GRAFANA_PUBLIC_PROXY_MODE:-external}; \
             GRAFANA_PUBLIC_HTTPS_PORT=\$(sed -n 's/^GRAFANA_PUBLIC_HTTPS_PORT=//p' .env | tail -1); GRAFANA_PUBLIC_HTTPS_PORT=\${GRAFANA_PUBLIC_HTTPS_PORT:-443}; \
             PORTS_TO_CHECK=\"\$HOST_PORT \$GRAFANA_HOST_PORT\"; \
-            if [ -n \"\$GRAFANA_PUBLIC_DOMAIN\" ]; then PORTS_TO_CHECK=\"\$PORTS_TO_CHECK \$GRAFANA_PUBLIC_HTTPS_PORT\"; fi; \
+            if [ \"\$GRAFANA_PUBLIC_PROXY_MODE\" = caddy ] && [ -n \"\$GRAFANA_PUBLIC_DOMAIN\" ]; then PORTS_TO_CHECK=\"\$PORTS_TO_CHECK \$GRAFANA_PUBLIC_HTTPS_PORT\"; fi; \
             CURRENT_PROJECT_CONTAINERS=\$(docker ps --filter label=com.docker.compose.project=splitapp-backend --format '{{.ID}}' | tr '\n' ' '); \
             for PORT in \$PORTS_TO_CHECK; do \
               [ -n \"\$PORT\" ] || continue; \
@@ -142,7 +143,7 @@ jobs:
             done; \
             COMPOSE_PROFILES_VALUE=\"\"; \
             MONITORING_SERVICES=\"prometheus grafana alloy\"; \
-            if [ -n \"\$GRAFANA_PUBLIC_DOMAIN\" ]; then COMPOSE_PROFILES_VALUE=public-grafana; MONITORING_SERVICES=\"\$MONITORING_SERVICES grafana-public-proxy\"; fi; \
+            if [ \"\$GRAFANA_PUBLIC_PROXY_MODE\" = caddy ] && [ -n \"\$GRAFANA_PUBLIC_DOMAIN\" ]; then COMPOSE_PROFILES_VALUE=public-grafana; MONITORING_SERVICES=\"\$MONITORING_SERVICES grafana-public-proxy\"; fi; \
             COMPOSE_PROFILES=\"\$COMPOSE_PROFILES_VALUE\" docker compose up -d --build; \
             COMPOSE_PROFILES=\"\$COMPOSE_PROFILES_VALUE\" docker compose up -d --force-recreate \$MONITORING_SERVICES; \
             GRAFANA_ADMIN_PASSWORD=\$(sed -n 's/^GRAFANA_ADMIN_PASSWORD=//p' .env | tail -1); \
