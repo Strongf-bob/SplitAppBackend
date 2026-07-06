@@ -27,6 +27,7 @@ def create_event_draft(
     payload: dict,
     source: str = "text",
     questions: list[dict] | None = None,
+    model_metadata: dict | None = None,
 ) -> dict:
     now = utc_now()
     draft = {
@@ -40,7 +41,7 @@ def create_event_draft(
         "source": source,
         "attachment_ids": [],
         "questions": questions or [],
-        "model_metadata": {},
+        "model_metadata": model_metadata or {},
         "created_at": now,
         "updated_at": now,
     }

@@ -222,10 +222,11 @@ def generate_splitik_reply(*, system_prompt: str, user_message: str, context: di
     return _extract_chat_content(body)
 
 
-def generate_receipt_draft_candidate(
+def _generate_json_candidate(
     *,
     model_role: str,
     system_prompt: str,
+    user_label: str,
     user_message: str,
     context: dict,
 ) -> dict:
@@ -241,7 +242,7 @@ def generate_receipt_draft_candidate(
             {
                 "role": "user",
                 "content": (
-                    f"Источник чека пользователя:\n{user_message}\n\n"
+                    f"{user_label}:\n{user_message}\n\n"
                     f"Разрешенный backend context JSON:\n{context}\n\n"
                     "Верни только JSON."
                 ),
@@ -279,6 +280,42 @@ def generate_receipt_draft_candidate(
         "model_id": model,
         "content": _parse_json_object(_extract_chat_content(body)),
     }
+
+
+def generate_receipt_draft_candidate(
+    *,
+    model_role: str,
+    system_prompt: str,
+    user_message: str,
+    context: dict,
+) -> dict:
+    return _generate_json_candidate(
+        model_role=model_role,
+        system_prompt=system_prompt,
+        user_label="Источник чека пользователя",
+        user_message=user_message,
+        context=context,
+    )
+
+
+def generate_event_draft_candidate(*, user_message: str, context: dict) -> dict:
+    return _generate_json_candidate(
+        model_role="primary",
+        system_prompt=(
+            "Ты извлекаешь намерение создания события SplitApp из сообщения пользователя. "
+            "Если пользователь явно просит создать событие, верни JSON: "
+            '{"intent":"create_event","payload":{"name":"короткое название события"},'
+            '"assistant_message":"естественный Markdown-ответ без emoji, что создан черновик '
+            'и его нужно подтвердить"}. '
+            "Название должно быть осмысленным и коротким: убирай служебные фразы вроде "
+            '"создай событие", сохраняй место, участников или повод, если они есть. '
+            'Если намерения создать событие нет, верни {"intent":"none"}. '
+            "Не утверждай, что событие уже создано окончательно: создан только черновик."
+        ),
+        user_label="Сообщение пользователя",
+        user_message=user_message,
+        context=context,
+    )
 
 
 def generate_receipt_image_candidate(

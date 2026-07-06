@@ -274,18 +274,45 @@ def _build_context(
     return context, chips, _mode_capabilities(mode)
 
 
-def _extract_event_name(message: str) -> str | None:
-    normalized = " ".join(message.strip().split())
-    lowered = normalized.casefold()
-    if "событ" not in lowered and "event" not in lowered:
+def _event_draft_candidate(message: str, context: dict) -> dict | None:
+    candidate = splitik_llm.generate_event_draft_candidate(
+        user_message=message,
+        context=context,
+    )
+    content = candidate.get("content", {})
+    if not isinstance(content, dict) or content.get("intent") != "create_event":
         return None
-    for marker in ("создай событие", "create event", "событие:"):
-        index = lowered.find(marker)
-        if index >= 0:
-            name = normalized[index + len(marker) :].strip(" :.-")
-            if name:
-                return name[:80]
-    return None
+    payload = content.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        return None
+    assistant_message = str(content.get("assistant_message") or "").strip()
+    return {
+        "name": name[:80],
+        "assistant_message": assistant_message,
+        "model_id": candidate.get("model_id"),
+    }
+
+
+def _looks_like_event_creation_request(message: str) -> bool:
+    lowered = message.casefold()
+    has_event = "событ" in lowered or "event" in lowered
+    has_create_verb = any(
+        marker in lowered
+        for marker in (
+            "создай",
+            "создать",
+            "создадим",
+            "добавь",
+            "добавить",
+            "новое",
+            "новый event",
+            "create event",
+        )
+    )
+    return has_event and has_create_verb
 
 
 def _receipt_clarifying_questions() -> list[dict]:
@@ -329,15 +356,25 @@ def _maybe_create_draft(
     mode = payload.mode.strip().lower()
     lowered = payload.message.casefold()
     if mode == "general":
-        event_name = _extract_event_name(payload.message)
-        if not event_name:
+        if not _looks_like_event_creation_request(payload.message):
+            return []
+        event_candidate = _event_draft_candidate(
+            payload.message,
+            context={"human_review_required": True},
+        )
+        if not event_candidate:
             return []
         return [
             splitik_tools.create_event_draft(
                 db,
                 actor_user_id=actor_user_id,
                 session_id=session_id,
-                payload={"name": event_name},
+                payload={"name": event_candidate["name"]},
+                source="llm",
+                model_metadata={
+                    "assistant_message": event_candidate["assistant_message"],
+                    "model_id": event_candidate["model_id"],
+                },
             )
         ]
 
@@ -547,29 +584,11 @@ def _draft_questions(drafts: list[dict]) -> list[dict]:
     return questions
 
 
-def _draft_reply(drafts: list[dict]) -> str:
-    draft = drafts[0]
-    if draft["type"] == "create_event":
-        name = draft.get("payload", {}).get("name") or "новое событие"
-        return (
-            f"Создал черновик события **{name}**.\n\n"
-            "Проверь название и подтверди создание, когда все верно."
-        )
-    if draft["type"] == "create_receipt":
-        payload = draft.get("payload", {})
-        title = payload.get("title") or "чек"
-        amount_kopecks = int(payload.get("total_amount_kopecks") or 0)
-        amount_rubles = amount_kopecks / 100
-        reply = (
-            f"Создал черновик чека **{title}** на **{amount_rubles:g} ₽**.\n\n"
-            "Проверь участников, суммы и подтверди чек, когда все верно."
-        )
-        questions = _draft_questions(drafts)
-        if questions:
-            question_lines = "\n".join(f"- {question['text']}" for question in questions)
-            reply = f"{reply}\n\nНужно уточнить:\n{question_lines}"
-        return reply
-    return "Создал черновик. Проверь данные и подтверди, когда все верно."
+def _draft_assistant_message(drafts: list[dict]) -> str | None:
+    if not drafts:
+        return None
+    message = str(drafts[0].get("model_metadata", {}).get("assistant_message") or "").strip()
+    return message or None
 
 
 def _draft_suggested_actions(drafts: list[dict]) -> list[dict]:
@@ -797,8 +816,9 @@ def send_splitik_message(
             mode=mode,
             tool_results=tool_results,
         )
-        if drafts:
-            reply = _draft_reply(drafts)
+        draft_reply = _draft_assistant_message(drafts)
+        if draft_reply:
+            reply = draft_reply
             stage = "guardrail.assistant"
             post_guardrail_decision = evaluate_assistant_message(
                 reply,
@@ -840,7 +860,13 @@ def send_splitik_message(
                 request_id=request_id,
                 status="success",
                 stage="completed",
-                model_ids=[],
+                model_ids=[
+                    str(model_id)
+                    for model_id in {
+                        draft.get("model_metadata", {}).get("model_id") for draft in drafts
+                    }
+                    if model_id
+                ],
                 context_summary=_context_summary(
                     payload,
                     mode=mode,
