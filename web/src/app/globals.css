@@ -22,18 +22,36 @@
   --input: 214 28% 88%;
   --ring: 188 78% 38%;
   --radius: 8px;
+  --page-x: clamp(0.75rem, 4vw, 1.75rem);
+  --sheet-x: clamp(1rem, 5vw, 1.75rem);
+  --bottom-nav-reserve: calc(104px + env(safe-area-inset-bottom));
+  --balance-font: clamp(3rem, 16vw, 4.5rem);
+  --home-total-font: clamp(1.25rem, 6vw, 1.625rem);
+  --action-icon-size: clamp(4rem, 22vw, 7rem);
+  --action-icon-svg: clamp(1.9rem, 9vw, 3rem);
+  --action-min-height: clamp(6.5rem, 30vw, 8.25rem);
+  --activity-avatar-size: clamp(3rem, 15vw, 5rem);
+  --activity-title-font: clamp(1rem, 5.7vw, 1.5rem);
+  --activity-detail-font: clamp(0.875rem, 5vw, 1.3125rem);
+  --profile-avatar-size: clamp(5rem, 26vw, 7rem);
 }
 
 * {
+  box-sizing: border-box;
   border-color: hsl(var(--border));
 }
 
 html {
+  overflow-x: hidden;
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
+  width: 100%;
   min-height: 100dvh;
+  overflow-x: hidden;
   background: hsl(var(--background));
   color: hsl(var(--foreground));
   font-family: var(--font-sans);
