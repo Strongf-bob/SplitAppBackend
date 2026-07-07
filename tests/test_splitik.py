@@ -1010,6 +1010,33 @@ def test_splitik_attachment_upload_endpoint_returns_private_metadata(db, fake_s3
     assert db.splitik_attachments.count_documents({"owner_user_id": USER_A}) == 1
 
 
+def test_splitik_attachment_upload_works_without_object_storage(db, fake_s3, monkeypatch):
+    monkeypatch.delenv("S3_BUCKET", raising=False)
+    api = FastAPI()
+    api.dependency_overrides[get_db] = lambda: db
+    api.dependency_overrides[get_s3] = lambda: fake_s3
+    api.dependency_overrides[get_actor_user_id] = lambda: USER_A
+    api.include_router(splitik_router.router)
+    client = TestClient(api)
+
+    response = client.post(
+        "/api/splitik/attachments",
+        files={"file": ("receipt.jpg", b"\xff\xd8\xfffake-jpeg", "image/jpeg")},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["filename"] == "receipt.jpg"
+    assert body["content_type"] == "image/jpeg"
+    assert "content" not in body
+    assert "bucket" not in body
+    assert "key" not in body
+    stored = db.splitik_attachments.find_one({"owner_user_id": USER_A})
+    assert stored["storage"] == "mongo"
+    assert stored["content"] == b"\xff\xd8\xfffake-jpeg"
+    assert fake_s3.objects == {}
+
+
 def test_splitik_explains_user_scoped_spending_from_backend_facts(db, monkeypatch):
     seed_event(db)
     receipt = receipts.create_receipt(

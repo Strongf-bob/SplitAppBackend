@@ -203,6 +203,18 @@ test("Splitik composer is fixed above the bottom nav and keyboard viewport", () 
   assert.match(page, /max-w-\[calc\(100vw-2rem\)\]/);
 });
 
+test("Splitik chat can attach receipt photos and send their attachment ids", () => {
+  assert.match(api, /export type SplitikAttachment/);
+  assert.match(api, /init\.body instanceof FormData/);
+  assert.match(page, /const \[splitikAttachments, setSplitikAttachments\] = useState<SplitikAttachment\[\]>\(\[\]\)/);
+  assert.match(page, /const uploadSplitikAttachment = async \(file: File\)/);
+  assert.match(page, /formData\.append\("file", file\)/);
+  assert.match(page, /authedApi<SplitikAttachment>\("\/api\/splitik\/attachments"/);
+  assert.match(page, /attachment_ids: splitikAttachments\.map\(\(attachment\) => attachment\.id\)/);
+  assert.match(page, /data-testid="splitik-attachment-input"/);
+  assert.match(page, /aria-label="Прикрепить фото чека"/);
+});
+
 test("mobile layout scales from compact phones with adaptive tokens instead of fixed SVG dimensions", () => {
   for (const token of [
     "--page-x: clamp(",

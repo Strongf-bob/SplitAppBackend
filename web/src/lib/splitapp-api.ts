@@ -105,6 +105,14 @@ export type SplitikMessageResponse = {
   suggested_actions?: Array<{ type: string; label: string }>;
 };
 
+export type SplitikAttachment = {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+};
+
 export type ClientReportScreen =
   | "home"
   | "events"
@@ -232,7 +240,8 @@ async function fetchWithAuth(path: string, tokens: SplitAppTokens | null, init: 
   const headers = new Headers(init.headers);
   if (tokens?.access_token) headers.set("Authorization", `Bearer ${tokens.access_token}`);
   if (!headers.has("X-Request-ID")) headers.set("X-Request-ID", crypto.randomUUID());
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const isFormDataBody = typeof FormData !== "undefined" && init.body instanceof FormData;
+  if (init.body && !isFormDataBody && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   return fetch(path, { ...init, headers });
 }
 
