@@ -45,6 +45,7 @@ import {
   ApiError,
   ClientReportScreen,
   reportClientIssue,
+  SplitikAttachment,
   SplitikMessageResponse,
   SplitAppTokens,
   saveTokens,
@@ -157,6 +158,8 @@ export default function SplitAppPage() {
     { id: "hint", from: "splitik", text: "Могу разобрать чек, спросить кто что ел или напомнить кому вернуть долг." }
   ]);
   const [chatDraft, setChatDraft] = useState("");
+  const [splitikAttachments, setSplitikAttachments] = useState<SplitikAttachment[]>([]);
+  const [isSplitikAttachmentUploading, setIsSplitikAttachmentUploading] = useState(false);
   const [splitikSessionId, setSplitikSessionId] = useState<string | null>(null);
   const [isSplitikSending, setIsSplitikSending] = useState(false);
   const [problemReport, setProblemReport] = useState<ProblemReportState | null>(null);
@@ -665,11 +668,19 @@ export default function SplitAppPage() {
   const sendSplitikMessage = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
     const text = chatDraft.trim();
-    if (!text || !tokens || isSplitikSending) return;
+    if ((!text && !splitikAttachments.length) || !tokens || isSplitikSending || isSplitikAttachmentUploading) return;
     const splitikEventId = isUuid(selectedEventId) ? selectedEventId : null;
-    const userMessage = { id: `u-${Date.now()}`, from: "user" as const, text };
+    const messageText = text || "Создай черновик чека по фото";
+    const userMessage = {
+      id: `u-${Date.now()}`,
+      from: "user" as const,
+      text: splitikAttachments.length
+        ? `${messageText}\n\n${splitikAttachments.map((attachment) => `Фото: ${attachment.filename}`).join("\n")}`
+        : messageText
+    };
     setChatMessages((items) => [...items, userMessage]);
     setChatDraft("");
+    setSplitikAttachments([]);
     setIsSplitikSending(true);
     try {
       const response = await authedApi<SplitikMessageResponse>("/api/splitik/messages", {
@@ -677,8 +688,9 @@ export default function SplitAppPage() {
         body: JSON.stringify({
           session_id: splitikSessionId,
           mode: splitikEventId ? "event" : "general",
-          message: text,
-          entry_point: splitikEventId ? { type: "event", event_id: splitikEventId } : undefined
+          message: messageText,
+          entry_point: splitikEventId ? { type: "event", event_id: splitikEventId } : undefined,
+          attachment_ids: splitikAttachments.map((attachment) => attachment.id)
         })
       });
       setSplitikSessionId(response.session_id);
@@ -707,6 +719,39 @@ export default function SplitAppPage() {
       ]);
     } finally {
       setIsSplitikSending(false);
+    }
+  };
+
+  const uploadSplitikAttachment = async (file: File) => {
+    if (!tokens || isSplitikAttachmentUploading) return;
+    setIsSplitikAttachmentUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const attachment = await authedApi<SplitikAttachment>("/api/splitik/attachments", {
+        method: "POST",
+        body: formData
+      });
+      setSplitikAttachments((items) => [...items, attachment]);
+      setChatDraft((current) => current || "Создай черновик чека по фото");
+      setMessage("Фото чека прикреплено.");
+    } catch (error) {
+      const requestId = error instanceof ApiError ? error.requestId : undefined;
+      void reportProblem({
+        screen: "splitik",
+        message: "Не удалось прикрепить фото чека.",
+        mode: "automatic_error",
+        requestId,
+        metadata: {
+          action: "splitik_attachment",
+          component: "SplitikScreen",
+          error_name: error instanceof Error ? error.name : "UnknownError",
+          error_message: error instanceof Error ? error.message : String(error ?? "unknown")
+        }
+      });
+      setMessage("Не удалось прикрепить фото чека. Попробуйте еще раз.");
+    } finally {
+      setIsSplitikAttachmentUploading(false);
     }
   };
 
@@ -765,6 +810,9 @@ export default function SplitAppPage() {
             onChatDraft={setChatDraft}
             onSendChat={sendSplitikMessage}
             isSplitikSending={isSplitikSending}
+            attachments={splitikAttachments}
+            isAttachmentUploading={isSplitikAttachmentUploading}
+            onAttachReceipt={uploadSplitikAttachment}
             onShowFriendCode={showFriendCode}
             onAddFriendByCode={addFriendByCode}
             onNavigate={navigate}
@@ -1060,6 +1108,9 @@ function WorkspaceScreen({
   onChatDraft,
   onSendChat,
   isSplitikSending,
+  attachments,
+  isAttachmentUploading,
+  onAttachReceipt,
   onShowFriendCode,
   onAddFriendByCode,
   onNavigate
@@ -1097,6 +1148,9 @@ function WorkspaceScreen({
   onChatDraft: (value: string) => void;
   onSendChat: (event?: FormEvent<HTMLFormElement>) => void;
   isSplitikSending: boolean;
+  attachments: SplitikAttachment[];
+  isAttachmentUploading: boolean;
+  onAttachReceipt: (file: File) => void;
   onShowFriendCode: () => void;
   onAddFriendByCode: (code: string) => Promise<boolean>;
   onNavigate: (view: View) => void;
@@ -1146,7 +1200,16 @@ function WorkspaceScreen({
           <NotificationsScreen activeTab={notificationTab} onTab={onNotificationTab} />
         ) : null}
         {view === "splitik" ? (
-          <SplitikScreen messages={chatMessages} draft={chatDraft} onDraft={onChatDraft} onSend={onSendChat} isSending={isSplitikSending} />
+          <SplitikScreen
+            messages={chatMessages}
+            draft={chatDraft}
+            onDraft={onChatDraft}
+            onSend={onSendChat}
+            isSending={isSplitikSending}
+            attachments={attachments}
+            isAttachmentUploading={isAttachmentUploading}
+            onAttachReceipt={onAttachReceipt}
+          />
         ) : null}
       </motion.div>
     </AnimatePresence>
@@ -1878,13 +1941,19 @@ function SplitikScreen({
   draft,
   onDraft,
   onSend,
-  isSending
+  isSending,
+  attachments,
+  isAttachmentUploading,
+  onAttachReceipt
 }: {
   messages: ChatMessage[];
   draft: string;
   onDraft: (value: string) => void;
   onSend: (event?: FormEvent<HTMLFormElement>) => void;
   isSending: boolean;
+  attachments: SplitikAttachment[];
+  isAttachmentUploading: boolean;
+  onAttachReceipt: (file: File) => void;
 }) {
   return (
     <SvgScreenFrame
@@ -1900,51 +1969,83 @@ function SplitikScreen({
       }
     >
       <div data-testid="splitik-chat-shell" className="flex min-h-0 flex-1 flex-col pb-[112px]">
-      <div data-testid="splitik-message-list" className="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto px-1 pb-3 pt-2">
-        <div data-testid="splitik-intro-card" className="mb-1 grid justify-items-center gap-3 rounded-[28px] bg-white px-4 py-5">
-          <div className="grid h-20 w-20 place-items-center rounded-[24px] border-4 border-[#111111] bg-[#f5f5f7] text-[#111111]">
-            <Bot className="h-10 w-10" strokeWidth={2.6} />
+        <div data-testid="splitik-message-list" className="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto px-1 pb-3 pt-2">
+          <div data-testid="splitik-intro-card" className="mb-1 grid justify-items-center gap-3 rounded-[28px] bg-white px-4 py-5">
+            <div className="grid h-20 w-20 place-items-center rounded-[24px] border-4 border-[#111111] bg-[#f5f5f7] text-[#111111]">
+              <Bot className="h-10 w-10" strokeWidth={2.6} />
+            </div>
+            <div className="mr-auto grid gap-3">
+              <div className="w-fit max-w-[92%] rounded-[18px] bg-[#eef1f7] px-4 py-3 text-base font-black leading-6 text-slate-900">Привет! Я Сплитик, чем могу помочь?</div>
+              <div className="w-fit max-w-[92%] rounded-[18px] bg-[#eef1f7] px-4 py-3 text-base font-black leading-6 text-slate-900">Могу разобрать чек, спросить кто что ел или напомнить кому вернуть долг.</div>
+            </div>
           </div>
-          <div className="mr-auto grid gap-3">
-            <div className="w-fit max-w-[92%] rounded-[18px] bg-[#eef1f7] px-4 py-3 text-base font-black leading-6 text-slate-900">Привет! Я Сплитик, чем могу помочь?</div>
-            <div className="w-fit max-w-[92%] rounded-[18px] bg-[#eef1f7] px-4 py-3 text-base font-black leading-6 text-slate-900">Могу разобрать чек, спросить кто что ел или напомнить кому вернуть долг.</div>
-          </div>
+          {messages.slice(2).map((item) => (
+            <div
+              key={item.id}
+              className={cn(
+                "max-w-[86%] rounded-2xl px-3 py-2 text-[15px] leading-6",
+                item.from === "user" ? "ml-auto bg-[#1f3d8f] font-bold text-white" : "mr-auto bg-[#eef1f7] font-medium text-slate-900"
+              )}
+            >
+              {item.from === "splitik" ? <MarkdownMessage text={item.text} /> : item.text}
+            </div>
+          ))}
         </div>
-        {messages.slice(2).map((item) => (
-          <div
-            key={item.id}
-            className={cn(
-              "max-w-[86%] rounded-2xl px-3 py-2 text-[15px] leading-6",
-              item.from === "user" ? "ml-auto bg-[#1f3d8f] font-bold text-white" : "mr-auto bg-[#eef1f7] font-medium text-slate-900"
-            )}
-          >
-            {item.from === "splitik" ? <MarkdownMessage text={item.text} /> : item.text}
+        {attachments.length ? (
+          <div className="fixed inset-x-4 bottom-[calc(150px+env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-[calc(100vw-2rem)] flex-wrap gap-2">
+            {attachments.map((attachment) => (
+              <span key={attachment.id} className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-[#1f3d8f] shadow-sm">
+                {attachment.filename}
+              </span>
+            ))}
           </div>
-        ))}
-      </div>
-      <form
-        onSubmit={onSend}
-        data-testid="splitik-composer"
-        className="fixed inset-x-4 bottom-[calc(86px+env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-[calc(100vw-2rem)] gap-2 rounded-2xl bg-white p-2 shadow-[0_14px_36px_rgba(15,23,42,0.18)]"
-      >
-        <Input
-          aria-label="Сообщение Сплитику"
-          data-testid="splitik-message-input"
-          className="min-h-12 flex-1 rounded-xl border-slate-200 bg-white px-3 text-sm text-slate-950 focus-visible:ring-[#1f3d8f]"
-          placeholder="Напишите сообщение..."
-          value={draft}
-          onChange={(event) => onDraft(event.target.value)}
-        />
-        <Button
-          type="submit"
-          aria-label="Отправить Сплитику"
-          disabled={isSending}
-          className="grid h-12 w-12 place-items-center rounded-xl bg-[#1f3d8f] p-0 text-white hover:bg-[#1f3d8f]/90 disabled:opacity-60"
+        ) : null}
+        <form
+          onSubmit={onSend}
+          data-testid="splitik-composer"
+          className="fixed inset-x-4 bottom-[calc(86px+env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-[calc(100vw-2rem)] gap-2 rounded-2xl bg-white p-2 shadow-[0_14px_36px_rgba(15,23,42,0.18)]"
         >
-          {isSending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <Send className="h-5 w-5" />}
-        </Button>
-      </form>
-    </div>
+          <Button
+            asChild
+            type="button"
+            aria-label="Прикрепить фото чека"
+            variant="ghost"
+            className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#eef1f7] p-0 text-[#1f3d8f] hover:bg-[#dfe5f1]"
+          >
+            <label>
+              {isAttachmentUploading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#1f3d8f]/30 border-t-[#1f3d8f]" /> : <ImageIcon className="h-5 w-5" />}
+              <input
+                data-testid="splitik-attachment-input"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={isAttachmentUploading || isSending}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (file) onAttachReceipt(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+          </Button>
+          <Input
+            aria-label="Сообщение Сплитику"
+            data-testid="splitik-message-input"
+            className="min-h-12 flex-1 rounded-xl border-slate-200 bg-white px-3 text-sm text-slate-950 focus-visible:ring-[#1f3d8f]"
+            placeholder="Напишите сообщение..."
+            value={draft}
+            onChange={(event) => onDraft(event.target.value)}
+          />
+          <Button
+            type="submit"
+            aria-label="Отправить Сплитику"
+            disabled={isSending || isAttachmentUploading || (!draft.trim() && !attachments.length)}
+            className="grid h-12 w-12 place-items-center rounded-xl bg-[#1f3d8f] p-0 text-white hover:bg-[#1f3d8f]/90 disabled:opacity-60"
+          >
+            {isSending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <Send className="h-5 w-5" />}
+          </Button>
+        </form>
+      </div>
     </SvgScreenFrame>
   );
 }

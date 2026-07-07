@@ -19,6 +19,7 @@ def _public_metadata(attachment: dict) -> dict:
     cleaned = strip_mongo_id(attachment)
     cleaned.pop("bucket", None)
     cleaned.pop("key", None)
+    cleaned.pop("content", None)
     return cleaned
 
 
@@ -36,18 +37,8 @@ def create_attachment(
     normalized_content_type = content_type.strip().lower()
     if normalized_content_type not in _IMAGE_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="Attachment must be an image.")
-    bucket = _bucket_name()
-    if not bucket:
-        raise HTTPException(
-            status_code=503,
-            detail="Object storage is not configured (S3_BUCKET).",
-        )
-
     attachment_id = new_uuid()
     extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
-    key = f"attachments/splitik/{actor_user_id}/{attachment_id}.{extension}"
-    s3.put_object(Bucket=bucket, Key=key, Body=content, ContentType=normalized_content_type)
-
     now = utc_now()
     attachment = {
         "id": attachment_id,
@@ -55,10 +46,15 @@ def create_attachment(
         "filename": filename,
         "content_type": normalized_content_type,
         "size_bytes": len(content),
-        "bucket": bucket,
-        "key": key,
         "created_at": now,
     }
+    bucket = _bucket_name()
+    if bucket:
+        key = f"attachments/splitik/{actor_user_id}/{attachment_id}.{extension}"
+        s3.put_object(Bucket=bucket, Key=key, Body=content, ContentType=normalized_content_type)
+        attachment.update({"storage": "s3", "bucket": bucket, "key": key})
+    else:
+        attachment.update({"storage": "mongo", "content": content})
     db.splitik_attachments.insert_one(attachment)
     return _public_metadata(attachment)
 
