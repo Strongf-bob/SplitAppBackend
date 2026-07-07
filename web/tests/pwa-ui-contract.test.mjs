@@ -107,6 +107,14 @@ test("bottom navigation active tab stays readable with a liquid glass state", ()
   assert.doesNotMatch(page, /active && "bg-white\/22 text-white"/);
 });
 
+test("bottom navigation selection follows the rendered screen after transition", () => {
+  assert.match(page, /const \[activeView, setActiveView\] = useState<View>\("home"\)/);
+  assert.match(page, /<PhoneShell[\s\S]*view=\{activeView\}[\s\S]*onNavigate=\{navigate\}/);
+  assert.match(page, /<WorkspaceScreen[\s\S]*view=\{view\}[\s\S]*onViewSettled=\{setActiveView\}/);
+  assert.match(page, /onAnimationComplete=\{\(\) => onViewSettled\(view\)\}/);
+  assert.match(page, /event\.preventDefault\(\)/);
+});
+
 test("PWA surfaces are built on shadcn primitives instead of one-off controls", () => {
   for (const primitive of [
     /import \{ Button \} from "@\/components\/ui\/button"/,
