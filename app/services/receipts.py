@@ -1,3 +1,4 @@
+import os
 from datetime import timedelta
 
 from fastapi import HTTPException
@@ -5,6 +6,7 @@ from pymongo.database import Database
 
 from app import schemas
 from app.core.monitoring import observe_money_amount, record_domain_event, track_service_operation
+from app.core.rate_limit import check_rate_limit
 
 from app.services.access import assert_event_access, assert_event_open, get_receipt_or_404
 from app.services.common import active_filter, new_uuid, record_audit_event, strip_mongo_id, utc_now
@@ -26,6 +28,13 @@ _RECEIPT_MONEY_METADATA_FIELDS = (
     "fiscal_total_amount_kopecks",
     "vat_amount_kopecks",
 )
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
 
 
 def _normalize_category(category: str | None) -> str | None:
@@ -217,6 +226,13 @@ def create_receipt(
     *,
     idempotency_key: str | None = None,
 ) -> dict:
+    check_rate_limit(
+        "receipts.create.day",
+        actor_user_id,
+        max_requests=_env_int("RECEIPT_CREATE_DAILY_LIMIT", 20),
+        window_seconds=24 * 60 * 60,
+        detail="Daily receipt creation limit exceeded.",
+    )
     return run_idempotent_create(
         db,
         actor_user_id=actor_user_id,

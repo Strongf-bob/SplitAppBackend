@@ -20,6 +20,10 @@ import {
   ScanLine,
   Search,
   Send,
+  Check,
+  PencilLine,
+  ExternalLink,
+  ReceiptText,
   User,
   Users
 } from "lucide-react";
@@ -46,6 +50,7 @@ import {
   ClientReportScreen,
   reportClientIssue,
   SplitikAttachment,
+  SplitikDraft,
   SplitikMessageResponse,
   SplitAppTokens,
   saveTokens,
@@ -61,7 +66,13 @@ type NotificationTab = "incoming" | "read";
 type PermissionId = "contacts" | "camera" | "gallery" | "notifications";
 type PermissionStatus = "pending" | "granted" | "unsupported" | "denied" | "skipped";
 type PermissionState = Record<PermissionId, { status: PermissionStatus; detail: string }>;
-type ChatMessage = { id: string; from: "user" | "splitik"; text: string };
+type ChatMessage = {
+  id: string;
+  from: "user" | "splitik";
+  text: string;
+  drafts?: SplitikDraft[];
+  questions?: Array<{ id: string; text: string }>;
+};
 type EventReceipts = Record<string, { loading: boolean; items: ReceiptSummary[] }>;
 type MarkdownBlock = { type: "paragraph"; text: string } | { type: "list"; items: string[] };
 type FriendOption = { id: string; initials: string; name: string; subtitle: string; amount: number; tone: string };
@@ -697,7 +708,13 @@ export default function SplitAppPage() {
       setSplitikSessionId(response.session_id);
       setChatMessages((items) => [
         ...items,
-        { id: response.message_id || `s-${Date.now()}`, from: "splitik", text: response.assistant_message }
+        {
+          id: response.message_id || `s-${Date.now()}`,
+          from: "splitik",
+          text: response.assistant_message,
+          drafts: response.drafts ?? [],
+          questions: response.questions ?? []
+        }
       ]);
     } catch (error) {
       const requestId = error instanceof ApiError ? error.requestId : undefined;
@@ -720,6 +737,25 @@ export default function SplitAppPage() {
       ]);
     } finally {
       setIsSplitikSending(false);
+    }
+  };
+
+  const confirmSplitikDraft = async (draftId: string) => {
+    if (!tokens) return;
+    try {
+      await authedApi(`/api/splitik/drafts/${draftId}/commit`, { method: "POST" });
+      setChatMessages((items) =>
+        items.map((item) => ({
+          ...item,
+          drafts: item.drafts?.map((draft) => (draft.id === draftId ? { ...draft, status: "committed" } : draft))
+        }))
+      );
+      const eventPage = await authedApi<EventPage>("/api/events");
+      const nextEvents = pageItems(eventPage).map(normalizeEvent);
+      setEvents(nextEvents.length ? nextEvents : fallbackEvents);
+      setMessage("Черновик подтвержден.");
+    } catch (error) {
+      setMessage(splitikErrorMessage(error));
     }
   };
 
@@ -816,6 +852,7 @@ export default function SplitAppPage() {
             attachments={splitikAttachments}
             isAttachmentUploading={isSplitikAttachmentUploading}
             onAttachReceipt={uploadSplitikAttachment}
+            onConfirmDraft={confirmSplitikDraft}
             onShowFriendCode={showFriendCode}
             onAddFriendByCode={addFriendByCode}
             onNavigate={navigate}
@@ -1132,6 +1169,7 @@ function WorkspaceScreen({
   attachments,
   isAttachmentUploading,
   onAttachReceipt,
+  onConfirmDraft,
   onShowFriendCode,
   onAddFriendByCode,
   onNavigate
@@ -1173,6 +1211,7 @@ function WorkspaceScreen({
   attachments: SplitikAttachment[];
   isAttachmentUploading: boolean;
   onAttachReceipt: (file: File) => void;
+  onConfirmDraft: (draftId: string) => void;
   onShowFriendCode: () => void;
   onAddFriendByCode: (code: string) => Promise<boolean>;
   onNavigate: (view: View) => void;
@@ -1232,6 +1271,7 @@ function WorkspaceScreen({
             attachments={attachments}
             isAttachmentUploading={isAttachmentUploading}
             onAttachReceipt={onAttachReceipt}
+            onConfirmDraft={onConfirmDraft}
           />
         ) : null}
       </motion.div>
@@ -1972,7 +2012,8 @@ function SplitikScreen({
   isSending,
   attachments,
   isAttachmentUploading,
-  onAttachReceipt
+  onAttachReceipt,
+  onConfirmDraft
 }: {
   messages: ChatMessage[];
   draft: string;
@@ -1982,6 +2023,7 @@ function SplitikScreen({
   attachments: SplitikAttachment[];
   isAttachmentUploading: boolean;
   onAttachReceipt: (file: File) => void;
+  onConfirmDraft: (draftId: string) => void;
 }) {
   return (
     <SvgScreenFrame
@@ -2008,14 +2050,32 @@ function SplitikScreen({
             </div>
           </div>
           {messages.slice(2).map((item) => (
-            <div
-              key={item.id}
-              className={cn(
-                "max-w-[86%] rounded-2xl px-3 py-2 text-[15px] leading-6",
-                item.from === "user" ? "ml-auto bg-[#1f3d8f] font-bold text-white" : "mr-auto bg-[#eef1f7] font-medium text-slate-900"
-              )}
-            >
-              {item.from === "splitik" ? <MarkdownMessage text={item.text} /> : item.text}
+            <div key={item.id} className={cn("grid gap-2", item.from === "user" ? "justify-items-end" : "justify-items-start")}>
+              <div
+                className={cn(
+                  "max-w-[86%] rounded-2xl px-3 py-2 text-[15px] leading-6",
+                  item.from === "user" ? "ml-auto bg-[#1f3d8f] font-bold text-white" : "mr-auto bg-[#eef1f7] font-medium text-slate-900"
+                )}
+              >
+                {item.from === "splitik" ? <MarkdownMessage text={item.text} /> : item.text}
+              </div>
+              {item.from === "splitik" && item.drafts?.length ? (
+                <div className="grid w-full max-w-[92%] gap-2">
+                  {item.drafts.map((draftItem) => (
+                    <SplitikDraftCard key={draftItem.id} draft={draftItem} onConfirm={onConfirmDraft} onEdit={onDraft} />
+                  ))}
+                </div>
+              ) : null}
+              {item.from === "splitik" && item.questions?.length ? (
+                <div className="grid w-full max-w-[92%] gap-1 rounded-2xl border border-[#d8dfeb] bg-white px-3 py-3 text-sm font-bold text-slate-700">
+                  <span className="text-[11px] font-black uppercase tracking-wide text-[#1f3d8f]">Нужно уточнить</span>
+                  {item.questions.map((question) => (
+                    <button key={question.id} type="button" className="text-left leading-5" onClick={() => onDraft(question.text)}>
+                      {question.text}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
@@ -2095,6 +2155,113 @@ function MarkdownMessage({ text }: { text: string }) {
       })}
     </div>
   );
+}
+
+function SplitikDraftCard({
+  draft,
+  onConfirm,
+  onEdit
+}: {
+  draft: SplitikDraft;
+  onConfirm: (draftId: string) => void;
+  onEdit: (value: string) => void;
+}) {
+  const title = splitikDraftTitle(draft);
+  const details = splitikDraftDetails(draft);
+  const isCommitted = draft.status === "committed";
+  return (
+    <Card data-testid="splitik-draft-card" className="overflow-hidden rounded-2xl border-[#d8dfeb] bg-white shadow-sm">
+      <CardHeader className="grid gap-2 p-3 pb-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#eef1f7] text-[#1f3d8f]">
+              {draft.type === "create_receipt" ? <ReceiptText className="h-5 w-5" /> : <CalendarCheck className="h-5 w-5" />}
+            </span>
+            <div className="min-w-0">
+              <CardTitle className="truncate text-sm font-black text-slate-950">{title}</CardTitle>
+              <p className="text-xs font-bold text-slate-500">{splitikDraftKind(draft)}</p>
+            </div>
+          </div>
+          <Badge className={cn("rounded-full px-2.5 py-1 text-[10px] font-black", isCommitted ? "bg-emerald-100 text-emerald-700" : "bg-[#d2daec] text-[#1f3d8f]")}>
+            {isCommitted ? "Подтвержден" : "Черновик"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-3 p-3 pt-0">
+        <div className="grid gap-1.5 rounded-xl bg-[#f5f7fb] p-3">
+          {details.map(([label, value]) => (
+            <div key={label} className="flex items-start justify-between gap-3 text-xs">
+              <span className="font-bold text-slate-500">{label}</span>
+              <span className="max-w-[62%] text-right font-black text-slate-900">{value}</span>
+            </div>
+          ))}
+        </div>
+        {draft.questions?.length ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+            Нужно уточнить: {draft.questions.map((question) => question.text).join(" · ")}
+          </div>
+        ) : null}
+        <div className="grid grid-cols-3 gap-2">
+          <Button type="button" variant="ghost" className="h-10 rounded-xl bg-[#eef1f7] px-2 text-xs font-black text-[#1f3d8f]" onClick={() => onEdit(`Покажи подробнее черновик ${draft.id}`)}>
+            <ExternalLink className="mr-1 h-4 w-4" />
+            Открыть
+          </Button>
+          <Button type="button" variant="ghost" className="h-10 rounded-xl bg-[#eef1f7] px-2 text-xs font-black text-[#1f3d8f]" onClick={() => onEdit(`Измени черновик ${draft.id}: `)}>
+            <PencilLine className="mr-1 h-4 w-4" />
+            Изменить
+          </Button>
+          <Button data-testid="splitik-draft-confirm" type="button" disabled={isCommitted} className="h-10 rounded-xl bg-[#1f3d8f] px-2 text-xs font-black text-white hover:bg-[#1f3d8f]/90 disabled:bg-slate-300" onClick={() => onConfirm(draft.id)}>
+            <Check className="mr-1 h-4 w-4" />
+            OK
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function splitikDraftKind(draft: SplitikDraft) {
+  if (draft.type === "create_event") return "Черновик события";
+  if (draft.type === "create_receipt") return "Черновик чека";
+  return "Черновик";
+}
+
+function splitikDraftTitle(draft: SplitikDraft) {
+  const payload = draft.payload;
+  if (draft.type === "create_event") return stringValue(payload.name) || "Новое событие";
+  if (draft.type === "create_receipt") return stringValue(payload.title) || "Новый чек";
+  return "Черновик";
+}
+
+function splitikDraftDetails(draft: SplitikDraft): Array<[string, string]> {
+  const payload = draft.payload;
+  if (draft.type === "create_event") {
+    return [
+      ["Название", stringValue(payload.name) || "Без названия"],
+      ["Статус", draft.status === "committed" ? "подтвержден" : "ожидает подтверждения"]
+    ];
+  }
+  if (draft.type === "create_receipt") {
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    return [
+      ["Сумма", money(numberValue(payload.total_amount_kopecks))],
+      ["Плательщик", shortId(stringValue(payload.payer_id))],
+      ["Позиции", items.length ? `${items.length}` : "не указаны"]
+    ];
+  }
+  return [["Статус", draft.status]];
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function shortId(value: string) {
+  return value ? `${value.slice(0, 8)}...` : "не указан";
 }
 
 function parseMarkdownMessage(text: string): MarkdownBlock[] {

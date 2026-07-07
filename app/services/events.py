@@ -1,3 +1,4 @@
+import os
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -57,6 +58,14 @@ _EVENT_POLICY_OPTIONS = {
     },
     "safety_policy": {"explicit_review"},
 }
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
 
 _EVENT_POLICY_DEFAULTS = {
     "split_strategy": "equal_default",
@@ -219,6 +228,13 @@ def _get_active_invite_or_error(db: Database, token: str) -> dict:
 
 @track_service_operation("events.create")
 def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str) -> dict:
+    check_rate_limit(
+        "events.create.day",
+        actor_user_id,
+        max_requests=_env_int("EVENT_CREATE_DAILY_LIMIT", 5),
+        window_seconds=24 * 60 * 60,
+        detail="Daily event creation limit exceeded.",
+    )
     creator_id = actor_user_id
     get_user_or_404(db, creator_id)
 

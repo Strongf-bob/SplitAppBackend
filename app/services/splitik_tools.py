@@ -59,6 +59,7 @@ def create_receipt_draft(
     source: str = "text",
     attachment_ids: list[str] | None = None,
     questions: list[dict] | None = None,
+    model_metadata: dict | None = None,
 ) -> dict:
     assert_event_access(db, event_id, actor_user_id)
     try:
@@ -79,7 +80,7 @@ def create_receipt_draft(
         "source": source,
         "attachment_ids": attachment_ids or [],
         "questions": questions or [],
-        "model_metadata": {},
+        "model_metadata": model_metadata or {},
         "created_at": now,
         "updated_at": now,
     }
@@ -131,15 +132,22 @@ def latest_pending_draft(
     actor_user_id: str,
     session_id: str,
     draft_type: str | None = None,
+    event_id: str | None = None,
 ) -> dict | None:
     query = {"owner_user_id": actor_user_id, "session_id": session_id, "status": "pending"}
     if draft_type:
         query["type"] = draft_type
+    if event_id:
+        query["event_id"] = event_id
     return db.splitik_drafts.find_one(query, sort=[("updated_at", -1)])
 
 
-def read_active_draft(db: Database, *, actor_user_id: str, session_id: str) -> dict | None:
-    draft = latest_pending_draft(db, actor_user_id=actor_user_id, session_id=session_id)
+def read_active_draft(
+    db: Database, *, actor_user_id: str, session_id: str, event_id: str | None = None
+) -> dict | None:
+    draft = latest_pending_draft(
+        db, actor_user_id=actor_user_id, session_id=session_id, event_id=event_id
+    )
     if not draft:
         return None
     return draft_to_api(draft)

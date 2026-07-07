@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import HTTPException
 from pymongo.database import Database
 
+from app.core.rate_limit import check_rate_limit
 from app.services.common import new_uuid, strip_mongo_id, utc_now
 
 _MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
@@ -13,6 +14,13 @@ _IMAGE_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
 def _bucket_name() -> str | None:
     bucket = os.getenv("S3_BUCKET", "").strip()
     return bucket or None
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
 
 
 def _public_metadata(attachment: dict) -> dict:
@@ -32,6 +40,13 @@ def create_attachment(
     content_type: str,
     content: bytes,
 ) -> dict:
+    check_rate_limit(
+        "splitik.attachments.day",
+        actor_user_id,
+        max_requests=_env_int("SPLITIK_ATTACHMENT_DAILY_LIMIT", 10),
+        window_seconds=24 * 60 * 60,
+        detail="Splitik attachment daily limit exceeded.",
+    )
     if len(content) > _MAX_ATTACHMENT_BYTES:
         raise HTTPException(status_code=413, detail="Attachment too large (max 10 MB).")
     normalized_content_type = content_type.strip().lower()

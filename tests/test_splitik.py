@@ -1,4 +1,5 @@
 import importlib.util
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -10,7 +11,14 @@ from app import schemas
 from app.dependencies import get_actor_user_id, get_db, get_s3
 from app.main import configure_request_logging
 from app.routers import splitik as splitik_router
-from app.services import receipt_ai_drafts, receipts, splitik, splitik_attachments, splitik_llm
+from app.services import (
+    receipt_ai_drafts,
+    receipts,
+    splitik,
+    splitik_attachments,
+    splitik_llm,
+    splitik_tools,
+)
 from tests.conftest import EVENT_ID, USER_A, USER_B, USER_C, seed_event, seed_users
 
 
@@ -50,6 +58,21 @@ def _mock_event_draft_candidate(monkeypatch, *, name="Кофе в Серф с П
         }
 
     monkeypatch.setattr(splitik_llm, "generate_event_draft_candidate", fake_candidate)
+    return calls
+
+
+def _mock_plan_candidate(monkeypatch, content):
+    calls = []
+
+    def fake_candidate(*, user_message, context):
+        calls.append({"user_message": user_message, "context": context})
+        return {
+            "model_role": "primary",
+            "model_id": "planner-model",
+            "content": content,
+        }
+
+    monkeypatch.setattr(splitik_llm, "generate_splitik_plan_candidate", fake_candidate)
     return calls
 
 
@@ -655,6 +678,330 @@ def test_splitik_rejects_instruction_text_as_event_name(db, monkeypatch):
     assert db.splitik_drafts.count_documents({}) == 0
 
 
+def test_splitik_planner_creates_multiple_event_drafts(db, monkeypatch):
+    seed_users(db)
+    _mock_llm(monkeypatch)
+    _mock_plan_candidate(
+        monkeypatch,
+        {
+            "intent": "create_drafts",
+            "assistant_message": "Подготовил два черновика событий.",
+            "actions": [
+                {"type": "create_event_draft", "payload": {"name": "Кофе в Серф"}},
+                {"type": "create_event_draft", "payload": {"name": "Ужин в Duo"}},
+            ],
+        },
+    )
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="general",
+            message="Создай два события: кофе в Серф и ужин в Duo",
+        ),
+        USER_A,
+    )
+
+    assert response["intent"] == "draft"
+    assert [draft["payload"]["name"] for draft in response["drafts"]] == [
+        "Кофе в Серф",
+        "Ужин в Duo",
+    ]
+    assert response["assistant_message"] == "Подготовил два черновика событий."
+    assert db.events.count_documents({}) == 0
+
+
+def test_splitik_planner_limits_drafts_per_request_before_writes(db, monkeypatch):
+    monkeypatch.setenv("SPLITIK_MAX_DRAFTS_PER_REQUEST", "1")
+    seed_users(db)
+    _mock_llm(monkeypatch)
+    _mock_plan_candidate(
+        monkeypatch,
+        {
+            "intent": "create_drafts",
+            "assistant_message": "Подготовил два черновика событий.",
+            "actions": [
+                {"type": "create_event_draft", "payload": {"name": "Кофе в Серф"}},
+                {"type": "create_event_draft", "payload": {"name": "Ужин в Duo"}},
+            ],
+        },
+    )
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="general",
+            message="Создай два события: кофе в Серф и ужин в Duo",
+        ),
+        USER_A,
+    )
+
+    assert response["intent"] == "guardrail"
+    assert response["drafts"] == []
+    assert response["guardrail_decision"]["reason"] == "splitik_draft_request_limit"
+    assert db.splitik_drafts.count_documents({}) == 0
+
+
+def test_splitik_limits_pending_drafts_per_user(db, monkeypatch):
+    monkeypatch.setenv("SPLITIK_PENDING_DRAFT_LIMIT", "1")
+    seed_users(db)
+    _mock_llm(monkeypatch)
+    splitik_tools.create_event_draft(
+        db,
+        actor_user_id=USER_A,
+        session_id="aaaaaaaa-1111-1111-1111-111111111111",
+        payload={"name": "Старый черновик"},
+        source="planner",
+    )
+    _mock_plan_candidate(
+        monkeypatch,
+        {
+            "intent": "create_drafts",
+            "assistant_message": "Подготовил черновик события.",
+            "actions": [{"type": "create_event_draft", "payload": {"name": "Новый черновик"}}],
+        },
+    )
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(mode="general", message="Создай событие"),
+        USER_A,
+    )
+
+    assert response["intent"] == "guardrail"
+    assert response["drafts"] == []
+    assert response["guardrail_decision"]["reason"] == "splitik_pending_draft_limit"
+    assert db.splitik_drafts.count_documents({"owner_user_id": USER_A}) == 1
+
+
+def test_splitik_planner_receives_all_attachment_metadata(db, fake_s3, monkeypatch):
+    _mock_llm(monkeypatch)
+    monkeypatch.setenv("S3_BUCKET", "test-bucket")
+    seed_event(db)
+    first = splitik_attachments.create_attachment(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        filename="receipt-1.jpg",
+        content_type="image/jpeg",
+        content=b"\xff\xd8\xfffirst",
+    )
+    second = splitik_attachments.create_attachment(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        filename="receipt-2.jpg",
+        content_type="image/jpeg",
+        content=b"\xff\xd8\xffsecond",
+    )
+    planner_calls = _mock_plan_candidate(
+        monkeypatch,
+        {
+            "intent": "ask_clarifying_question",
+            "assistant_message": "Не вижу OCR текста по фото. Уточните суммы.",
+            "actions": [
+                {
+                    "type": "ask_clarifying_question",
+                    "questions": [
+                        {
+                            "id": "receipt_text",
+                            "text": "Пришлите текст или OCR по чекам.",
+                            "required": True,
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Создай черновики по двум фото",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+            attachment_ids=[first["id"], second["id"]],
+        ),
+        USER_A,
+    )
+
+    attachment_ids = [attachment["id"] for attachment in planner_calls[0]["context"]["attachments"]]
+    assert attachment_ids == [first["id"], second["id"]]
+    assert "key" not in str(planner_calls[0]["context"]["attachments"])
+    assert response["intent"] == "question"
+    assert response["questions"][0]["id"] == "receipt_text"
+    assert db.splitik_drafts.count_documents({}) == 0
+
+
+def test_splitik_rejects_too_many_attachments_per_message(db, monkeypatch):
+    monkeypatch.setenv("SPLITIK_ATTACHMENTS_PER_MESSAGE", "3")
+    seed_users(db)
+    _mock_llm(monkeypatch)
+
+    with pytest.raises(HTTPException) as exc:
+        splitik.send_splitik_message(
+            db,
+            schemas.SplitikMessageRequest(
+                mode="general",
+                message="Разбери фото чеков",
+                attachment_ids=[
+                    "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
+                    "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2",
+                    "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3",
+                    "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4",
+                ],
+            ),
+            USER_A,
+        )
+
+    assert exc.value.status_code == 429
+    assert exc.value.detail == "Too many Splitik attachments in one message."
+    assert db.splitik_sessions.count_documents({}) == 0
+    assert db.splitik_drafts.count_documents({}) == 0
+    assert db.splitik_interactions.find_one({"error.type": "HTTPException"}) is not None
+
+
+def test_splitik_planner_creates_receipt_draft_from_structured_json(db, monkeypatch):
+    _mock_llm(monkeypatch)
+    seed_event(db)
+    receipt_payload = _receipt_ai_candidate("primary")["content"]["payload"]
+    _mock_plan_candidate(
+        monkeypatch,
+        {
+            "intent": "create_drafts",
+            "assistant_message": "Подготовил черновик чека.",
+            "actions": [
+                {
+                    "type": "create_receipt_draft",
+                    "event_id": EVENT_ID,
+                    "payload": receipt_payload,
+                    "questions": [],
+                }
+            ],
+        },
+    )
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Добавь чек: капучино 10 рублей",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+
+    assert response["intent"] == "draft"
+    assert len(response["drafts"]) == 1
+    assert response["drafts"][0]["type"] == "create_receipt"
+    assert response["drafts"][0]["payload"]["items"][0]["name"] == "Капучино"
+    assert response["drafts"][0]["model_metadata"]["model_id"] == "planner-model"
+    assert db.receipts.count_documents({"event_id": EVENT_ID}) == 0
+
+
+def test_splitik_planner_rejects_forbidden_action_without_writes(db, monkeypatch):
+    seed_event(db)
+    _mock_llm(monkeypatch)
+    _mock_plan_candidate(
+        monkeypatch,
+        {
+            "intent": "create_drafts",
+            "assistant_message": "Я удалил событие.",
+            "actions": [
+                {
+                    "type": "delete_event",
+                    "event_id": EVENT_ID,
+                    "$where": "this.creator_id != null",
+                }
+            ],
+        },
+    )
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Удали событие",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+
+    assert response["intent"] == "guardrail"
+    assert response["drafts"] == []
+    assert response["guardrail_decision"]["reason"] == "forbidden_operation"
+    assert db.splitik_drafts.count_documents({}) == 0
+
+
+def test_splitik_receipt_draft_update_is_scoped_to_current_event(db, monkeypatch):
+    _mock_llm(monkeypatch)
+    seed_event(db)
+    second_event_id = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    db.events.insert_one(
+        {
+            "id": second_event_id,
+            "creator_id": USER_A,
+            "name": "Dinner",
+            "is_closed": False,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+    db.event_memberships.insert_many(
+        [
+            {
+                "id": "dddddddd-0000-0000-0000-000000000001",
+                "event_id": second_event_id,
+                "user_id": USER_A,
+                "role": "creator",
+                "status": "active",
+                "joined_at": now,
+                "removed_at": None,
+                "created_at": now,
+                "updated_at": now,
+            },
+            {
+                "id": "dddddddd-0000-0000-0000-000000000002",
+                "event_id": second_event_id,
+                "user_id": USER_B,
+                "role": "member",
+                "status": "active",
+                "joined_at": now,
+                "removed_at": None,
+                "created_at": now,
+                "updated_at": now,
+            },
+        ]
+    )
+
+    created = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Добавь чек: кофе 1200 рублей",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+    first_draft_id = created["drafts"][0]["id"]
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            session_id=created["session_id"],
+            mode="event",
+            message="Поменяй сумму на 1500 рублей",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=second_event_id),
+        ),
+        USER_A,
+    )
+
+    stored = db.splitik_drafts.find_one({"id": first_draft_id})
+    assert stored["payload"]["total_amount_kopecks"] == 120000
+    assert response["drafts"] == []
+
+
 def test_splitik_creates_receipt_draft_from_event_text_without_changing_money(db, monkeypatch):
     _mock_llm(monkeypatch)
     seed_event(db)
@@ -1056,6 +1403,54 @@ def test_splitik_attachment_upload_works_without_object_storage(db, fake_s3, mon
     assert stored["storage"] == "mongo"
     assert stored["content"] == b"\xff\xd8\xfffake-jpeg"
     assert fake_s3.objects == {}
+
+
+def test_splitik_attachment_upload_daily_limit(db, fake_s3, monkeypatch):
+    monkeypatch.setenv("SPLITIK_ATTACHMENT_DAILY_LIMIT", "1")
+    monkeypatch.delenv("S3_BUCKET", raising=False)
+
+    splitik_attachments.create_attachment(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        filename="receipt-1.jpg",
+        content_type="image/jpeg",
+        content=b"\xff\xd8\xfffirst",
+    )
+    with pytest.raises(HTTPException) as exc:
+        splitik_attachments.create_attachment(
+            db,
+            fake_s3,
+            actor_user_id=USER_A,
+            filename="receipt-2.jpg",
+            content_type="image/jpeg",
+            content=b"\xff\xd8\xffsecond",
+        )
+
+    assert exc.value.status_code == 429
+    assert exc.value.detail == "Splitik attachment daily limit exceeded."
+    assert db.splitik_attachments.count_documents({"owner_user_id": USER_A}) == 1
+
+
+def test_splitik_message_hourly_limit_is_enforced(db, monkeypatch):
+    monkeypatch.setenv("SPLITIK_MESSAGE_HOURLY_LIMIT", "1")
+    seed_users(db)
+    _mock_llm(monkeypatch)
+
+    splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(mode="general", message="Привет"),
+        USER_A,
+    )
+    with pytest.raises(HTTPException) as exc:
+        splitik.send_splitik_message(
+            db,
+            schemas.SplitikMessageRequest(mode="general", message="Еще вопрос"),
+            USER_A,
+        )
+
+    assert exc.value.status_code == 429
+    assert exc.value.detail == "Splitik hourly message limit exceeded."
 
 
 def test_splitik_explains_user_scoped_spending_from_backend_facts(db, monkeypatch):

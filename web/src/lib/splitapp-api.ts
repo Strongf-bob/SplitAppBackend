@@ -97,12 +97,26 @@ export type ReceiptPage = {
   total: number;
 };
 
+export type SplitikDraft = {
+  id: string;
+  type: string;
+  status: string;
+  payload: Record<string, unknown>;
+  event_id?: string | null;
+  session_id?: string | null;
+  version?: number;
+  source?: string;
+  attachment_ids?: string[];
+  questions?: Array<{ id: string; text: string; required?: boolean }>;
+};
+
 export type SplitikMessageResponse = {
   session_id: string;
   message_id: string;
   assistant_message: string;
+  drafts?: SplitikDraft[];
   questions?: Array<{ id: string; text: string }>;
-  suggested_actions?: Array<{ type: string; label: string }>;
+  suggested_actions?: Array<{ type: string; label: string; draft_id?: string | null }>;
 };
 
 export type SplitikAttachment = {
