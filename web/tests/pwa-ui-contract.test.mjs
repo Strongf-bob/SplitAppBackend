@@ -83,7 +83,7 @@ test("authenticated app uses real backend actions instead of static cards", () =
 test("mobile shell keeps the real app surface full-height and gallery input mounted", () => {
   assert.match(page, /bg-\[#f5f5f7\]/);
   assert.match(page, /pb-\[var\(--bottom-nav-reserve\)\]/);
-  assert.match(globals, /--bottom-nav-reserve:\s*calc\(104px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.match(globals, /--bottom-nav-reserve:\s*calc\(92px \+ env\(safe-area-inset-bottom\)\)/);
   assert.match(page, /galleryInputRef/);
   assert.doesNotMatch(page, /bg-\[#1e1e1e\]/);
 });
@@ -242,6 +242,20 @@ test("mobile layout scales from compact phones with adaptive tokens instead of f
   assert.doesNotMatch(page, /text-\[72px\]/);
   assert.doesNotMatch(page, /h-28 w-28/);
   assert.doesNotMatch(page, /grid-cols-\[92px_1fr_auto\]/);
+});
+
+test("home screen uses compact phone tokens instead of oversized Figma frame proportions", () => {
+  assert.match(globals, /--home-hero-gap:\s*clamp\(/);
+  assert.match(globals, /--home-event-min-height:\s*clamp\(/);
+  assert.match(globals, /--avatar-stack-size:\s*clamp\(/);
+  assert.match(page, /gap-\[var\(--home-hero-gap\)\]/);
+  assert.match(page, /minHeight: "var\(--home-event-min-height\)"/);
+  assert.match(page, /width: "var\(--avatar-stack-size\)", height: "var\(--avatar-stack-size\)"/);
+  assert.doesNotMatch(globals, /--balance-font:\s*clamp\(3rem,\s*16vw,\s*4\.5rem\)/);
+  assert.doesNotMatch(globals, /--action-icon-size:\s*clamp\(4rem,\s*22vw,\s*7rem\)/);
+  assert.doesNotMatch(page, /mt-12 grid grid-cols-\[repeat\(3,minmax\(0,1fr\)\)\]/);
+  assert.doesNotMatch(page, /min-h-\[clamp\(9rem,42vw,10\.875rem\)\]/);
+  assert.doesNotMatch(page, /h-16 w-16/);
 });
 
 test("Splitik chat uses a messenger-style bottom anchored message list", () => {

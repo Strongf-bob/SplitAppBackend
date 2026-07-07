@@ -1256,18 +1256,18 @@ function HomeScreen({
   const balance = (owedToMe || 0) - (iOwe || 0);
   return (
     <div data-testid="home-balance-screen" className="-mx-3 -mt-3 grid min-h-[calc(100dvh-92px)] w-full overflow-hidden content-start bg-[#1f3d8f] text-white">
-      <section className="px-[var(--page-x)] pb-9 pt-8">
+      <section className="grid gap-[var(--home-hero-gap)] px-[var(--page-x)] pb-[clamp(1.5rem,5dvh,2.25rem)] pt-[clamp(1.5rem,5dvh,2.25rem)]">
         <p className="break-words text-center font-black leading-none tracking-normal" style={{ fontSize: "var(--balance-font)" }}>{money(balance)}</p>
-        <div className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-3 text-[clamp(1rem,5.6vw,1.375rem)] font-black leading-none">
+        <div className="flex flex-wrap justify-center gap-x-[clamp(1rem,5vw,1.75rem)] gap-y-3 text-[clamp(0.9375rem,4.7vw,1.25rem)] font-black leading-none">
           <span className="inline-flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-md bg-emerald-600 text-emerald-300">
-              <ArrowUp className="h-7 w-7" strokeWidth={3.2} />
+            <span className="grid h-8 w-8 place-items-center rounded-md bg-emerald-600 text-emerald-300">
+              <ArrowUp className="h-6 w-6" strokeWidth={3.2} />
             </span>
             {money(owedToMe)}
           </span>
           <span className="inline-flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-md bg-red-700 text-red-500">
-              <ArrowDown className="h-7 w-7" strokeWidth={3.2} />
+            <span className="grid h-8 w-8 place-items-center rounded-md bg-red-700 text-red-500">
+              <ArrowDown className="h-6 w-6" strokeWidth={3.2} />
             </span>
             {money(iOwe)}
           </span>
@@ -1276,25 +1276,26 @@ function HomeScreen({
           data-testid="home-event-card"
           type="button"
           onClick={() => onNavigate("events")}
-          className="mt-8 grid h-auto min-h-[clamp(9rem,42vw,10.875rem)] w-full justify-stretch gap-4 rounded-[clamp(1.5rem,7vw,2rem)] bg-[#111111] px-[clamp(1.25rem,7vw,2.25rem)] py-[clamp(1.25rem,6vw,1.75rem)] text-left text-white hover:bg-[#111111]/92"
+          className="grid h-auto w-full justify-stretch gap-[clamp(0.875rem,3.6vw,1.25rem)] bg-[#111111] px-[clamp(1.25rem,6vw,2rem)] py-[clamp(1.125rem,5vw,1.5rem)] text-left text-white hover:bg-[#111111]/92"
+          style={{ minHeight: "var(--home-event-min-height)", borderRadius: "var(--home-event-radius)" }}
         >
-          <span className="break-words text-[clamp(1.25rem,6.6vw,1.75rem)] font-black leading-tight">{eventTitle(mainEvent)}</span>
+          <span className="break-words text-[clamp(1.125rem,5.6vw,1.625rem)] font-black leading-tight">{eventTitle(mainEvent)}</span>
           <span className="flex items-end justify-between gap-3">
             <AvatarStack count={mainEvent.participants_count ?? mainEvent.participants?.length ?? 0} />
             <span className="min-w-0 break-words pb-1 text-right font-black text-white/38" style={{ fontSize: "var(--home-total-font)" }}>{money(mainEvent.total_kopecks ?? 0)}</span>
           </span>
         </Button>
-        <div className="mt-12 grid grid-cols-[repeat(3,minmax(0,1fr))] gap-[clamp(0.5rem,3vw,1rem)]">
+        <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-[clamp(0.5rem,3vw,1rem)]">
           <QuickAction icon={ScanLine} label="Сканировать чек" onClick={() => onNavigate("splitik")} />
           <QuickAction icon={Plus} label="Добавить платеж" onClick={onCreateEventOpen} />
           <QuickAction icon={Inbox} label="Входящие" onClick={() => onNavigate("notifications")} />
         </div>
       </section>
 
-      <section className="rounded-t-[28px] bg-[#f5f5f7] px-[var(--sheet-x)] pb-[var(--bottom-nav-reserve)] pt-8 text-slate-950">
-        <div className="mb-7 flex items-center justify-between gap-4">
-          <h3 className="text-[30px] font-black leading-none">Активность</h3>
-          <Badge className="rounded-full bg-[#d2d6e6] px-5 py-1.5 text-lg font-black text-[#1f3d8f]">Все</Badge>
+      <section className="rounded-t-[28px] bg-[#f5f5f7] px-[var(--sheet-x)] pb-[var(--bottom-nav-reserve)] pt-[clamp(1.5rem,5vw,2rem)] text-slate-950">
+        <div className="mb-[clamp(1.25rem,5vw,1.75rem)] flex items-center justify-between gap-4">
+          <h3 className="text-[clamp(1.625rem,7vw,1.875rem)] font-black leading-none">Активность</h3>
+          <Badge className="rounded-full bg-[#d2d6e6] px-4 py-1.5 text-base font-black text-[#1f3d8f]">Все</Badge>
         </div>
         <div className="grid gap-0">
         {[
@@ -1308,7 +1309,7 @@ function HomeScreen({
               <p className="break-words font-black leading-tight" style={{ fontSize: "var(--activity-title-font)" }}>{title}</p>
               <p className="break-words font-bold leading-tight text-slate-400" style={{ fontSize: "var(--activity-detail-font)" }}>{detail}</p>
             </div>
-            <span className={cn("col-start-2 text-[clamp(1rem,5.7vw,1.5rem)] font-black sm:col-start-auto", tone)}>{amount}</span>
+            <span className={cn("col-start-2 text-[clamp(1rem,5vw,1.375rem)] font-black sm:col-start-auto", tone)}>{amount}</span>
           </div>
         ))}
         </div>
@@ -1326,17 +1327,18 @@ function AvatarStack({ count }: { count: number }) {
         <span
           key={friend.id}
           className={cn(
-            "-ml-2 grid h-16 w-16 place-items-center rounded-full border-2 border-[#111111] text-[24px] font-black",
+            "-ml-2 grid place-items-center rounded-full border-2 border-[#111111] font-black",
             index === 0 && "ml-0 bg-[#bbb2d5] text-[#654da1]",
             index === 1 && "bg-[#d8d9e4] text-[#1f3d8f]",
             index === 2 && "bg-[#c9d0e2] text-[#0645d8]"
           )}
+          style={{ width: "var(--avatar-stack-size)", height: "var(--avatar-stack-size)", fontSize: "var(--avatar-stack-font)" }}
         >
           {friend.initials}
         </span>
       ))}
       {overflow ? (
-        <span className="-ml-2 grid h-16 w-16 place-items-center rounded-full border-2 border-[#111111] bg-slate-500 text-[22px] font-black text-white">
+        <span className="-ml-2 grid place-items-center rounded-full border-2 border-[#111111] bg-slate-500 font-black text-white" style={{ width: "var(--avatar-stack-size)", height: "var(--avatar-stack-size)", fontSize: "var(--avatar-stack-font)" }}>
           +{overflow}
         </span>
       ) : null}
