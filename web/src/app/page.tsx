@@ -940,7 +940,7 @@ function PhoneShell({
         </header>
       ) : null}
 
-      <section className={cn("relative z-10", loggedIn && "pb-[calc(120px+env(safe-area-inset-bottom))]")}>{children}</section>
+      <section className={cn("relative z-10", loggedIn && "pb-[var(--bottom-nav-reserve)]")}>{children}</section>
 
       {loggedIn ? (
         <nav
@@ -981,10 +981,10 @@ function BottomNavButton({ item, active }: { item: { id: View; label: string; ic
 
 function AuthScreen({ onLogin }: { onLogin: () => void }) {
   return (
-    <section data-testid="svg-auth-screen" className="grid min-h-dvh bg-[#1f3d8f] px-6 pb-[max(env(safe-area-inset-bottom),32px)] pt-[max(env(safe-area-inset-top),24px)] text-white">
-      <div className="grid content-center gap-4 pb-[18dvh] pt-[20dvh]">
+    <section data-testid="svg-auth-screen" className="grid min-h-dvh bg-[#1f3d8f] px-[var(--page-x)] pb-[max(env(safe-area-inset-bottom),32px)] pt-[max(env(safe-area-inset-top),24px)] text-white">
+      <div className="grid content-center gap-4 pb-[clamp(5rem,18dvh,9rem)] pt-[clamp(5rem,20dvh,10rem)]">
         <div>
-          <h1 className="text-[76px] font-black leading-none tracking-normal sm:text-[88px]">Split.</h1>
+          <h1 className="text-[clamp(4rem,20vw,5.5rem)] font-black leading-none tracking-normal">Split.</h1>
           <p className="mt-3 text-base font-bold text-[#d2daec]">Делите счета поровну</p>
         </div>
       </div>
@@ -1149,9 +1149,9 @@ function HomeScreen({
   const balance = (owedToMe || 0) - (iOwe || 0);
   return (
     <div data-testid="home-balance-screen" className="-mx-3 -mt-3 grid min-h-[calc(100dvh-92px)] content-start bg-[#1f3d8f] text-white">
-      <section className="px-5 pb-9 pt-8">
-        <p className="text-center text-[72px] font-black leading-none tracking-normal">{money(balance)}</p>
-        <div className="mt-7 flex justify-center gap-5 text-[22px] font-black leading-none">
+      <section className="px-[var(--page-x)] pb-9 pt-8">
+        <p className="break-words text-center font-black leading-none tracking-normal" style={{ fontSize: "var(--balance-font)" }}>{money(balance)}</p>
+        <div className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-3 text-[clamp(1rem,5.6vw,1.375rem)] font-black leading-none">
           <span className="inline-flex items-center gap-2">
             <span className="grid h-9 w-9 place-items-center rounded-md bg-emerald-600 text-emerald-300">
               <ArrowUp className="h-7 w-7" strokeWidth={3.2} />
@@ -1169,22 +1169,22 @@ function HomeScreen({
           data-testid="home-event-card"
           type="button"
           onClick={() => onNavigate("events")}
-          className="mt-8 grid h-auto min-h-[174px] w-full justify-stretch gap-4 rounded-[32px] bg-[#111111] px-9 py-7 text-left text-white hover:bg-[#111111]/92"
+          className="mt-8 grid h-auto min-h-[clamp(9rem,42vw,10.875rem)] w-full justify-stretch gap-4 rounded-[clamp(1.5rem,7vw,2rem)] bg-[#111111] px-[clamp(1.25rem,7vw,2.25rem)] py-[clamp(1.25rem,6vw,1.75rem)] text-left text-white hover:bg-[#111111]/92"
         >
-          <span className="text-[28px] font-black leading-tight">{eventTitle(mainEvent)}</span>
+          <span className="break-words text-[clamp(1.25rem,6.6vw,1.75rem)] font-black leading-tight">{eventTitle(mainEvent)}</span>
           <span className="flex items-end justify-between gap-3">
             <AvatarStack count={mainEvent.participants_count ?? mainEvent.participants?.length ?? 0} />
-            <span className="pb-1 text-[26px] font-black text-white/38">{money(mainEvent.total_kopecks ?? 0)}</span>
+            <span className="min-w-0 break-words pb-1 text-right font-black text-white/38" style={{ fontSize: "var(--home-total-font)" }}>{money(mainEvent.total_kopecks ?? 0)}</span>
           </span>
         </Button>
-        <div className="mt-12 grid grid-cols-3 gap-4">
+        <div className="mt-12 grid grid-cols-[repeat(3,minmax(0,1fr))] gap-[clamp(0.5rem,3vw,1rem)]">
           <QuickAction icon={ScanLine} label="Сканировать чек" onClick={() => onNavigate("splitik")} />
           <QuickAction icon={Plus} label="Добавить платеж" onClick={onCreateEventOpen} />
           <QuickAction icon={Inbox} label="Входящие" onClick={() => onNavigate("notifications")} />
         </div>
       </section>
 
-      <section className="rounded-t-[28px] bg-[#f5f5f7] px-7 pb-[calc(120px+env(safe-area-inset-bottom))] pt-8 text-slate-950">
+      <section className="rounded-t-[28px] bg-[#f5f5f7] px-[var(--sheet-x)] pb-[var(--bottom-nav-reserve)] pt-8 text-slate-950">
         <div className="mb-7 flex items-center justify-between gap-4">
           <h3 className="text-[30px] font-black leading-none">Активность</h3>
           <Badge className="rounded-full bg-[#d2d6e6] px-5 py-1.5 text-lg font-black text-[#1f3d8f]">Все</Badge>
@@ -1195,13 +1195,13 @@ function HomeScreen({
           ["Максим вернул долг", "Перевод сегодня", "+650 ₽", "text-emerald-600"],
           ["Иван создал событие", "Новое событие 3 мин", "-", "text-slate-500"]
         ].map(([title, detail, amount, tone]) => (
-          <div key={title} className="grid grid-cols-[92px_1fr_auto] items-center gap-3 border-b border-slate-200 py-4 last:border-b-0">
+          <div key={title} className="grid grid-cols-[var(--activity-avatar-size)_minmax(0,1fr)] items-center gap-3 border-b border-slate-200 py-4 last:border-b-0 sm:grid-cols-[var(--activity-avatar-size)_minmax(0,1fr)_auto]">
             <ActivityAvatar>{title[0]}</ActivityAvatar>
-            <div>
-              <p className="text-[24px] font-black leading-tight">{title}</p>
-              <p className="text-[21px] font-bold leading-tight text-slate-400">{detail}</p>
+            <div className="min-w-0">
+              <p className="break-words font-black leading-tight" style={{ fontSize: "var(--activity-title-font)" }}>{title}</p>
+              <p className="break-words font-bold leading-tight text-slate-400" style={{ fontSize: "var(--activity-detail-font)" }}>{detail}</p>
             </div>
-            <span className={cn("text-[24px] font-black", tone)}>{amount}</span>
+            <span className={cn("col-start-2 text-[clamp(1rem,5.7vw,1.5rem)] font-black sm:col-start-auto", tone)}>{amount}</span>
           </div>
         ))}
         </div>
@@ -1249,9 +1249,9 @@ function QuickAction({
   showBadge?: boolean;
 }) {
   return (
-    <Button type="button" onClick={onClick} variant="ghost" className="grid h-auto min-h-[132px] place-items-center rounded-2xl p-0 text-center text-[16px] font-bold leading-tight text-white hover:bg-white/10 hover:text-white">
-      <span className="relative grid h-28 w-28 place-items-center rounded-full bg-[#111111]">
-        <Icon className="h-12 w-12" strokeWidth={2.2} />
+    <Button type="button" onClick={onClick} variant="ghost" className="grid h-auto min-h-[var(--action-min-height)] min-w-0 place-items-center rounded-2xl p-0 text-center text-[clamp(0.75rem,3.9vw,1rem)] font-bold leading-tight text-white hover:bg-white/10 hover:text-white">
+      <span className="relative grid place-items-center rounded-full bg-[#111111]" style={{ width: "var(--action-icon-size)", height: "var(--action-icon-size)" }}>
+        <Icon style={{ width: "var(--action-icon-svg)", height: "var(--action-icon-svg)" }} strokeWidth={2.2} />
         {showBadge ? <span className="absolute right-5 top-5 h-4 w-4 rounded-full bg-red-500" /> : null}
       </span>
       <span>{label}</span>
@@ -1260,7 +1260,7 @@ function QuickAction({
 }
 
 function ActivityAvatar({ children }: { children: React.ReactNode }) {
-  return <span className="grid h-20 w-20 place-items-center rounded-full bg-[#c7cee0] text-[34px] font-black text-[#1f3d8f]">{children}</span>;
+  return <span className="grid place-items-center rounded-full bg-[#c7cee0] text-[clamp(1.5rem,8vw,2.125rem)] font-black text-[#1f3d8f]" style={{ width: "var(--activity-avatar-size)", height: "var(--activity-avatar-size)" }}>{children}</span>;
 }
 
 function SvgScreenFrame({
@@ -1280,7 +1280,7 @@ function SvgScreenFrame({
 }) {
   return (
     <div data-testid={testId} className="-mx-3 -mt-3 grid min-h-[calc(100dvh-92px)] bg-[#1f3d8f] text-white">
-      <section className="grid gap-5 px-6 pb-8 pt-6">
+      <section className="grid gap-5 px-[var(--page-x)] pb-8 pt-6">
         <div className="flex min-h-12 items-center justify-between gap-4">
           <h2 className="text-[32px] font-black leading-none tracking-normal">{title}</h2>
           {action}
@@ -1289,7 +1289,7 @@ function SvgScreenFrame({
       </section>
       <section
         data-testid="svg-screen-sheet"
-        className={cn("min-h-[58dvh] rounded-t-[28px] bg-[#f5f5f7] px-5 pb-[calc(120px+env(safe-area-inset-bottom))] pt-7 text-slate-950", sheetClassName)}
+        className={cn("min-h-[58dvh] rounded-t-[28px] bg-[#f5f5f7] px-[var(--sheet-x)] pb-[var(--bottom-nav-reserve)] pt-7 text-slate-950", sheetClassName)}
       >
         {children}
       </section>
@@ -1771,7 +1771,7 @@ function ProfileScreen({
       title="Профиль"
       hero={
       <div className="grid justify-items-center gap-4 py-2 text-center">
-        <div className="grid h-28 w-28 place-items-center overflow-hidden rounded-full bg-[#bbb2d5] text-4xl font-black text-[#654da1]">
+        <div className="grid place-items-center overflow-hidden rounded-full bg-[#bbb2d5] text-[clamp(1.75rem,9vw,2.25rem)] font-black text-[#654da1]" style={{ width: "var(--profile-avatar-size)", height: "var(--profile-avatar-size)" }}>
           {currentUser?.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={currentUser.avatar_url} alt="" className="h-full w-full object-cover" />

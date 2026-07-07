@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 const page = readFileSync(new URL("../src/app/page.tsx", import.meta.url), "utf8");
 const api = readFileSync(new URL("../src/lib/splitapp-api.ts", import.meta.url), "utf8");
 const sw = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
+const globals = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
 
 test("PWA implements the SVG screen set as navigable app views", () => {
   for (const view of ["home", "events", "people", "profile", "notifications", "splitik"]) {
@@ -29,7 +30,7 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v14/);
+  assert.match(sw, /splitapp-next-pwa-v15/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
@@ -81,7 +82,8 @@ test("authenticated app uses real backend actions instead of static cards", () =
 
 test("mobile shell keeps the real app surface full-height and gallery input mounted", () => {
   assert.match(page, /bg-\[#f5f5f7\]/);
-  assert.match(page, /pb-\[calc\(120px\+env\(safe-area-inset-bottom\)\)\]/);
+  assert.match(page, /pb-\[var\(--bottom-nav-reserve\)\]/);
+  assert.match(globals, /--bottom-nav-reserve:\s*calc\(104px \+ env\(safe-area-inset-bottom\)\)/);
   assert.match(page, /galleryInputRef/);
   assert.doesNotMatch(page, /bg-\[#1e1e1e\]/);
 });
@@ -163,7 +165,7 @@ test("API errors show FastAPI validation details instead of a bare HTTP 422", ()
 test("event creation surfaces backend errors instead of hiding the cause", () => {
   assert.match(page, /catch \(error\)/);
   assert.match(page, /error instanceof ApiError/);
-  assert.match(page, /setMessage\(`Не удалось создать событие: \$\{error\.message\}`\)/);
+  assert.match(page, /notifyProblem\(error, "events", "Не удалось создать событие\.", \{ action: "create_event", component: "EventCreateScreen" \}\)/);
 });
 
 test("event creation clears expired auth sessions when refresh fails", () => {
@@ -185,6 +187,27 @@ test("Splitik composer is fixed above the bottom nav and keyboard viewport", () 
   assert.match(page, /fixed inset-x-4 bottom-\[calc\(86px\+env\(safe-area-inset-bottom\)\)\]/);
   assert.match(page, /pb-\[112px\]/);
   assert.match(page, /max-w-\[calc\(100vw-2rem\)\]/);
+});
+
+test("mobile layout scales from compact phones with adaptive tokens instead of fixed SVG dimensions", () => {
+  for (const token of [
+    "--page-x: clamp(",
+    "--balance-font: clamp(",
+    "--action-icon-size: clamp(",
+    "--activity-avatar-size: clamp(",
+    "--bottom-nav-reserve:"
+  ]) {
+    assert.match(globals, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing adaptive token: ${token}`);
+  }
+
+  assert.match(globals, /-webkit-text-size-adjust:\s*100%/);
+  assert.match(globals, /overflow-x:\s*hidden/);
+  assert.match(page, /style=\{\{ fontSize: "var\(--balance-font\)" \}\}/);
+  assert.match(page, /grid-cols-\[repeat\(3,minmax\(0,1fr\)\)\]/);
+  assert.match(page, /style=\{\{ width: "var\(--action-icon-size\)", height: "var\(--action-icon-size\)" \}\}/);
+  assert.doesNotMatch(page, /text-\[72px\]/);
+  assert.doesNotMatch(page, /h-28 w-28/);
+  assert.doesNotMatch(page, /grid-cols-\[92px_1fr_auto\]/);
 });
 
 test("Splitik chat uses a messenger-style bottom anchored message list", () => {
@@ -245,7 +268,7 @@ test("home add action opens a dedicated event creation screen", () => {
 
 test("home screen follows the Figma balance card and activity sheet composition", () => {
   assert.match(page, /data-testid="home-balance-screen"/);
-  assert.match(page, /text-\[72px\]/);
+  assert.match(page, /fontSize: "var\(--balance-font\)"/);
   assert.match(page, /ArrowUp/);
   assert.match(page, /ArrowDown/);
   assert.match(page, /data-testid="home-event-card"/);
@@ -276,7 +299,7 @@ test("friends screen exposes add-by-code affordance", () => {
 test("SVG auth screen is a clean first screen before Yandex OAuth", () => {
   assert.match(page, /data-testid="svg-auth-screen"/);
   assert.match(page, /grid min-h-dvh bg-\[#1f3d8f\]/);
-  assert.match(page, /text-\[76px\]/);
+  assert.match(page, /text-\[clamp\(4rem,20vw,5\.5rem\)\]/);
   assert.match(page, /Делите счета поровну/);
   assert.match(page, /Войти через Яндекс/);
   assert.doesNotMatch(page, /Войдите, чтобы открыть события/);
