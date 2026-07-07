@@ -22,6 +22,11 @@
   --input: 214 28% 88%;
   --ring: 188 78% 38%;
   --radius: 8px;
+  --screen-pad: clamp(0.875rem, 4.4vw, 2rem);
+  --content-max: 34rem;
+  --content-width: min(calc(100vw - var(--screen-pad) * 2), var(--content-max));
+  --rail-x: max(var(--screen-pad), calc((100vw - var(--content-max)) / 2));
+  --nav-width: min(calc(100vw - var(--screen-pad) * 2), 32rem);
   --page-x: clamp(0.875rem, 4.4vw, 1.5rem);
   --sheet-x: clamp(1rem, 4.6vw, 1.5rem);
   --bottom-nav-reserve: calc(92px + env(safe-area-inset-bottom));

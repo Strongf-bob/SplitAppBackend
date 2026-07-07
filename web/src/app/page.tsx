@@ -1019,7 +1019,7 @@ function PhoneShell({
       {loggedIn ? (
         <nav
           data-platform-nav="ios-tab-bar"
-          className="fixed inset-x-3 bottom-0 z-30 rounded-[28px] border border-white/50 bg-white/72 p-1.5 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_18px_46px_rgba(31,61,143,0.22)] backdrop-blur-[22px] supports-[backdrop-filter]:bg-white/62"
+          className="fixed bottom-0 left-1/2 z-30 w-[var(--nav-width)] -translate-x-1/2 rounded-[28px] border border-white/50 bg-white/72 p-1.5 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_18px_46px_rgba(31,61,143,0.22)] backdrop-blur-[22px] supports-[backdrop-filter]:bg-white/62"
         >
           <div className="grid grid-cols-5 gap-1">
             {navItems.map((item) => (
@@ -1181,7 +1181,7 @@ function WorkspaceScreen({
     <AnimatePresence mode="wait">
       <motion.div
         key={view}
-        className="min-h-[calc(100dvh-74px)] w-full overflow-hidden rounded-t-[24px] bg-[#f5f5f7] px-3 pb-5 pt-3"
+        className="min-h-[calc(100dvh-74px)] w-full overflow-hidden rounded-t-[24px] bg-[#f5f5f7] pb-5 pt-3"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10 }}
@@ -1255,8 +1255,8 @@ function HomeScreen({
   const mainEvent = events?.[0] ?? fallbackEvents[0];
   const balance = (owedToMe || 0) - (iOwe || 0);
   return (
-    <div data-testid="home-balance-screen" className="-mx-3 -mt-3 grid min-h-[calc(100dvh-92px)] w-full overflow-hidden content-start bg-[#1f3d8f] text-white">
-      <section className="grid gap-[var(--home-hero-gap)] px-[var(--page-x)] pb-[clamp(1.5rem,5dvh,2.25rem)] pt-[clamp(1.5rem,5dvh,2.25rem)]">
+    <div data-testid="home-balance-screen" className="grid min-h-[calc(100dvh-92px)] w-full overflow-hidden content-start bg-[#1f3d8f] text-white">
+      <section className="mx-auto grid w-[var(--content-width)] gap-[var(--home-hero-gap)] pb-[clamp(1.5rem,5dvh,2.25rem)] pt-[clamp(1.5rem,5dvh,2.25rem)]">
         <p className="break-words text-center font-black leading-none tracking-normal" style={{ fontSize: "var(--balance-font)" }}>{money(balance)}</p>
         <div className="flex flex-wrap justify-center gap-x-[clamp(1rem,5vw,1.75rem)] gap-y-3 text-[clamp(0.9375rem,4.7vw,1.25rem)] font-black leading-none">
           <span className="inline-flex items-center gap-2">
@@ -1275,8 +1275,9 @@ function HomeScreen({
         <Button
           data-testid="home-event-card"
           type="button"
+          size={null}
           onClick={() => onNavigate("events")}
-          className="grid h-auto w-full justify-stretch gap-[clamp(0.875rem,3.6vw,1.25rem)] bg-[#111111] px-[clamp(1.25rem,6vw,2rem)] py-[clamp(1.125rem,5vw,1.5rem)] text-left text-white hover:bg-[#111111]/92"
+          className="grid h-auto w-full min-w-0 max-w-full justify-stretch gap-[clamp(0.875rem,3.6vw,1.25rem)] bg-[#111111] px-[clamp(1.25rem,6vw,2rem)] py-[clamp(1.125rem,5vw,1.5rem)] text-left text-white hover:bg-[#111111]/92"
           style={{ minHeight: "var(--home-event-min-height)", borderRadius: "var(--home-event-radius)" }}
         >
           <span className="break-words text-[clamp(1.125rem,5.6vw,1.625rem)] font-black leading-tight">{eventTitle(mainEvent)}</span>
@@ -1292,7 +1293,8 @@ function HomeScreen({
         </div>
       </section>
 
-      <section className="rounded-t-[28px] bg-[#f5f5f7] px-[var(--sheet-x)] pb-[var(--bottom-nav-reserve)] pt-[clamp(1.5rem,5vw,2rem)] text-slate-950">
+      <section className="rounded-t-[28px] bg-[#f5f5f7] pb-[var(--bottom-nav-reserve)] pt-[clamp(1.5rem,5vw,2rem)] text-slate-950">
+        <div className="mx-auto w-[var(--content-width)]">
         <div className="mb-[clamp(1.25rem,5vw,1.75rem)] flex items-center justify-between gap-4">
           <h3 className="text-[clamp(1.625rem,7vw,1.875rem)] font-black leading-none">Активность</h3>
           <Badge className="rounded-full bg-[#d2d6e6] px-4 py-1.5 text-base font-black text-[#1f3d8f]">Все</Badge>
@@ -1312,6 +1314,7 @@ function HomeScreen({
             <span className={cn("col-start-2 text-[clamp(1rem,5vw,1.375rem)] font-black sm:col-start-auto", tone)}>{amount}</span>
           </div>
         ))}
+        </div>
         </div>
       </section>
     </div>
@@ -1388,8 +1391,8 @@ function SvgScreenFrame({
   sheetClassName?: string;
 }) {
   return (
-    <div data-testid={testId} className="-mx-3 -mt-3 grid min-h-[calc(100dvh-92px)] bg-[#1f3d8f] text-white">
-      <section className="grid gap-5 px-[var(--page-x)] pb-8 pt-6">
+    <div data-testid={testId} className="grid min-h-[calc(100dvh-92px)] bg-[#1f3d8f] text-white">
+      <section className="mx-auto grid w-[var(--content-width)] gap-5 pb-8 pt-6">
         <div className="flex min-h-12 items-center justify-between gap-4">
           <h2 className="text-[32px] font-black leading-none tracking-normal">{title}</h2>
           {action}
@@ -1398,9 +1401,9 @@ function SvgScreenFrame({
       </section>
       <section
         data-testid="svg-screen-sheet"
-        className={cn("min-h-[58dvh] rounded-t-[28px] bg-[#f5f5f7] px-[var(--sheet-x)] pb-[var(--bottom-nav-reserve)] pt-7 text-slate-950", sheetClassName)}
+        className={cn("min-h-[58dvh] rounded-t-[28px] bg-[#f5f5f7] pb-[var(--bottom-nav-reserve)] pt-7 text-slate-950", sheetClassName)}
       >
-        {children}
+        <div className="mx-auto flex min-h-0 w-[var(--content-width)] flex-1 flex-col">{children}</div>
       </section>
     </div>
   );
