@@ -218,6 +218,27 @@ def test_splitik_llm_uses_runtime_primary_model(monkeypatch):
     assert reply == "Сплитик: готово."
     assert requests[0]["url"] == "https://ai.example/v1/chat/completions"
     assert requests[0]["json"]["model"] == "primary-model"
+    assert requests[0]["timeout"] == 60
+
+
+def test_splitik_llm_timeout_can_be_overridden(monkeypatch):
+    _set_llm_env(monkeypatch)
+    monkeypatch.setenv("SPLITIK_LLM_TIMEOUT_SECONDS", "35")
+    requests = []
+
+    def fake_post(url, headers, json, timeout):
+        requests.append({"timeout": timeout})
+        return _FakeResponse(body={"choices": [{"message": {"content": "Сплитик: готово."}}]})
+
+    monkeypatch.setattr(splitik_llm.httpx, "post", fake_post)
+
+    splitik_llm.generate_splitik_reply(
+        system_prompt="system",
+        user_message="hello",
+        context={"allowed": True},
+    )
+
+    assert requests[0]["timeout"] == 35
 
 
 def test_splitik_chat_supports_legacy_primary_model_without_receipt_models(monkeypatch):

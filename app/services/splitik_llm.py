@@ -49,7 +49,7 @@ def is_llm_configured() -> bool:
 
 def load_config() -> SplitikLLMConfig:
     try:
-        timeout = float(os.getenv("SPLITIK_LLM_TIMEOUT_SECONDS", "20"))
+        timeout = float(os.getenv("SPLITIK_LLM_TIMEOUT_SECONDS", "60"))
     except ValueError as exc:
         raise HTTPException(status_code=503, detail="Splitik LLM is not configured.") from exc
 
