@@ -283,7 +283,7 @@ async function responseErrorMessage(response: Response): Promise<string> {
 }
 
 function sanitizeReportMetadata(metadata: Record<string, unknown>) {
-  const allowed = new Set(["api_status", "api_path", "component", "screen_label", "action", "error_name"]);
+  const allowed = new Set(["api_status", "api_path", "component", "screen_label", "action", "error_name", "error_message"]);
   return Object.fromEntries(Object.entries(metadata).filter(([key]) => allowed.has(key)));
 }
 

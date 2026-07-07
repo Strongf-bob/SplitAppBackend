@@ -143,6 +143,20 @@ test("authenticated startup refreshes expired access tokens instead of showing a
   assert.doesNotMatch(page, /Backend недоступен, показан локальный срез PWA\./);
 });
 
+test("authenticated startup tolerates malformed page payloads without crashing the route", () => {
+  assert.match(page, /function pageItems<T>\(page: \{ items\?: T\[\] \} \| null \| undefined\)/);
+  assert.match(page, /const nextEvents = pageItems\(eventPage\)\.map\(normalizeEvent\)/);
+  assert.match(page, /setEvents\(nextEvents\.length \? nextEvents : fallbackEvents\)/);
+  assert.match(page, /setFriendships\(pageItems\(friendshipPage\)\)/);
+  assert.doesNotMatch(page, /eventPage\.items\.length/);
+  assert.doesNotMatch(page, /friendshipPage\.items \?\? \[\]/);
+});
+
+test("client error reports include a sanitized error message for production diagnosis", () => {
+  assert.match(page, /error_message: error instanceof Error \? error\.message : String\(error \?\? "unknown"\)/);
+  assert.match(api, /"error_message"/);
+});
+
 test("Splitik assistant replies render safe Markdown instead of a flattened text blob", () => {
   assert.match(page, /function MarkdownMessage/);
   assert.match(page, /parseMarkdownMessage/);
@@ -268,6 +282,7 @@ test("home add action opens a dedicated event creation screen", () => {
 
 test("home screen follows the Figma balance card and activity sheet composition", () => {
   assert.match(page, /data-testid="home-balance-screen"/);
+  assert.match(page, /w-full overflow-hidden/);
   assert.match(page, /fontSize: "var\(--balance-font\)"/);
   assert.match(page, /ArrowUp/);
   assert.match(page, /ArrowDown/);
@@ -277,6 +292,13 @@ test("home screen follows the Figma balance card and activity sheet composition"
   assert.match(page, /Добавить платеж/);
   assert.match(page, /rounded-t-\[28px\]/);
   assert.doesNotMatch(page, /Синхрониз\./);
+});
+
+test("home shell covers the viewport instead of exposing the dark page background", () => {
+  assert.match(globals, /--background:\s*240 11% 96%/);
+  assert.match(page, /<main className="min-h-dvh w-full overflow-x-hidden bg-\[#f5f5f7\]/);
+  assert.match(page, /<div className="min-h-dvh w-full overflow-x-hidden bg-\[#f5f5f7\]">/);
+  assert.match(page, /className="min-h-\[calc\(100dvh-74px\)\] w-full overflow-hidden/);
 });
 
 test("home inbox action badge is conditional on unread incoming items", () => {
@@ -294,6 +316,13 @@ test("friends screen exposes add-by-code affordance", () => {
   assert.match(page, /\/api\/users\/search\?q=/);
   assert.match(page, /\/api\/friends/);
   assert.match(page, /\/api\/users\/me/);
+});
+
+test("friends screen owns its title without duplicating the global app header", () => {
+  assert.match(page, /showHeader=\{view === "home"\}/);
+  assert.match(page, /showHeader: boolean/);
+  assert.match(page, /showHeader && loggedIn \? \(/);
+  assert.match(page, /testId="friends-screen"[\s\S]*title="Друзья"/);
 });
 
 test("SVG auth screen is a clean first screen before Yandex OAuth", () => {
@@ -331,4 +360,10 @@ test("Splitik keeps the SVG intro card while anchoring conversation to the compo
   assert.match(page, /data-testid="splitik-intro-card"/);
   assert.match(page, /flex min-h-0 flex-1 flex-col justify-end/);
   assert.match(page, /fixed inset-x-4 bottom-\[calc\(86px\+env\(safe-area-inset-bottom\)\)\]/);
+});
+
+test("Splitik failures are reported silently and shown inline instead of blocking the chat", () => {
+  assert.match(page, /void reportProblem\(\{\s*screen: "splitik"/);
+  assert.match(page, /setMessage\("Сплитик сейчас не смог ответить\. Попробуйте еще раз чуть позже\."\)/);
+  assert.doesNotMatch(page, /notifyProblem\(error, "splitik"/);
 });
