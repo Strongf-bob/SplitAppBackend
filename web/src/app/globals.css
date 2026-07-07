@@ -22,17 +22,22 @@
   --input: 214 28% 88%;
   --ring: 188 78% 38%;
   --radius: 8px;
-  --page-x: clamp(0.75rem, 4vw, 1.75rem);
-  --sheet-x: clamp(1rem, 5vw, 1.75rem);
-  --bottom-nav-reserve: calc(104px + env(safe-area-inset-bottom));
-  --balance-font: clamp(3rem, 16vw, 4.5rem);
-  --home-total-font: clamp(1.25rem, 6vw, 1.625rem);
-  --action-icon-size: clamp(4rem, 22vw, 7rem);
-  --action-icon-svg: clamp(1.9rem, 9vw, 3rem);
-  --action-min-height: clamp(6.5rem, 30vw, 8.25rem);
-  --activity-avatar-size: clamp(3rem, 15vw, 5rem);
-  --activity-title-font: clamp(1rem, 5.7vw, 1.5rem);
-  --activity-detail-font: clamp(0.875rem, 5vw, 1.3125rem);
+  --page-x: clamp(0.875rem, 4.4vw, 1.5rem);
+  --sheet-x: clamp(1rem, 4.6vw, 1.5rem);
+  --bottom-nav-reserve: calc(92px + env(safe-area-inset-bottom));
+  --balance-font: clamp(2.75rem, 14.2vw, 4.125rem);
+  --home-total-font: clamp(1rem, 4.8vw, 1.375rem);
+  --home-hero-gap: clamp(1.125rem, 4.8dvh, 2rem);
+  --home-event-min-height: clamp(7.25rem, 31vw, 9.25rem);
+  --home-event-radius: clamp(1.25rem, 6vw, 1.75rem);
+  --action-icon-size: clamp(3.5rem, 17vw, 5.75rem);
+  --action-icon-svg: clamp(1.65rem, 7.2vw, 2.5rem);
+  --action-min-height: clamp(5.5rem, 24vw, 7rem);
+  --avatar-stack-size: clamp(2.75rem, 12.5vw, 3.875rem);
+  --avatar-stack-font: clamp(1rem, 5vw, 1.5rem);
+  --activity-avatar-size: clamp(2.875rem, 13vw, 4.25rem);
+  --activity-title-font: clamp(1rem, 4.8vw, 1.375rem);
+  --activity-detail-font: clamp(0.875rem, 4.2vw, 1.125rem);
   --profile-avatar-size: clamp(5rem, 26vw, 7rem);
 }
 
