@@ -139,6 +139,7 @@ const permissions: Array<{ id: PermissionId; label: string; icon: React.ElementT
 export default function SplitAppPage() {
   const [tokens, setTokens] = useState<SplitAppTokens | null>(null);
   const [view, setView] = useState<View>("home");
+  const [activeView, setActiveView] = useState<View>("home");
   const [previousView, setPreviousView] = useState<View>("home");
   const [eventTab, setEventTab] = useState<EventTab>("active");
   const [notificationTab, setNotificationTab] = useState<NotificationTab>("incoming");
@@ -761,10 +762,11 @@ export default function SplitAppPage() {
         <AuthScreen onLogin={startYandexLogin} />
       ) : (
         <PhoneShell
-          view={view}
+          view={activeView}
           title={viewTitle(view)}
           onBack={goBack}
           onHome={goHome}
+          onNavigate={navigate}
           showHeader={view === "home"}
           showBack={view !== "home"}
           onNotifications={() => navigate("notifications")}
@@ -773,6 +775,7 @@ export default function SplitAppPage() {
         >
           <WorkspaceScreen
             view={view}
+            onViewSettled={setActiveView}
             events={events}
             friendOptions={friendOptions}
             eventTab={eventTab}
@@ -941,6 +944,7 @@ function PhoneShell({
   children,
   onBack,
   onHome,
+  onNavigate,
   onNotifications,
   onLogout
 }: {
@@ -952,6 +956,7 @@ function PhoneShell({
   children: React.ReactNode;
   onBack: () => void;
   onHome: () => void;
+  onNavigate: (view: View) => void;
   onNotifications: () => void;
   onLogout: () => void;
 }) {
@@ -1018,7 +1023,7 @@ function PhoneShell({
         >
           <div className="grid grid-cols-5 gap-1">
             {navItems.map((item) => (
-              <BottomNavButton key={item.id} item={item} active={view === item.id} />
+              <BottomNavButton key={item.id} item={item} active={view === item.id} onNavigate={onNavigate} />
             ))}
           </div>
         </nav>
@@ -1027,7 +1032,15 @@ function PhoneShell({
   );
 }
 
-function BottomNavButton({ item, active }: { item: { id: View; label: string; icon: React.ElementType }; active: boolean }) {
+function BottomNavButton({
+  item,
+  active,
+  onNavigate
+}: {
+  item: { id: View; label: string; icon: React.ElementType };
+  active: boolean;
+  onNavigate: (view: View) => void;
+}) {
   const Icon = item.icon;
   return (
     <Button
@@ -1040,7 +1053,14 @@ function BottomNavButton({ item, active }: { item: { id: View; label: string; ic
           : "hover:bg-white/30 hover:text-[#1f3d8f]"
       )}
     >
-      <a href={`#${item.id}`} aria-current={active ? "page" : undefined}>
+      <a
+        href={`#${item.id}`}
+        aria-current={active ? "page" : undefined}
+        onClick={(event) => {
+          event.preventDefault();
+          onNavigate(item.id);
+        }}
+      >
         <Icon className={cn("h-5 w-5", item.id === "splitik" && "h-8 w-8")} />
         {item.id !== "splitik" ? <span>{item.label}</span> : null}
       </a>
@@ -1076,6 +1096,7 @@ function AuthScreen({ onLogin }: { onLogin: () => void }) {
 
 function WorkspaceScreen({
   view,
+  onViewSettled,
   events,
   friendOptions,
   eventTab,
@@ -1116,6 +1137,7 @@ function WorkspaceScreen({
   onNavigate
 }: {
   view: View;
+  onViewSettled: (view: View) => void;
   events: EventSummary[];
   friendOptions: FriendOption[];
   eventTab: EventTab;
@@ -1164,6 +1186,7 @@ function WorkspaceScreen({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10 }}
         transition={{ duration: 0.2 }}
+        onAnimationComplete={() => onViewSettled(view)}
       >
         {view === "home" ? (
           <HomeScreen events={events} owedToMe={owedToMe} iOwe={iOwe} onNavigate={onNavigate} onCreateEventOpen={onCreateEventOpen} />
