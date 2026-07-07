@@ -228,7 +228,11 @@ export default function SplitAppPage() {
     (error: unknown, screen: ClientReportScreen, fallbackMessage: string, metadata: Record<string, unknown> = {}) => {
       const requestId = error instanceof ApiError ? error.requestId : undefined;
       const errorName = error instanceof Error ? error.name : "UnknownError";
-      const reportMetadata = { ...metadata, error_name: errorName };
+      const reportMetadata = {
+        ...metadata,
+        error_name: errorName,
+        error_message: error instanceof Error ? error.message : String(error ?? "unknown")
+      };
       void reportProblem({
         screen,
         message: fallbackMessage,
@@ -326,8 +330,9 @@ export default function SplitAppPage() {
       .then(([nextSummary, eventPage, user, friendshipPage]) => {
         setSummary(nextSummary);
         setCurrentUser(user);
-        setEvents(eventPage.items.length ? eventPage.items.map(normalizeEvent) : fallbackEvents);
-        setFriendships(friendshipPage.items ?? []);
+        const nextEvents = pageItems(eventPage).map(normalizeEvent);
+        setEvents(nextEvents.length ? nextEvents : fallbackEvents);
+        setFriendships(pageItems(friendshipPage));
       })
       .catch(handleInitialDataError);
   }, [authedApi, handleInitialDataError, tokens]);
@@ -682,7 +687,20 @@ export default function SplitAppPage() {
         { id: response.message_id || `s-${Date.now()}`, from: "splitik", text: response.assistant_message }
       ]);
     } catch (error) {
-      notifyProblem(error, "splitik", "Сплитик сейчас не смог ответить.", { action: "splitik_message", component: "SplitikScreen" });
+      const requestId = error instanceof ApiError ? error.requestId : undefined;
+      void reportProblem({
+        screen: "splitik",
+        message: "Сплитик сейчас не смог ответить.",
+        mode: "automatic_error",
+        requestId,
+        metadata: {
+          action: "splitik_message",
+          component: "SplitikScreen",
+          error_name: error instanceof Error ? error.name : "UnknownError",
+          error_message: error instanceof Error ? error.message : String(error ?? "unknown")
+        }
+      });
+      setMessage("Сплитик сейчас не смог ответить. Попробуйте еще раз чуть позже.");
       setChatMessages((items) => [
         ...items,
         { id: `s-${Date.now()}`, from: "splitik", text: splitikErrorMessage(error) }
@@ -693,7 +711,7 @@ export default function SplitAppPage() {
   };
 
   return (
-    <main className="min-h-dvh bg-[#f5f5f7] text-slate-950">
+    <main className="min-h-dvh w-full overflow-x-hidden bg-[#f5f5f7] text-slate-950">
       {!tokens ? (
         <AuthScreen onLogin={startYandexLogin} />
       ) : (
@@ -702,6 +720,7 @@ export default function SplitAppPage() {
           title={viewTitle(view)}
           onBack={goBack}
           onHome={goHome}
+          showHeader={view === "home"}
           showBack={view !== "home"}
           onNotifications={() => navigate("notifications")}
           onLogout={logout}
@@ -869,6 +888,7 @@ function PhoneShell({
   view,
   title,
   loggedIn,
+  showHeader,
   showBack,
   children,
   onBack,
@@ -879,6 +899,7 @@ function PhoneShell({
   view: View;
   title: string;
   loggedIn: boolean;
+  showHeader: boolean;
   showBack: boolean;
   children: React.ReactNode;
   onBack: () => void;
@@ -887,8 +908,8 @@ function PhoneShell({
   onLogout: () => void;
 }) {
   return (
-    <div className="min-h-dvh bg-[#f5f5f7]">
-      {loggedIn ? (
+    <div className="min-h-dvh w-full overflow-x-hidden bg-[#f5f5f7]">
+      {showHeader && loggedIn ? (
         <header className="sticky top-0 z-30 flex items-end justify-between gap-2 bg-[#1f3d8f] px-4 pb-4 pt-[max(env(safe-area-inset-top),16px)] text-white">
           <div className="flex min-w-0 items-center gap-2">
             {showBack ? (
@@ -1084,7 +1105,7 @@ function WorkspaceScreen({
     <AnimatePresence mode="wait">
       <motion.div
         key={view}
-        className="min-h-[calc(100dvh-74px)] rounded-t-[24px] bg-[#f5f5f7] px-3 pb-5 pt-3"
+        className="min-h-[calc(100dvh-74px)] w-full overflow-hidden rounded-t-[24px] bg-[#f5f5f7] px-3 pb-5 pt-3"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10 }}
@@ -1148,7 +1169,7 @@ function HomeScreen({
   const mainEvent = events?.[0] ?? fallbackEvents[0];
   const balance = (owedToMe || 0) - (iOwe || 0);
   return (
-    <div data-testid="home-balance-screen" className="-mx-3 -mt-3 grid min-h-[calc(100dvh-92px)] content-start bg-[#1f3d8f] text-white">
+    <div data-testid="home-balance-screen" className="-mx-3 -mt-3 grid min-h-[calc(100dvh-92px)] w-full overflow-hidden content-start bg-[#1f3d8f] text-white">
       <section className="px-[var(--page-x)] pb-9 pt-8">
         <p className="break-words text-center font-black leading-none tracking-normal" style={{ fontSize: "var(--balance-font)" }}>{money(balance)}</p>
         <div className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-3 text-[clamp(1rem,5.6vw,1.375rem)] font-black leading-none">
@@ -2065,6 +2086,10 @@ function parseHashView(hash: string): View | null {
 
 function viewToReportScreen(view: View): ClientReportScreen {
   return view;
+}
+
+function pageItems<T>(page: { items?: T[] } | null | undefined) {
+  return Array.isArray(page?.items) ? page.items : [];
 }
 
 function isUuid(value: string | null): value is string {
