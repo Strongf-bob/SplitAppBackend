@@ -258,6 +258,24 @@ test("home screen uses compact phone tokens instead of oversized Figma frame pro
   assert.doesNotMatch(page, /h-16 w-16/);
 });
 
+test("app surfaces use responsive layout rails instead of raw viewport edges", () => {
+  for (const token of [
+    "--screen-pad: clamp(",
+    "--content-max:",
+    "--content-width: min(",
+    "--rail-x: max(",
+    "--nav-width: min("
+  ]) {
+    assert.match(globals, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing rail token: ${token}`);
+  }
+
+  assert.match(page, /mx-auto w-\[var\(--content-width\)\]/);
+  assert.match(page, /fixed bottom-0 left-1\/2 z-30 w-\[var\(--nav-width\)\] -translate-x-1\/2/);
+  assert.match(page, /data-testid=\{testId\} className="grid min-h-\[calc\(100dvh-92px\)\] bg-\[#1f3d8f\] text-white"/);
+  assert.doesNotMatch(page, /-mx-3 -mt-3/);
+  assert.doesNotMatch(page, /fixed inset-x-3 bottom-0/);
+});
+
 test("Splitik chat uses a messenger-style bottom anchored message list", () => {
   assert.match(page, /data-testid="splitik-chat-shell"/);
   assert.match(page, /data-testid="splitik-message-list"/);
