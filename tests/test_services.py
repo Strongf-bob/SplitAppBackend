@@ -59,6 +59,23 @@ def test_event_create_and_list_for_actor(db):
     assert page["total"] == 1
 
 
+def test_event_create_daily_limit_is_enforced(db, monkeypatch):
+    from tests.conftest import seed_users
+
+    monkeypatch.setenv("EVENT_CREATE_DAILY_LIMIT", "1")
+    seed_users(db)
+    events.create_event(db, schemas.EventCreate(name="First"), USER_A)
+
+    try:
+        events.create_event(db, schemas.EventCreate(name="Second"), USER_A)
+    except Exception as exc:
+        assert_status(exc, 429)
+    else:
+        raise AssertionError("Expected daily event creation limit to fail")
+
+    assert db.events.count_documents({"creator_id": USER_A}) == 1
+
+
 def test_event_policies_are_validated_and_enforced(db):
     seed_event(db)
 
@@ -650,6 +667,21 @@ def test_receipt_create_is_idempotent_for_same_key_and_payload(db):
     assert second == first
     assert db.receipts.count_documents({"event_id": EVENT_ID}) == 1
     assert db.idempotency_keys.count_documents({}) == 1
+
+
+def test_receipt_create_daily_limit_is_enforced(db, monkeypatch):
+    monkeypatch.setenv("RECEIPT_CREATE_DAILY_LIMIT", "1")
+    seed_event(db)
+    receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+
+    try:
+        receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    except Exception as exc:
+        assert_status(exc, 429)
+    else:
+        raise AssertionError("Expected daily receipt creation limit to fail")
+
+    assert db.receipts.count_documents({"event_id": EVENT_ID}) == 1
 
 
 def test_receipt_create_rejects_idempotency_key_reuse_with_different_payload(db):

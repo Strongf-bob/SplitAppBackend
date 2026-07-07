@@ -223,6 +223,18 @@ test("Splitik chat can attach receipt photos and send their attachment ids", () 
   assert.match(page, /aria-label="Прикрепить фото чека"/);
 });
 
+test("Splitik renders interactive draft cards returned by the backend", () => {
+  assert.match(api, /export type SplitikDraft/);
+  assert.match(api, /drafts\?: SplitikDraft\[\]/);
+  assert.match(page, /type ChatMessage = \{[\s\S]*drafts\?: SplitikDraft\[\]/);
+  assert.match(page, /drafts: response\.drafts \?\? \[\]/);
+  assert.match(page, /function SplitikDraftCard/);
+  assert.match(page, /data-testid="splitik-draft-card"/);
+  assert.match(page, /data-testid="splitik-draft-confirm"/);
+  assert.match(page, /\/api\/splitik\/drafts\/\$\{draftId\}\/commit/);
+  assert.doesNotMatch(page, /JSON\.stringify\(draft\.payload, null, 2\)/);
+});
+
 test("mobile layout scales from compact phones with adaptive tokens instead of fixed SVG dimensions", () => {
   for (const token of [
     "--page-x: clamp(",

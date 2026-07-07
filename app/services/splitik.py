@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import os
 import time
 import traceback
 
@@ -8,6 +9,11 @@ from fastapi import HTTPException
 from pymongo.database import Database
 
 from app import schemas
+from app.core.rate_limit import (
+    acquire_concurrency_limit,
+    check_rate_limit,
+    release_concurrency_limit,
+)
 from app.services import splitik_llm
 from app.services.access import (
     active_event_memberships,
@@ -18,6 +24,7 @@ from app.services.access import (
 from app.services.balances import get_event_balance_explanations, get_event_balances
 from app.services.common import new_uuid, strip_mongo_id, utc_now, user_to_api_dict
 from app.services.splitik_guardrails import (
+    evaluate_planner_action,
     evaluate_assistant_message,
     evaluate_user_message,
     sanitize_message,
@@ -28,6 +35,8 @@ from app.services import splitik_attachments, splitik_tools
 
 logger = logging.getLogger("splitapp")
 _MODES = {"general", "event", "receipt", "member"}
+_SECONDS_PER_HOUR = 60 * 60
+_SECONDS_PER_DAY = 24 * 60 * 60
 
 _FORBIDDEN_CAPABILITIES = [
     "forbidden:impersonate_user",
@@ -62,6 +71,17 @@ _SYSTEM_PROMPT = """
 
 def _clean(document: dict) -> dict:
     return strip_mongo_id(document)
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _limit_decision(reason: str, message: str) -> dict:
+    return {"allowed": False, "reason": reason, "message": message}
 
 
 def _draft_to_api(draft: dict) -> dict:
@@ -368,17 +388,304 @@ def _answered_receipt_question_ids(message: str) -> list[str]:
     return answered
 
 
+def _empty_draft_result() -> dict:
+    return {
+        "drafts": [],
+        "assistant_message": None,
+        "questions": [],
+        "guardrail_decision": None,
+        "intent": None,
+        "model_ids": [],
+    }
+
+
+def _planner_context(
+    db: Database,
+    *,
+    payload: schemas.SplitikMessageRequest,
+    actor_user_id: str,
+    session_id: str,
+) -> dict:
+    event_id = _event_id_from_payload(payload)
+    attachments = []
+    attachment_ids = [str(attachment_id) for attachment_id in payload.attachment_ids]
+    if attachment_ids:
+        attachments = splitik_attachments.list_attachments_for_actor(
+            db,
+            actor_user_id=actor_user_id,
+            attachment_ids=attachment_ids,
+        )
+    return {
+        "mode": payload.mode.strip().lower(),
+        "entry_point": _entry_point_summary(payload),
+        "event_id": event_id,
+        "attachment_ids": attachment_ids,
+        "attachments": attachments,
+        "recent_messages": splitik_tools.read_recent_session_messages(
+            db,
+            actor_user_id=actor_user_id,
+            session_id=session_id,
+            limit=6,
+        ),
+        "active_draft": splitik_tools.read_active_draft(
+            db,
+            actor_user_id=actor_user_id,
+            session_id=session_id,
+            event_id=event_id,
+        ),
+        "human_review_required": True,
+        "allowed_actions": [
+            "create_event_draft",
+            "create_receipt_draft",
+            "update_receipt_draft",
+            "ask_clarifying_question",
+        ],
+    }
+
+
+def _normalize_questions(value: object) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    questions: list[dict] = []
+    for question in value:
+        if not isinstance(question, dict):
+            continue
+        question_id = str(question.get("id") or "").strip()
+        text = str(question.get("text") or "").strip()
+        if not question_id or not text:
+            continue
+        questions.append(
+            {
+                "id": question_id[:80],
+                "text": text[:300],
+                "required": bool(question.get("required", True)),
+            }
+        )
+    return questions
+
+
+def _execute_planner_actions(
+    db: Database,
+    *,
+    payload: schemas.SplitikMessageRequest,
+    actor_user_id: str,
+    session_id: str,
+    candidate: dict,
+) -> dict:
+    content = candidate.get("content", {})
+    if not isinstance(content, dict):
+        return _empty_draft_result()
+    actions = content.get("actions", [])
+    if not isinstance(actions, list) or not actions:
+        return _empty_draft_result()
+
+    draft_actions = [
+        action
+        for action in actions
+        if isinstance(action, dict)
+        and action.get("type") in {"create_event_draft", "create_receipt_draft"}
+    ]
+    max_drafts_per_request = max(1, _env_int("SPLITIK_MAX_DRAFTS_PER_REQUEST", 3))
+    if len(draft_actions) > max_drafts_per_request:
+        decision = _limit_decision(
+            "splitik_draft_request_limit",
+            "Слишком много черновиков за один запрос. Разбейте задачу на несколько сообщений.",
+        )
+        return {
+            **_empty_draft_result(),
+            "assistant_message": decision["message"],
+            "guardrail_decision": decision,
+            "intent": "guardrail",
+        }
+
+    pending_limit = max(1, _env_int("SPLITIK_PENDING_DRAFT_LIMIT", 10))
+    pending_count = db.splitik_drafts.count_documents(
+        {"owner_user_id": actor_user_id, "status": "pending"}
+    )
+    if draft_actions and pending_count + len(draft_actions) > pending_limit:
+        decision = _limit_decision(
+            "splitik_pending_draft_limit",
+            "У вас уже слишком много неподтвержденных черновиков. Подтвердите или удалите старые.",
+        )
+        return {
+            **_empty_draft_result(),
+            "assistant_message": decision["message"],
+            "guardrail_decision": decision,
+            "intent": "guardrail",
+        }
+
+    for action in actions:
+        if not isinstance(action, dict):
+            return {
+                **_empty_draft_result(),
+                "assistant_message": "Я не смог безопасно разобрать план действий.",
+                "guardrail_decision": {
+                    "allowed": False,
+                    "reason": "invalid_planner_action",
+                    "message": "Я не смог безопасно разобрать план действий.",
+                },
+                "intent": "guardrail",
+            }
+        decision = evaluate_planner_action(action)
+        if not decision["allowed"]:
+            return {
+                **_empty_draft_result(),
+                "assistant_message": decision["message"],
+                "guardrail_decision": decision,
+                "intent": "guardrail",
+            }
+
+    drafts: list[dict] = []
+    questions: list[dict] = []
+    model_id = candidate.get("model_id")
+    model_metadata = {
+        "model_id": model_id,
+        "planner_intent": content.get("intent"),
+    }
+
+    for action in actions:
+        action_type = action["type"]
+        if action_type == "create_event_draft":
+            payload_data = action.get("payload") if isinstance(action.get("payload"), dict) else {}
+            name = str(payload_data.get("name") or "").strip()
+            if not name or _looks_like_invalid_event_name(name):
+                continue
+            drafts.append(
+                splitik_tools.create_event_draft(
+                    db,
+                    actor_user_id=actor_user_id,
+                    session_id=session_id,
+                    payload={"name": name[:80]},
+                    source="planner",
+                    questions=_normalize_questions(action.get("questions")),
+                    model_metadata=model_metadata,
+                )
+            )
+        elif action_type == "create_receipt_draft":
+            event_id = str(action.get("event_id") or _event_id_from_payload(payload) or "")
+            payload_data = action.get("payload") if isinstance(action.get("payload"), dict) else {}
+            if not event_id or not payload_data:
+                questions.extend(_normalize_questions(action.get("questions")))
+                continue
+            attachment_ids = [
+                str(attachment_id) for attachment_id in action.get("attachment_ids", [])
+            ]
+            if attachment_ids:
+                splitik_attachments.list_attachments_for_actor(
+                    db,
+                    actor_user_id=actor_user_id,
+                    attachment_ids=attachment_ids,
+                )
+            drafts.append(
+                splitik_tools.create_receipt_draft(
+                    db,
+                    actor_user_id=actor_user_id,
+                    session_id=session_id,
+                    event_id=event_id,
+                    payload=payload_data,
+                    source="planner",
+                    attachment_ids=attachment_ids,
+                    questions=_normalize_questions(action.get("questions")),
+                    model_metadata=model_metadata,
+                )
+            )
+        elif action_type == "update_receipt_draft":
+            event_id = str(action.get("event_id") or _event_id_from_payload(payload) or "")
+            draft_id = str(action.get("draft_id") or "")
+            if not draft_id and event_id:
+                latest = splitik_tools.latest_pending_draft(
+                    db,
+                    actor_user_id=actor_user_id,
+                    session_id=session_id,
+                    draft_type="create_receipt",
+                    event_id=event_id,
+                )
+                draft_id = latest["id"] if latest else ""
+            payload_patch = action.get("payload") if isinstance(action.get("payload"), dict) else {}
+            patch: dict = {"model_metadata": model_metadata}
+            if payload_patch:
+                patch["payload"] = payload_patch
+            normalized_questions = _normalize_questions(action.get("questions"))
+            if normalized_questions or "questions" in action:
+                patch["questions"] = normalized_questions
+            if draft_id:
+                drafts.append(
+                    splitik_tools.update_draft(
+                        db,
+                        actor_user_id=actor_user_id,
+                        draft_id=draft_id,
+                        patch=patch,
+                    )
+                )
+        elif action_type == "ask_clarifying_question":
+            questions.extend(_normalize_questions(action.get("questions")))
+
+    assistant_message = str(content.get("assistant_message") or "").strip() or None
+    intent = "draft" if drafts else "question" if questions else None
+    return {
+        "drafts": drafts,
+        "assistant_message": assistant_message,
+        "questions": questions,
+        "guardrail_decision": None,
+        "intent": intent,
+        "model_ids": [str(model_id)] if model_id else [],
+    }
+
+
+def _planner_draft_result(
+    db: Database,
+    *,
+    payload: schemas.SplitikMessageRequest,
+    actor_user_id: str,
+    session_id: str,
+) -> dict:
+    try:
+        candidate = splitik_llm.generate_splitik_plan_candidate(
+            user_message=payload.message,
+            context=_planner_context(
+                db,
+                payload=payload,
+                actor_user_id=actor_user_id,
+                session_id=session_id,
+            ),
+        )
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            return _empty_draft_result()
+        raise
+    return _execute_planner_actions(
+        db,
+        payload=payload,
+        actor_user_id=actor_user_id,
+        session_id=session_id,
+        candidate=candidate,
+    )
+
+
 def _maybe_create_draft(
     db: Database,
     payload: schemas.SplitikMessageRequest,
     actor_user_id: str,
     session_id: str,
-) -> list[dict]:
+) -> dict:
     mode = payload.mode.strip().lower()
     lowered = payload.message.casefold()
+    planner_result = _planner_draft_result(
+        db,
+        payload=payload,
+        actor_user_id=actor_user_id,
+        session_id=session_id,
+    )
+    if (
+        planner_result["drafts"]
+        or planner_result["questions"]
+        or planner_result["guardrail_decision"]
+    ):
+        return planner_result
+
     if mode == "general":
         if not _looks_like_event_creation_request(payload.message):
-            return []
+            return _empty_draft_result()
         recent_messages = splitik_tools.read_recent_session_messages(
             db,
             actor_user_id=actor_user_id,
@@ -393,23 +700,28 @@ def _maybe_create_draft(
             },
         )
         if not event_candidate:
-            return []
-        return [
-            splitik_tools.create_event_draft(
-                db,
-                actor_user_id=actor_user_id,
-                session_id=session_id,
-                payload={"name": event_candidate["name"]},
-                source="llm",
-                model_metadata={
-                    "assistant_message": event_candidate["assistant_message"],
-                    "model_id": event_candidate["model_id"],
-                },
-            )
-        ]
+            return _empty_draft_result()
+        draft = splitik_tools.create_event_draft(
+            db,
+            actor_user_id=actor_user_id,
+            session_id=session_id,
+            payload={"name": event_candidate["name"]},
+            source="llm",
+            model_metadata={
+                "assistant_message": event_candidate["assistant_message"],
+                "model_id": event_candidate["model_id"],
+            },
+        )
+        return {
+            **_empty_draft_result(),
+            "drafts": [draft],
+            "assistant_message": event_candidate["assistant_message"],
+            "intent": "draft",
+            "model_ids": [event_candidate["model_id"]] if event_candidate["model_id"] else [],
+        }
 
     if mode != "event" or not payload.entry_point or not payload.entry_point.event_id:
-        return []
+        return _empty_draft_result()
 
     event_id = str(payload.entry_point.event_id)
     attachment_ids = [str(attachment_id) for attachment_id in payload.attachment_ids]
@@ -431,22 +743,21 @@ def _maybe_create_draft(
         content = candidate.get("content", {})
         receipt_payload = content.get("payload") if isinstance(content, dict) else None
         if not receipt_payload:
-            return []
+            return _empty_draft_result()
         questions = content.get("questions") if isinstance(content, dict) else None
         if not questions:
             questions = _receipt_clarifying_questions()
-        return [
-            splitik_tools.create_receipt_draft(
-                db,
-                actor_user_id=actor_user_id,
-                session_id=session_id,
-                event_id=event_id,
-                payload=receipt_payload,
-                source="image",
-                attachment_ids=attachment_ids,
-                questions=questions,
-            )
-        ]
+        draft = splitik_tools.create_receipt_draft(
+            db,
+            actor_user_id=actor_user_id,
+            session_id=session_id,
+            event_id=event_id,
+            payload=receipt_payload,
+            source="image",
+            attachment_ids=attachment_ids,
+            questions=questions,
+        )
+        return {**_empty_draft_result(), "drafts": [draft], "intent": "draft"}
 
     amount_kopecks = splitik_tools.amount_kopecks_from_text(payload.message)
     latest_receipt_draft = splitik_tools.latest_pending_draft(
@@ -454,6 +765,7 @@ def _maybe_create_draft(
         actor_user_id=actor_user_id,
         session_id=session_id,
         draft_type="create_receipt",
+        event_id=event_id,
     )
     if latest_receipt_draft and latest_receipt_draft.get("questions"):
         answered_question_ids = _answered_receipt_question_ids(payload.message)
@@ -463,17 +775,16 @@ def _maybe_create_draft(
                 for question in latest_receipt_draft.get("questions", [])
                 if question.get("id") not in set(answered_question_ids)
             ]
-            return [
-                splitik_tools.update_draft(
-                    db,
-                    actor_user_id=actor_user_id,
-                    draft_id=latest_receipt_draft["id"],
-                    patch={
-                        "questions": remaining_questions,
-                        "model_metadata": {"answered_question_ids": answered_question_ids},
-                    },
-                )
-            ]
+            draft = splitik_tools.update_draft(
+                db,
+                actor_user_id=actor_user_id,
+                draft_id=latest_receipt_draft["id"],
+                patch={
+                    "questions": remaining_questions,
+                    "model_metadata": {"answered_question_ids": answered_question_ids},
+                },
+            )
+            return {**_empty_draft_result(), "drafts": [draft], "intent": "draft"}
     if (
         latest_receipt_draft
         and amount_kopecks
@@ -483,17 +794,16 @@ def _maybe_create_draft(
         payload_patch["total_amount_kopecks"] = amount_kopecks
         if payload_patch.get("items"):
             payload_patch["items"][0]["cost_kopecks"] = amount_kopecks
-        return [
-            splitik_tools.update_draft(
-                db,
-                actor_user_id=actor_user_id,
-                draft_id=latest_receipt_draft["id"],
-                patch={"payload": payload_patch},
-            )
-        ]
+        draft = splitik_tools.update_draft(
+            db,
+            actor_user_id=actor_user_id,
+            draft_id=latest_receipt_draft["id"],
+            patch={"payload": payload_patch},
+        )
+        return {**_empty_draft_result(), "drafts": [draft], "intent": "draft"}
 
     if not any(marker in lowered for marker in ("чек", "счет", "счёт", "заплатил")):
-        return []
+        return _empty_draft_result()
 
     receipt_payload = splitik_tools.build_simple_receipt_payload(
         db,
@@ -502,17 +812,16 @@ def _maybe_create_draft(
         message=payload.message,
     )
     if not receipt_payload:
-        return []
-    return [
-        splitik_tools.create_receipt_draft(
-            db,
-            actor_user_id=actor_user_id,
-            session_id=session_id,
-            event_id=event_id,
-            payload=receipt_payload,
-            questions=_receipt_clarifying_questions(),
-        )
-    ]
+        return _empty_draft_result()
+    draft = splitik_tools.create_receipt_draft(
+        db,
+        actor_user_id=actor_user_id,
+        session_id=session_id,
+        event_id=event_id,
+        payload=receipt_payload,
+        questions=_receipt_clarifying_questions(),
+    )
+    return {**_empty_draft_result(), "drafts": [draft], "intent": "draft"}
 
 
 def _is_expense_explanation_request(message: str) -> bool:
@@ -767,8 +1076,36 @@ def send_splitik_message(
     context: dict = {}
     drafts: list[dict] = []
     tools: list[str] = []
+    concurrency_acquired = False
     try:
         get_user_or_404(db, actor_user_id)
+        stage = "rate_limit"
+        if len(payload.attachment_ids) > max(1, _env_int("SPLITIK_ATTACHMENTS_PER_MESSAGE", 3)):
+            raise HTTPException(
+                status_code=429,
+                detail="Too many Splitik attachments in one message.",
+            )
+        check_rate_limit(
+            "splitik.messages.hour",
+            actor_user_id,
+            max_requests=_env_int("SPLITIK_MESSAGE_HOURLY_LIMIT", 10),
+            window_seconds=_SECONDS_PER_HOUR,
+            detail="Splitik hourly message limit exceeded.",
+        )
+        check_rate_limit(
+            "splitik.messages.day",
+            actor_user_id,
+            max_requests=_env_int("SPLITIK_MESSAGE_DAILY_LIMIT", 30),
+            window_seconds=_SECONDS_PER_DAY,
+            detail="Splitik daily message limit exceeded.",
+        )
+        acquire_concurrency_limit(
+            "splitik.messages.concurrent",
+            actor_user_id,
+            max_concurrent=_env_int("SPLITIK_MESSAGE_CONCURRENT_LIMIT", 1),
+            detail="Another Splitik request is already running.",
+        )
+        concurrency_acquired = True
         stage = "guardrail.user"
         guardrail_decision = evaluate_user_message(payload.message, context_scope=mode)
         if not guardrail_decision["allowed"]:
@@ -827,8 +1164,11 @@ def send_splitik_message(
         stage = "context.build"
         context, chips, capabilities = _build_context(db, payload, actor_user_id)
         stage = "drafts.create"
-        drafts = _maybe_create_draft(db, payload, actor_user_id, session["id"])
-        questions = _draft_questions(drafts)
+        draft_result = _maybe_create_draft(db, payload, actor_user_id, session["id"])
+        drafts = draft_result["drafts"]
+        questions = _draft_questions(drafts) + draft_result["questions"]
+        if draft_result["guardrail_decision"]:
+            guardrail_decision = draft_result["guardrail_decision"]
         if drafts:
             context["drafts"] = drafts
         tools = _available_tools(mode)
@@ -846,19 +1186,22 @@ def send_splitik_message(
             mode=mode,
             tool_results=tool_results,
         )
-        draft_reply = _draft_assistant_message(drafts)
-        if draft_reply:
-            reply = draft_reply
-            stage = "guardrail.assistant"
-            post_guardrail_decision = evaluate_assistant_message(
-                reply,
-                committed_resource=False,
+        draft_reply = draft_result["assistant_message"] or _draft_assistant_message(drafts)
+        if draft_reply or draft_result["intent"] in {"question", "guardrail"}:
+            reply = draft_reply or (
+                questions[0]["text"] if questions else "Я не смог безопасно разобрать запрос."
             )
-            if not post_guardrail_decision["allowed"]:
-                reply = post_guardrail_decision["message"]
-                guardrail_decision = post_guardrail_decision
+            stage = "guardrail.assistant"
+            if not guardrail_decision or guardrail_decision["allowed"]:
+                post_guardrail_decision = evaluate_assistant_message(
+                    reply,
+                    committed_resource=False,
+                )
+                if not post_guardrail_decision["allowed"]:
+                    reply = post_guardrail_decision["message"]
+                    guardrail_decision = post_guardrail_decision
             now = utc_now()
-            intent = "draft"
+            intent = draft_result["intent"] or "draft"
             if not guardrail_decision["allowed"]:
                 intent = "guardrail"
             stage = "session.write"
@@ -890,7 +1233,8 @@ def send_splitik_message(
                 request_id=request_id,
                 status="success",
                 stage="completed",
-                model_ids=[
+                model_ids=draft_result["model_ids"]
+                or [
                     str(model_id)
                     for model_id in {
                         draft.get("model_metadata", {}).get("model_id") for draft in drafts
@@ -1025,6 +1369,9 @@ def send_splitik_message(
             exc=exc,
         )
         raise
+    finally:
+        if concurrency_acquired:
+            release_concurrency_limit("splitik.messages.concurrent", actor_user_id)
 
 
 def get_splitik_session(db: Database, session_id: str, actor_user_id: str) -> dict:

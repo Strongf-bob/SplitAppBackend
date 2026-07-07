@@ -13,6 +13,15 @@
 - `SPLITIK_VERIFICATION_MODEL` - independent verification model for receipt understanding cross-checks.
 - `SPLITIK_ESCALATION_MODEL` - escalation model used when primary and verification results disagree.
 - `SPLITIK_LLM_TIMEOUT_SECONDS`
+- `SPLITIK_MESSAGE_HOURLY_LIMIT` - default `10` Splitik messages per user per hour.
+- `SPLITIK_MESSAGE_DAILY_LIMIT` - default `30` Splitik messages per user per day.
+- `SPLITIK_MESSAGE_CONCURRENT_LIMIT` - default `1` active Splitik message per user.
+- `SPLITIK_ATTACHMENTS_PER_MESSAGE` - default `3` attachment ids per Splitik message.
+- `SPLITIK_ATTACHMENT_DAILY_LIMIT` - default `10` uploaded Splitik attachments per user per day.
+- `SPLITIK_MAX_DRAFTS_PER_REQUEST` - default `3` newly created drafts from one planner response.
+- `SPLITIK_PENDING_DRAFT_LIMIT` - default `10` pending Splitik drafts per user.
+- `EVENT_CREATE_DAILY_LIMIT` - default `5` created events per user per day.
+- `RECEIPT_CREATE_DAILY_LIMIT` - default `20` created receipts per user per day.
 
 `SPLITIK_LLM_MODEL` remains a legacy fallback for the primary model only. New
 runtime config must use the role-specific variables above so model IDs can be
@@ -87,6 +96,8 @@ metadata и event context, после чего backend валидирует ре
 
 Перед вызовом LLM backend применяет deterministic guardrails:
 
+- per-user limits for Splitik messages, concurrent Splitik calls, attachments,
+  drafts per request, pending drafts, event creation, and receipt creation;
 - out-of-scope homework/general assistant prompts получают refusal;
 - requests for passwords, tokens, API keys or payment credentials are refused;
 - private friend-spending questions outside shared context are refused;
@@ -121,6 +132,40 @@ General spending questions such as "кто мне должен" or "скольк
 backend-computed balance facts. LLM receives `user_balance_summary` and formats
 the answer; it is not the source of financial calculations.
 
+## Runtime chain
+
+Splitik message processing is backend-controlled:
+
+1. `app/routers/splitik.py` receives `POST /api/splitik/messages`, resolves the
+   authenticated actor, and forwards `X-Request-ID`.
+2. `app/services/splitik.py` checks per-user hourly, daily, attachment-count
+   and concurrency limits before expensive context building or LLM calls.
+3. `app/services/splitik.py` creates or loads the Splitik session owned by that
+   actor.
+4. User-message guardrails run before the model. Homework, secrets, and
+   private-spending requests can be refused before any LLM call.
+5. Backend builds bounded context: actor-visible events, entry point, recent
+   session messages, event-scoped active draft, and sanitized attachment
+   metadata.
+6. `app/services/splitik_llm.py::generate_splitik_plan_candidate` asks the LLM
+   for a strict JSON plan. The model can only propose allowlisted actions such
+   as `create_event_draft`, `create_receipt_draft`, `update_receipt_draft`, or
+   `ask_clarifying_question`.
+7. `app/services/splitik.py` caps planner output by draft count and pending
+   draft count before any new draft write.
+8. `app/services/splitik_guardrails.py::evaluate_planner_action` rejects
+   unsupported action types, raw database/tool operations, Mongo-style
+   operators, deletes, payments, and direct money-state changes.
+9. `app/services/splitik_tools.py` validates allowed planner actions with
+   existing domain schemas and access checks, then writes only pending
+   `splitik_drafts`.
+10. If no safe draft action is produced, Splitik falls back to chat/explanation
+   behavior or returns clarifying questions.
+11. Assistant text is checked by post-LLM guardrails, then the message and
+   diagnostics are stored in `splitik_sessions` and `splitik_interactions`.
+12. Real event or receipt documents are created only later through
+    `POST /api/splitik/drafts/{id}/commit`.
+
 ## Model context and backend tools
 
 Сплитик не отдает модели всю историю пользователя и не дает ей прямой доступ к
@@ -130,14 +175,17 @@ MongoDB. Перед каждым LLM-вызовом backend собирает bou
 - `splitik` metadata: mode, locale, timezone;
 - `available_tools`: allowlist backend tools, допустимых в текущем mode;
 - `tool_results`: результаты уже исполненных серверных reads;
-- `conversation_state`: состояние только текущей `session_id`;
+- `conversation_state`: состояние только текущей `session_id` и текущего
+  event scope, если он есть;
 - `drafts`, если текущий запрос создал или обновил draft;
 - `user_balance_summary`, если запрос похож на вопрос о тратах/долгах.
+- `attachments`: sanitized metadata по всем `attachment_ids`, без bucket/key,
+  private URL или raw content.
 
 MVP tools:
 
 - `splitik.get_active_draft` - последний pending draft текущего пользователя в
-  текущей `session_id`;
+  текущей `session_id` и текущем `event_id`, если запрос пришел из события;
 - `splitik.get_recent_session_messages` - короткая история сообщений только
   этой Splitik session;
 - `splitik.get_event_history` - последние receipts конкретного события после
@@ -147,9 +195,10 @@ MVP tools:
 
 Если клиент передает старую `session_id`, backend может добавить в
 `conversation_state.active_draft` текущий pending draft и последние сообщения
-этой сессии. Если `session_id` не передан, создается новая сессия, старый draft
-автоматически не подмешивается, и фразы вроде "поменяй сумму" не применяются к
-прошлым черновикам.
+этой сессии. Для event mode active draft дополнительно фильтруется по
+`event_id`, поэтому фраза "поменяй сумму" в другом событии не меняет старый
+чек из предыдущего события. Если `session_id` не передан, создается новая
+сессия, старый draft автоматически не подмешивается.
 
 System prompt runtime:
 
@@ -193,7 +242,8 @@ Backend creates a pending draft before any committed event exists:
 }
 ```
 
-The LLM receives only backend-approved context:
+The planner LLM receives only backend-approved context and returns structured
+JSON:
 
 ```json
 {
@@ -201,21 +251,35 @@ The LLM receives only backend-approved context:
   "messages": [
     {
       "role": "system",
-      "content": "Ты Сплитик, ассистент SplitApp..."
+      "content": "Ты planner Splitik. Верни только JSON-план..."
     },
     {
       "role": "user",
-      "content": "Сообщение пользователя:\nСоздай событие: Ужин в Duo\n\nРазрешенный backend context JSON:\n{current_user, events, friendships, splitik, available_tools, tool_results, conversation_state, drafts}"
+      "content": "Сообщение пользователя:\nСоздай событие: Ужин в Duo\n\nРазрешенный backend context JSON:\n{mode, entry_point, recent_messages, active_draft, attachments, allowed_actions}"
     }
   ],
-  "temperature": 0.2
+  "temperature": 0.1,
+  "response_format": {
+    "type": "json_object"
+  }
 }
 ```
 
-The model returns assistant text, for example:
+The model returns a plan:
 
-```text
-Сплитик: готово.
+```json
+{
+  "intent": "create_drafts",
+  "assistant_message": "Подготовил черновик события **Ужин в Duo**.",
+  "actions": [
+    {
+      "type": "create_event_draft",
+      "payload": {
+        "name": "Ужин в Duo"
+      }
+    }
+  ]
+}
 ```
 
 Backend response:
@@ -223,7 +287,7 @@ Backend response:
 ```json
 {
   "intent": "draft",
-  "assistant_message": "Сплитик: готово.",
+  "assistant_message": "Подготовил черновик события **Ужин в Duo**.",
   "guardrail_decision": {
     "allowed": true,
     "reason": "allowed"

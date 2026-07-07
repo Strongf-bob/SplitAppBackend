@@ -323,6 +323,38 @@ def generate_event_draft_candidate(*, user_message: str, context: dict) -> dict:
     )
 
 
+def generate_splitik_plan_candidate(*, user_message: str, context: dict) -> dict:
+    return _generate_json_candidate(
+        model_role="primary",
+        system_prompt=(
+            "Ты planner Splitik. Верни только JSON-план, без текста вне JSON. "
+            "Backend считает твой JSON недоверенным и сам валидирует все поля. "
+            "Разрешенные action type: create_event_draft, create_receipt_draft, "
+            "update_receipt_draft, ask_clarifying_question. "
+            "Нельзя возвращать delete_event, payment, database, mongo, raw_query, "
+            "mark_payment_paid, confirm_receipt или любые tool calls. "
+            "Если пользователь просит создать несколько сущностей, верни несколько actions. "
+            "Если фото переданы без OCR/vision текста, не притворяйся что прочитал чек: "
+            "верни ask_clarifying_question. "
+            "Форма ответа: "
+            '{"intent":"create_drafts|ask_clarifying_question|none",'
+            '"assistant_message":"короткий Markdown-ответ без emoji",'
+            '"actions":[{"type":"create_event_draft","payload":{"name":"..."}},'
+            '{"type":"create_receipt_draft","event_id":"uuid","payload":{...},'
+            '"attachment_ids":["uuid"],"questions":[]},'
+            '{"type":"update_receipt_draft","draft_id":"uuid","event_id":"uuid",'
+            '"payload":{...},"questions":[]},'
+            '{"type":"ask_clarifying_question","questions":[{"id":"...","text":"...",'
+            '"required":true}]}]}. '
+            "Receipt payload должен соответствовать CreateReceiptRequest: суммы в копейках, "
+            "payer_id и share_items.user_id только из backend context."
+        ),
+        user_label="Сообщение пользователя",
+        user_message=user_message,
+        context=context,
+    )
+
+
 def generate_receipt_image_candidate(
     *,
     model_role: str,

@@ -150,3 +150,55 @@ def evaluate_structured_response(response: dict, *, capabilities: list[str]) -> 
             "Это действие заблокировано политикой безопасности SplitApp.",
         )
     return _decision(True, "allowed")
+
+
+def evaluate_planner_action(action: dict) -> dict:
+    action_type = str(action.get("type") or action.get("operation") or action.get("tool") or "")
+    allowed_types = {
+        "create_event_draft",
+        "create_receipt_draft",
+        "update_receipt_draft",
+        "ask_clarifying_question",
+    }
+    forbidden_types = {
+        "delete_event",
+        "edit_existing_money_state",
+        "impersonate_user",
+        "mark_foreign_payment_paid",
+        "mark_payment_paid",
+        "confirm_receipt",
+        "create_payment",
+        "raw_query",
+        "mongo",
+        "database",
+    }
+    if action_type not in allowed_types or action_type in forbidden_types:
+        return _decision(
+            False,
+            "forbidden_operation",
+            "Это действие заблокировано политикой безопасности SplitApp.",
+        )
+
+    stack: list[object] = [action]
+    while stack:
+        value = stack.pop()
+        if isinstance(value, dict):
+            for key, child in value.items():
+                normalized_key = str(key).casefold()
+                if normalized_key.startswith("$") or normalized_key in {
+                    "raw_query",
+                    "mongo",
+                    "database",
+                    "collection",
+                    "pipeline",
+                    "where",
+                }:
+                    return _decision(
+                        False,
+                        "forbidden_operation",
+                        "Это действие заблокировано политикой безопасности SplitApp.",
+                    )
+                stack.append(child)
+        elif isinstance(value, list):
+            stack.extend(value)
+    return _decision(True, "allowed")
