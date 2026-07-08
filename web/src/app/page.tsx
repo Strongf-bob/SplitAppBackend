@@ -98,7 +98,7 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v26";
+const clientShellVersion = "splitapp-next-pwa-v27";
 const initialSyncRetryDelayMs = 900;
 
 const figmaHomeAsset = (name: string) => `/assets/figma-home/${name}`;
@@ -173,6 +173,7 @@ export default function SplitAppPage() {
     setView(nextView);
     setActiveView(nextView);
     window.history.replaceState(null, "", `/app#${nextView}`);
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, []);
 
   const clearExpiredSession = useCallback(() => {
@@ -382,6 +383,7 @@ export default function SplitAppPage() {
       setView(routeView);
       setActiveView(routeView);
       normalizeAppRoute(routeView);
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     }
 
     const onHashChange = () => {
@@ -390,6 +392,7 @@ export default function SplitAppPage() {
       setView(nextView);
       setActiveView(nextView);
       normalizeAppRoute(nextView);
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     };
 
     window.addEventListener("hashchange", onHashChange);
@@ -1250,7 +1253,7 @@ function AuthScreen({ onLogin }: { onLogin: () => void }) {
   return (
     <section
       data-testid="svg-auth-screen"
-      className="grid min-h-dvh overflow-hidden bg-[#1f387c] px-[var(--auth-gutter)] pb-[max(env(safe-area-inset-bottom),0px)] pt-[max(env(safe-area-inset-top),0px)] text-white"
+      className="grid min-h-dvh overflow-hidden bg-[#1f3d8f] px-[var(--auth-gutter)] pb-[max(env(safe-area-inset-bottom),0px)] pt-[max(env(safe-area-inset-top),0px)] text-white"
       aria-label="Экран входа SplitApp"
     >
       <div className="mx-auto flex min-h-dvh w-full max-w-[var(--auth-content-max)] flex-col">
@@ -1450,8 +1453,8 @@ function HomeScreen({
     tone: "text-slate-500"
   }));
   return (
-    <div data-testid="home-balance-screen" className="relative min-h-dvh w-full overflow-hidden bg-[#1f387c] text-white">
-      <section className="relative z-10 mx-auto min-h-[53dvh] w-[var(--content-width)] pb-[clamp(1.25rem,3.2dvh,1.75rem)] pt-[max(env(safe-area-inset-top),clamp(5.75rem,12.8dvh,7rem))]">
+    <div data-testid="home-balance-screen" className="relative min-h-dvh w-full overflow-hidden bg-[#1f3d8f] text-white">
+      <section className="relative z-10 mx-auto min-h-[53dvh] w-[var(--content-width)] pb-[clamp(1.25rem,3.2dvh,1.75rem)] pt-[max(env(safe-area-inset-top),clamp(3.25rem,8dvh,4.75rem))]">
         <p className="break-words text-center font-black leading-[.82] tracking-normal" style={{ fontSize: "var(--home-balance-font)" }}>{money(balance)}</p>
         <div className="mt-[clamp(1.25rem,3.4dvh,1.7rem)] flex flex-wrap justify-center gap-x-[clamp(1.8rem,8vw,2.6rem)] gap-y-3 text-[clamp(1.05rem,5vw,1.25rem)] font-black leading-none">
           <span className="inline-flex items-center gap-2">
@@ -1478,7 +1481,7 @@ function HomeScreen({
           <span className="break-words text-[clamp(1.05rem,4.8vw,1.25rem)] font-black leading-tight">{mainEvent ? eventTitle(mainEvent) : "Создайте первое событие"}</span>
           <span className="flex items-end justify-between gap-3">
             {mainEvent ? <AvatarStack count={mainEvent.participants_count ?? mainEvent.participants?.length ?? 0} /> : <span className="text-sm font-bold text-white/50">Пока нет активных расходов</span>}
-            <span className="min-w-0 break-words pb-1 text-right font-black text-white/38" style={{ fontSize: "var(--home-total-font)" }}>{money(mainEvent?.total_kopecks ?? 0)}</span>
+            {mainEvent ? <span className="min-w-0 break-words pb-1 text-right font-black text-white/38" style={{ fontSize: "var(--home-total-font)" }}>{money(mainEvent.total_kopecks ?? 0)}</span> : null}
           </span>
         </Button>
         <div className="mt-[clamp(1.75rem,4.2dvh,2.35rem)] grid grid-cols-[repeat(3,minmax(0,1fr))] gap-[clamp(0.45rem,2.6vw,.85rem)]">
@@ -1492,7 +1495,7 @@ function HomeScreen({
         <div className="mx-auto w-[var(--content-width)]">
         <div className="mb-[clamp(1.2rem,4vw,1.5rem)] flex items-center justify-between">
           <h3 className="text-[clamp(1.25rem,5.1vw,1.45rem)] font-black uppercase leading-none tracking-[-0.02em]">Активность</h3>
-          <span className="rounded-[10px] bg-[#1f387c38] px-3 py-0.5 text-[13px] font-black leading-[22px] text-[#1f387c]">Все</span>
+          <span className="rounded-[10px] bg-[#1f3d8f38] px-3 py-0.5 text-[13px] font-black leading-[22px] text-[#1f3d8f]">Все</span>
         </div>
         <div data-testid="home-activity-list" className="grid max-h-[min(35dvh,330px)] gap-0 overflow-y-auto overscroll-contain pr-1">
         {activityItems.map(({ title, detail, amount, tone }) => (
