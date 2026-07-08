@@ -1584,6 +1584,21 @@ def test_splitik_message_hourly_limit_is_enforced(db, monkeypatch):
     assert exc.value.detail == "Splitik hourly message limit exceeded."
 
 
+def test_splitik_default_hourly_limit_allows_repeated_chat_retries(db, monkeypatch):
+    monkeypatch.delenv("SPLITIK_MESSAGE_HOURLY_LIMIT", raising=False)
+    seed_users(db)
+    _mock_llm(monkeypatch)
+
+    for index in range(11):
+        response = splitik.send_splitik_message(
+            db,
+            schemas.SplitikMessageRequest(mode="general", message=f"Привет {index}"),
+            USER_A,
+        )
+
+    assert response["intent"] == "chat"
+
+
 def test_splitik_explains_user_scoped_spending_from_backend_facts(db, monkeypatch):
     seed_event(db)
     receipt = receipts.create_receipt(

@@ -98,7 +98,7 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v29";
+const clientShellVersion = "splitapp-next-pwa-v30";
 const initialSyncRetryDelayMs = 900;
 const splitikMessageTimeoutMs = 15000;
 
@@ -944,19 +944,21 @@ export default function SplitAppPage() {
       ]);
     } catch (error) {
       const requestId = error instanceof ApiError ? error.requestId : undefined;
-      void reportProblem({
-        screen: "splitik",
-        message: "Сплитик сейчас не смог ответить.",
-        mode: "automatic_error",
-        requestId,
-        metadata: {
-          action: "splitik_message",
-          component: "SplitikScreen",
-          error_name: error instanceof Error ? error.name : "UnknownError",
-          error_message: error instanceof Error ? error.message : String(error ?? "unknown")
-        }
-      });
-      setMessage("Сплитик сейчас не смог ответить. Попробуйте еще раз чуть позже.");
+      if (shouldReportSplitikError(error)) {
+        void reportProblem({
+          screen: "splitik",
+          message: "Сплитик сейчас не смог ответить.",
+          mode: "automatic_error",
+          requestId,
+          metadata: {
+            action: "splitik_message",
+            component: "SplitikScreen",
+            error_name: error instanceof Error ? error.name : "UnknownError",
+            error_message: error instanceof Error ? error.message : String(error ?? "unknown")
+          }
+        });
+      }
+      setMessage(splitikErrorMessage(error));
       setChatMessagesAndCache((items) => [
         ...items,
         { id: `s-${Date.now()}`, from: "splitik", text: splitikErrorMessage(error) }
@@ -2534,12 +2536,23 @@ function Avatar({ children }: { children: React.ReactNode }) {
   return <span className="grid h-9 w-9 place-items-center rounded-full bg-[#c6cbdc] text-sm font-black text-[#1f3d8f]">{children}</span>;
 }
 
+function shouldReportSplitikError(error: unknown) {
+  if (error instanceof ApiError && error.status === 429) return false;
+  return true;
+}
+
 function splitikErrorMessage(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") {
     return "Сплитик не успел ответить за 15 секунд. Я остановил ожидание, попробуйте отправить еще раз.";
   }
   if (error instanceof ApiError) {
     if (error.status === 401) return "Сессия истекла. Войдите через Яндекс еще раз.";
+    if (error.status === 429) {
+      if (error.message.includes("Another Splitik request")) {
+        return "Сплитик еще отвечает на прошлое сообщение. Дождитесь ответа или отправьте заново через несколько секунд.";
+      }
+      return "Слишком много сообщений подряд. Подождите немного и отправьте запрос еще раз.";
+    }
     return "Сплитик сейчас не смог ответить. Мы уже получили отчет, попробуйте еще раз чуть позже.";
   }
   return "Не смог достучаться до Сплитика. Проверьте сеть и попробуйте еще раз.";
