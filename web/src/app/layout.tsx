@@ -39,7 +39,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ru">
-      <body className={montserrat.variable}>{children}</body>
+      <body className={`${montserrat.variable} ${montserrat.className}`}>{children}</body>
     </html>
   );
 }

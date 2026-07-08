@@ -347,5 +347,6 @@ function formatValidationDetail(items: unknown[]) {
 }
 
 export function money(kopecks = 0) {
-  return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB" }).format(kopecks / 100);
+  const rubles = Math.round(kopecks / 100);
+  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(rubles)} ₽`;
 }
