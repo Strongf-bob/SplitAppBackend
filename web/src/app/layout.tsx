@@ -6,6 +6,11 @@ export const metadata: Metadata = {
   title: "SplitApp",
   description: "PWA-клиент SplitApp для событий, чеков, долгов и Сплитика.",
   manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "SplitApp"
+  },
   icons: {
     icon: [
       { url: "/assets/icon-192.png", sizes: "192x192", type: "image/png" },

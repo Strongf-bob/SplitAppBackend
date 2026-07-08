@@ -6,6 +6,7 @@ const page = readFileSync(new URL("../src/app/page.tsx", import.meta.url), "utf8
 const api = readFileSync(new URL("../src/lib/splitapp-api.ts", import.meta.url), "utf8");
 const sw = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
 const globals = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
+const layout = readFileSync(new URL("../src/app/layout.tsx", import.meta.url), "utf8");
 
 test("PWA implements the SVG screen set as navigable app views", () => {
   for (const view of ["home", "events", "people", "profile", "notifications", "splitik"]) {
@@ -22,15 +23,15 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
     "event-tab",
     "notification-tab",
     "splitik-message-input",
-    "aria-label=\"Назад\"",
-    "aria-label=\"На главную\""
+    "data-testid=\"splitik-composer\"",
+    "data-testid=\"friend-code-toggle\""
   ]) {
     assert.match(page, new RegExp(expected), `missing affordance: ${expected}`);
   }
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v17/);
+  assert.match(sw, /splitapp-next-pwa-v18/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
@@ -103,7 +104,8 @@ test("profile screen shows the authenticated Yandex user instead of a hardcoded 
 
 test("bottom navigation active tab stays readable with a liquid glass state", () => {
   assert.match(page, /backdrop-blur-\[22px\]/);
-  assert.match(page, /bg-white\/72 text-\[#1f3d8f\]/);
+  assert.match(page, /bg-white\/82 text-slate-950/);
+  assert.match(page, /text-slate-950 transition-all/);
   assert.doesNotMatch(page, /active && "bg-white\/22 text-white"/);
 });
 
@@ -133,6 +135,9 @@ test("iOS mobile shell uses a safe-area glass tab bar instead of a generic nav s
   assert.match(page, /data-platform-nav="ios-tab-bar"/);
   assert.match(page, /supports-\[backdrop-filter\]:bg-white\/62/);
   assert.match(page, /pb-\[max\(env\(safe-area-inset-bottom\),12px\)\]/);
+  assert.match(layout, /statusBarStyle: "black-translucent"/);
+  assert.match(globals, /html \{[\s\S]*background:\s*#1f3d8f;/);
+  assert.match(globals, /body \{[\s\S]*background:\s*#1f3d8f;/);
   assert.doesNotMatch(page, /rounded-t-\[26px\]/);
 });
 
@@ -152,10 +157,13 @@ test("authenticated startup refreshes expired access tokens instead of showing a
 });
 
 test("authenticated startup tolerates malformed page payloads without crashing the route", () => {
+  assert.match(page, /Promise\.allSettled\(\[/);
+  assert.match(page, /initial_sync_partial/);
   assert.match(page, /function pageItems<T>\(page: \{ items\?: T\[\] \} \| null \| undefined\)/);
-  assert.match(page, /const nextEvents = pageItems\(eventPage\)\.map\(normalizeEvent\)/);
+  assert.match(page, /const nextEvents = pageItems\(eventResult\.value\)\.map\(normalizeEvent\)/);
   assert.match(page, /setEvents\(nextEvents\)/);
-  assert.match(page, /setFriendships\(pageItems\(friendshipPage\)\)/);
+  assert.match(page, /setFriendships\(pageItems\(friendshipResult\.value\)\)/);
+  assert.doesNotMatch(page, /Promise\.all\(\[\s*authedApi<HomeSummary>/);
   assert.doesNotMatch(page, /eventPage\.items\.length/);
   assert.doesNotMatch(page, /friendshipPage\.items \?\? \[\]/);
 });
@@ -374,7 +382,7 @@ test("home screen follows the Figma balance card and activity sheet composition"
   assert.match(page, /data-testid="home-activity-list"/);
   assert.match(page, /overflow-y-auto/);
   assert.doesNotMatch(page, />Все<\/Badge>/);
-  assert.doesNotMatch(page, /showHeader=\{view === "home"\}/);
+  assert.doesNotMatch(page, /showHeader/);
   assert.doesNotMatch(page, /Синхрониз\./);
 });
 
@@ -383,6 +391,7 @@ test("home shell covers the viewport instead of exposing the dark page backgroun
   assert.match(page, /<main className="min-h-dvh w-full overflow-x-hidden bg-\[#1f3d8f\]/);
   assert.match(page, /<div className="min-h-dvh w-full overflow-x-hidden bg-\[#1f3d8f\]">/);
   assert.match(page, /className="min-h-\[calc\(100dvh-74px\)\] w-full overflow-hidden/);
+  assert.doesNotMatch(page, /loggedIn && "pb-\[var\(--bottom-nav-reserve\)\]"/);
 });
 
 test("home inbox action badge is conditional on unread incoming items", () => {
@@ -403,9 +412,9 @@ test("friends screen exposes add-by-code affordance", () => {
 });
 
 test("friends screen owns its title without duplicating the global app header", () => {
-  assert.match(page, /showHeader=\{false\}/);
-  assert.match(page, /showHeader: boolean/);
-  assert.match(page, /showHeader && loggedIn \? \(/);
+  assert.doesNotMatch(page, /showHeader/);
+  assert.doesNotMatch(page, /aria-label="На главную"/);
+  assert.doesNotMatch(page, /aria-label="Выйти"/);
   assert.match(page, /testId="friends-screen"[\s\S]*title="Друзья"/);
 });
 
