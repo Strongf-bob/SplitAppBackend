@@ -32,8 +32,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v30/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v30"/);
+  assert.match(sw, /splitapp-next-pwa-v31/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v31"/);
   assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
@@ -150,7 +150,7 @@ test("bottom navigation selection follows the requested screen immediately", () 
 
 test("bottom navigation switches tabs immediately without waiting for exit animation", () => {
   assert.match(page, /setActiveView\(nextView\)/);
-  assert.match(page, /<AnimatePresence initial=\{false\}>/);
+  assert.match(page, /<AnimatePresence initial=\{false\} mode="popLayout">/);
   assert.doesNotMatch(page, /<AnimatePresence mode="wait">/);
   assert.doesNotMatch(page, /onAnimationComplete=\{\(\) => onViewSettled\(view\)\}/);
 });
@@ -161,6 +161,9 @@ test("bottom navigation resets the app scroll root after each tab commit", () =>
   assert.match(page, /scrollRootRef=\{appScrollRef\}/);
   assert.match(page, /data-testid="app-scroll-root"/);
   assert.match(page, /resetAppScroll/);
+  assert.match(page, /const previousScrollRestoration = window\.history\.scrollRestoration/);
+  assert.match(page, /window\.history\.scrollRestoration = "manual"/);
+  assert.match(page, /window\.history\.scrollRestoration = previousScrollRestoration/);
   assert.match(page, /document\.scrollingElement/);
   assert.match(page, /appScrollRef\.current\?\.scrollTo\(\{ top: 0, left: 0, behavior: "auto" \}\)/);
   assert.match(page, /useLayoutEffect\(\(\) => \{\s*resetAppScroll\(\);\s*\}, \[activeView, resetAppScroll\]\)/);
