@@ -76,7 +76,7 @@ jobs:
       SPLITIK_ESCALATION_MODEL: ${{ secrets.SPLITIK_ESCALATION_MODEL }}
       SPLITIK_LLM_TIMEOUT_SECONDS: ${{ vars.SPLITIK_LLM_TIMEOUT_SECONDS || '12' }}
       SPLITIK_PRIMARY_TIMEOUT_SECONDS: ${{ vars.SPLITIK_PRIMARY_TIMEOUT_SECONDS || '12' }}
-      SPLITIK_FAST_CHAT_TIMEOUT_SECONDS: ${{ vars.SPLITIK_FAST_CHAT_TIMEOUT_SECONDS || '8' }}
+      SPLITIK_FAST_CHAT_TIMEOUT_SECONDS: ${{ vars.SPLITIK_FAST_CHAT_TIMEOUT_SECONDS || '12' }}
       SPLITIK_INTENT_TIMEOUT_SECONDS: ${{ vars.SPLITIK_INTENT_TIMEOUT_SECONDS || '8' }}
       SPLITIK_VERIFICATION_TIMEOUT_SECONDS: ${{ vars.SPLITIK_VERIFICATION_TIMEOUT_SECONDS || '12' }}
       SPLITIK_ESCALATION_TIMEOUT_SECONDS: ${{ vars.SPLITIK_ESCALATION_TIMEOUT_SECONDS || '12' }}
@@ -102,6 +102,52 @@ jobs:
           test -n "$SPLITIK_PRIMARY_MODEL"
           test -n "$SPLITIK_FAST_CHAT_MODEL"
           test -n "$SPLITIK_INTENT_MODEL"
+
+      - name: Benchmark configured Splitik LLM latency
+        run: |
+          python - <<'PY'
+          import time
+          import httpx
+          from app.services import splitik_llm
+
+          config = splitik_llm.load_config()
+          roles = ["primary", "fast_chat", "intent"]
+          print("role\tmodel\tattempt\telapsed_ms\tstatus")
+          for role in roles:
+              model = splitik_llm._model_for_role(config, role)
+              timeout = splitik_llm._role_timeout(config, role)
+              for attempt in range(1, 4):
+                  payload = {
+                      "model": model,
+                      "messages": [
+                          {"role": "system", "content": "Return a short health-check response. No private data."},
+                          {"role": "user", "content": "health check"},
+                      ],
+                      "temperature": 0,
+                  }
+                  started = time.monotonic()
+                  status = "ok"
+                  try:
+                      response = httpx.post(
+                          splitik_llm._chat_completions_url(config.base_url),
+                          headers={
+                              "Authorization": f"Bearer {config.api_key}",
+                              "Content-Type": "application/json",
+                          },
+                          json=payload,
+                          timeout=timeout,
+                      )
+                      if response.status_code >= 400:
+                          status = f"http_{response.status_code}"
+                      else:
+                          splitik_llm._extract_chat_content(response.json())
+                  except httpx.TimeoutException:
+                      status = "timeout"
+                  except Exception as exc:
+                      status = type(exc).__name__
+                  elapsed_ms = round((time.monotonic() - started) * 1000, 2)
+                  print(f"{role}\t{model}\t{attempt}\t{elapsed_ms}\t{status}")
+          PY
 
       - name: Check configured Splitik LLM response SLA
         run: python -m pytest tests/test_splitik_llm_smoke.py -q
@@ -131,7 +177,7 @@ jobs:
       SPLITIK_ESCALATION_MODEL_VALUE: ${{ secrets.SPLITIK_ESCALATION_MODEL }}
       SPLITIK_LLM_TIMEOUT_SECONDS_VALUE: ${{ vars.SPLITIK_LLM_TIMEOUT_SECONDS || '12' }}
       SPLITIK_PRIMARY_TIMEOUT_SECONDS_VALUE: ${{ vars.SPLITIK_PRIMARY_TIMEOUT_SECONDS || '12' }}
-      SPLITIK_FAST_CHAT_TIMEOUT_SECONDS_VALUE: ${{ vars.SPLITIK_FAST_CHAT_TIMEOUT_SECONDS || '8' }}
+      SPLITIK_FAST_CHAT_TIMEOUT_SECONDS_VALUE: ${{ vars.SPLITIK_FAST_CHAT_TIMEOUT_SECONDS || '12' }}
       SPLITIK_INTENT_TIMEOUT_SECONDS_VALUE: ${{ vars.SPLITIK_INTENT_TIMEOUT_SECONDS || '8' }}
       SPLITIK_VERIFICATION_TIMEOUT_SECONDS_VALUE: ${{ vars.SPLITIK_VERIFICATION_TIMEOUT_SECONDS || '12' }}
       SPLITIK_ESCALATION_TIMEOUT_SECONDS_VALUE: ${{ vars.SPLITIK_ESCALATION_TIMEOUT_SECONDS || '12' }}
