@@ -137,19 +137,24 @@ Security и app behavior:
   - `SPLITIK_LLM_BASE_URL`
   - `SPLITIK_LLM_API_KEY`
   - `SPLITIK_PRIMARY_MODEL`
+  - `SPLITIK_FAST_CHAT_MODEL` - fast model for plain chat replies; default
+    `deepseek-v4-flash`.
+  - `SPLITIK_FAST_CHAT_TIMEOUT_SECONDS` - default `8`.
   - `SPLITIK_INTENT_MODEL` — optional small routing model; use `deepseek-v4-flash`
     for the pre-planner intent classifier.
+  - `SPLITIK_INTENT_TIMEOUT_SECONDS` - optional timeout for the intent router.
   - `SPLITIK_VERIFICATION_MODEL`
   - `SPLITIK_ESCALATION_MODEL`
-  - `SPLITIK_LLM_TIMEOUT_SECONDS`
+  - `SPLITIK_LLM_TIMEOUT_SECONDS` - default `12`.
   - `SPLITIK_LLM_MODEL` — legacy fallback только для primary model.
 
-`SPLITIK_LLM_MODEL` или `SPLITIK_PRIMARY_MODEL` достаточно для обычных Splitik
-chat replies. `SPLITIK_INTENT_MODEL` можно не задавать, тогда pre-planner intent
-classifier использует primary model. AI receipt drafts дополнительно требуют
-`SPLITIK_VERIFICATION_MODEL` и `SPLITIK_ESCALATION_MODEL`; если они отсутствуют,
-configuration error возвращает только draft endpoint, а backend и обычный
-Splitik chat продолжают работать.
+`SPLITIK_LLM_MODEL` или `SPLITIK_PRIMARY_MODEL` достаточно для primary Splitik
+replies. Plain chat replies use `SPLITIK_FAST_CHAT_MODEL`; if it is not set,
+backend uses `SPLITIK_INTENT_MODEL` or `deepseek-v4-flash`. `SPLITIK_INTENT_MODEL`
+можно не задавать, тогда pre-planner intent classifier использует primary
+model. AI receipt drafts дополнительно требуют `SPLITIK_VERIFICATION_MODEL` и
+`SPLITIK_ESCALATION_MODEL`; если они отсутствуют, configuration error возвращает
+только draft endpoint, а backend и обычный Splitik chat продолжают работать.
 Model IDs должны жить в environment variables, а не в коде, чтобы provider/model
 mix можно было менять без rebuild backend.
 

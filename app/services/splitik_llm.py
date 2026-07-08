@@ -12,6 +12,7 @@ class SplitikLLMConfig:
     base_url: str
     api_key: str
     primary_model: str
+    fast_chat_model: str
     intent_model: str | None
     verification_model: str | None
     escalation_model: str | None
@@ -23,6 +24,7 @@ class SplitikLLMConfig:
             model
             for model in {
                 self.primary_model,
+                self.fast_chat_model,
                 self.intent_model,
                 self.verification_model,
                 self.escalation_model,
@@ -47,6 +49,7 @@ def is_llm_configured() -> bool:
         _env("SPLITIK_LLM_BASE_URL")
         or _env("SPLITIK_LLM_API_KEY")
         or _env("SPLITIK_PRIMARY_MODEL")
+        or _env("SPLITIK_FAST_CHAT_MODEL")
         or _env("SPLITIK_INTENT_MODEL")
         or _env("SPLITIK_VERIFICATION_MODEL")
         or _env("SPLITIK_ESCALATION_MODEL")
@@ -56,7 +59,7 @@ def is_llm_configured() -> bool:
 
 def load_config() -> SplitikLLMConfig:
     try:
-        timeout = float(os.getenv("SPLITIK_LLM_TIMEOUT_SECONDS", "60"))
+        timeout = float(os.getenv("SPLITIK_LLM_TIMEOUT_SECONDS", "12"))
     except ValueError as exc:
         raise HTTPException(status_code=503, detail="Splitik LLM is not configured.") from exc
 
@@ -68,6 +71,9 @@ def load_config() -> SplitikLLMConfig:
         base_url=_required_env("SPLITIK_LLM_BASE_URL"),
         api_key=_required_env("SPLITIK_LLM_API_KEY"),
         primary_model=primary_model,
+        fast_chat_model=_env("SPLITIK_FAST_CHAT_MODEL")
+        or _env("SPLITIK_INTENT_MODEL")
+        or "deepseek-v4-flash",
         intent_model=_env("SPLITIK_INTENT_MODEL") or None,
         verification_model=_env("SPLITIK_VERIFICATION_MODEL") or None,
         escalation_model=_env("SPLITIK_ESCALATION_MODEL") or None,
@@ -75,12 +81,32 @@ def load_config() -> SplitikLLMConfig:
     )
 
 
+def _role_timeout(config: SplitikLLMConfig, model_role: str) -> float:
+    timeout_by_role = {
+        "primary": os.getenv("SPLITIK_PRIMARY_TIMEOUT_SECONDS"),
+        "fast_chat": os.getenv("SPLITIK_FAST_CHAT_TIMEOUT_SECONDS"),
+        "intent": os.getenv("SPLITIK_INTENT_TIMEOUT_SECONDS"),
+        "verification": os.getenv("SPLITIK_VERIFICATION_TIMEOUT_SECONDS"),
+        "escalation": os.getenv("SPLITIK_ESCALATION_TIMEOUT_SECONDS"),
+    }
+    raw_timeout = timeout_by_role.get(model_role)
+    if model_role == "fast_chat" and not raw_timeout:
+        return min(config.timeout_seconds, 8)
+    if not raw_timeout:
+        return config.timeout_seconds
+    try:
+        return float(raw_timeout)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail="Splitik LLM is not configured.") from exc
+
+
 def _model_for_role(
     config: SplitikLLMConfig,
-    model_role: Literal["primary", "intent", "verification", "escalation"],
+    model_role: Literal["primary", "fast_chat", "intent", "verification", "escalation"],
 ) -> str:
     model_by_role = {
         "primary": config.primary_model,
+        "fast_chat": config.fast_chat_model,
         "intent": config.intent_model or config.primary_model,
         "verification": config.verification_model,
         "escalation": config.escalation_model,
@@ -188,11 +214,18 @@ def validate_configured_models_available() -> None:
         raise RuntimeError("Configured Splitik LLM models are not available.")
 
 
-def generate_splitik_reply(*, system_prompt: str, user_message: str, context: dict) -> str:
+def generate_splitik_reply(
+    *,
+    system_prompt: str,
+    user_message: str,
+    context: dict,
+    model_role: Literal["primary", "fast_chat"] = "primary",
+) -> str:
     config = load_config()
+    model = _model_for_role(config, model_role)
 
     payload = {
-        "model": config.primary_model,
+        "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {
@@ -214,7 +247,7 @@ def generate_splitik_reply(*, system_prompt: str, user_message: str, context: di
                 "Content-Type": "application/json",
             },
             json=payload,
-            timeout=config.timeout_seconds,
+            timeout=_role_timeout(config, model_role),
         )
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail="Splitik LLM request failed.") from exc
@@ -270,7 +303,7 @@ def _generate_json_candidate(
                 "Content-Type": "application/json",
             },
             json=payload,
-            timeout=config.timeout_seconds,
+            timeout=_role_timeout(config, model_role),
         )
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail="Splitik LLM request failed.") from exc
