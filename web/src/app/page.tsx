@@ -98,7 +98,7 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v32";
+const clientShellVersion = "splitapp-next-pwa-v33";
 const initialSyncRetryDelayMs = 900;
 const splitikMessageTimeoutMs = 15000;
 
@@ -2222,6 +2222,7 @@ function SplitikScreen({
   onConfirmDraft: (draftId: string) => void;
 }) {
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [activeDraft, setActiveDraft] = useState<SplitikDraft | null>(null);
   const updateDraft = (value: string) => {
     onDraft(value);
     window.requestAnimationFrame(() => {
@@ -2260,7 +2261,7 @@ function SplitikScreen({
               {item.from === "splitik" && item.drafts?.length ? (
                 <div className="grid w-full max-w-[92%] gap-2">
                   {item.drafts.map((draftItem) => (
-                    <SplitikDraftCard key={draftItem.id} draft={draftItem} onConfirm={onConfirmDraft} onEdit={applyDraftPrompt} />
+                    <SplitikDraftCard key={draftItem.id} draft={draftItem} onOpen={setActiveDraft} onConfirm={onConfirmDraft} onEdit={applyDraftPrompt} />
                   ))}
                 </div>
               ) : null}
@@ -2333,6 +2334,18 @@ function SplitikScreen({
             {isSending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <Send className="h-5 w-5" />}
           </Button>
         </form>
+        <SplitikDraftSheet
+          draft={activeDraft}
+          onClose={() => setActiveDraft(null)}
+          onEdit={(value) => {
+            setActiveDraft(null);
+            applyDraftPrompt(value);
+          }}
+          onConfirm={(draftId) => {
+            setActiveDraft(null);
+            onConfirmDraft(draftId);
+          }}
+        />
       </div>
       </section>
     </div>
@@ -2360,10 +2373,12 @@ function MarkdownMessage({ text }: { text: string }) {
 
 function SplitikDraftCard({
   draft,
+  onOpen,
   onConfirm,
   onEdit
 }: {
   draft: SplitikDraft;
+  onOpen: (draft: SplitikDraft) => void;
   onConfirm: (draftId: string) => void;
   onEdit: (value: string) => void;
 }) {
@@ -2407,7 +2422,7 @@ function SplitikDraftCard({
             data-testid="splitik-draft-open"
             type="button"
             className="min-h-11 rounded-xl bg-[#1f3d8f] px-3 text-sm font-black text-white hover:bg-[#1f3d8f]/90"
-            onClick={() => onEdit(`Покажи подробнее черновик ${draft.id}`)}
+            onClick={() => onOpen(draft)}
           >
             <ExternalLink className="mr-1 h-4 w-4" />
             Открыть черновик
@@ -2425,6 +2440,77 @@ function SplitikDraftCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function SplitikDraftSheet({
+  draft,
+  onClose,
+  onEdit,
+  onConfirm
+}: {
+  draft: SplitikDraft | null;
+  onClose: () => void;
+  onEdit: (value: string) => void;
+  onConfirm: (draftId: string) => void;
+}) {
+  if (!draft) return null;
+  const title = splitikDraftTitle(draft);
+  const details = splitikDraftDetails(draft);
+  const isCommitted = draft.status === "committed";
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        data-testid="splitik-draft-sheet"
+        className="fixed inset-0 z-50 grid items-end bg-slate-950/40 px-3 pb-[calc(76px+env(safe-area-inset-bottom))] backdrop-blur-[2px]"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+      >
+        <motion.div
+          className="mx-auto grid max-h-[74dvh] w-full max-w-[var(--content-max)] gap-4 overflow-y-auto rounded-[28px] bg-white p-4 text-slate-950 shadow-[0_24px_70px_rgba(15,23,42,0.34)]"
+          initial={{ y: 28 }}
+          animate={{ y: 0 }}
+          exit={{ y: 28 }}
+          transition={{ duration: 0.18 }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-wide text-[#1f3d8f]">{splitikDraftKind(draft)}</p>
+              <h3 className="mt-1 break-words text-2xl font-black leading-tight">{title}</h3>
+            </div>
+            <Badge className={cn("shrink-0 rounded-full px-3 py-1 text-[10px] font-black", isCommitted ? "bg-emerald-100 text-emerald-700" : "bg-[#d2daec] text-[#1f3d8f]")}>
+              {isCommitted ? "Подтвержден" : "Черновик"}
+            </Badge>
+          </div>
+          <div className="grid gap-2 rounded-2xl bg-[#f5f7fb] p-3">
+            {details.map(([label, value]) => (
+              <div key={label} className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-3 text-sm">
+                <span className="font-bold text-slate-500">{label}</span>
+                <span className="break-words text-right font-black text-slate-900">{value}</span>
+              </div>
+            ))}
+          </div>
+          {draft.questions?.length ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800">
+              Нужно уточнить: {draft.questions.map((question) => question.text).join(" · ")}
+            </div>
+          ) : null}
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" variant="secondary" className="min-h-12 rounded-2xl bg-[#eef1f7] text-sm font-black text-slate-700 hover:bg-[#e2e7f2]" onClick={onClose}>
+              Закрыть
+            </Button>
+            <Button type="button" variant="ghost" className="min-h-12 rounded-2xl bg-[#eef1f7] text-sm font-black text-[#1f3d8f]" onClick={() => onEdit(`Измени черновик ${draft.id}: `)}>
+              Изменить
+            </Button>
+          </div>
+          <Button data-testid="splitik-draft-sheet-confirm" type="button" disabled={isCommitted} className="min-h-12 rounded-2xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90 disabled:bg-slate-300" onClick={() => onConfirm(draft.id)}>
+            Подтвердить черновик
+          </Button>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
