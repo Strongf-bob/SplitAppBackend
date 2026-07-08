@@ -342,9 +342,7 @@ def test_pwa_contains_friendly_problem_report_surface():
 
 
 def test_production_diagnostics_workflow_fetches_sanitized_reports():
-    workflow = (
-        PROJECT_ROOT / ".github" / "workflows" / "production-diagnostics.yml"
-    ).read_text()
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "production-diagnostics.yml").read_text()
 
     assert "workflow_dispatch" in workflow
     assert "DEPLOY_SSH_KEY" in workflow
