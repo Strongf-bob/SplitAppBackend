@@ -12,6 +12,7 @@ class SplitikLLMConfig:
     base_url: str
     api_key: str
     primary_model: str
+    intent_model: str | None
     verification_model: str | None
     escalation_model: str | None
     timeout_seconds: float
@@ -20,7 +21,12 @@ class SplitikLLMConfig:
     def model_ids(self) -> set[str]:
         return {
             model
-            for model in {self.primary_model, self.verification_model, self.escalation_model}
+            for model in {
+                self.primary_model,
+                self.intent_model,
+                self.verification_model,
+                self.escalation_model,
+            }
             if model
         }
 
@@ -41,6 +47,7 @@ def is_llm_configured() -> bool:
         _env("SPLITIK_LLM_BASE_URL")
         or _env("SPLITIK_LLM_API_KEY")
         or _env("SPLITIK_PRIMARY_MODEL")
+        or _env("SPLITIK_INTENT_MODEL")
         or _env("SPLITIK_VERIFICATION_MODEL")
         or _env("SPLITIK_ESCALATION_MODEL")
         or _env("SPLITIK_LLM_MODEL")
@@ -61,6 +68,7 @@ def load_config() -> SplitikLLMConfig:
         base_url=_required_env("SPLITIK_LLM_BASE_URL"),
         api_key=_required_env("SPLITIK_LLM_API_KEY"),
         primary_model=primary_model,
+        intent_model=_env("SPLITIK_INTENT_MODEL") or None,
         verification_model=_env("SPLITIK_VERIFICATION_MODEL") or None,
         escalation_model=_env("SPLITIK_ESCALATION_MODEL") or None,
         timeout_seconds=timeout,
@@ -68,10 +76,12 @@ def load_config() -> SplitikLLMConfig:
 
 
 def _model_for_role(
-    config: SplitikLLMConfig, model_role: Literal["primary", "verification", "escalation"]
+    config: SplitikLLMConfig,
+    model_role: Literal["primary", "intent", "verification", "escalation"],
 ) -> str:
     model_by_role = {
         "primary": config.primary_model,
+        "intent": config.intent_model or config.primary_model,
         "verification": config.verification_model,
         "escalation": config.escalation_model,
     }
@@ -231,7 +241,7 @@ def _generate_json_candidate(
     context: dict,
 ) -> dict:
     config = load_config()
-    if model_role not in {"primary", "verification", "escalation"}:
+    if model_role not in {"primary", "intent", "verification", "escalation"}:
         raise HTTPException(status_code=400, detail="Invalid Splitik model role.")
     model = _model_for_role(config, model_role)  # type: ignore[arg-type]
 
@@ -357,7 +367,7 @@ def generate_splitik_plan_candidate(*, user_message: str, context: dict) -> dict
 
 def generate_splitik_intent_candidate(*, user_message: str, context: dict) -> dict:
     return _generate_json_candidate(
-        model_role="primary",
+        model_role="intent",
         system_prompt=(
             "Ты intent-router Splitik. Перед JSON planner нужно понять, что хочет "
             "пользователь. Верни только JSON. "

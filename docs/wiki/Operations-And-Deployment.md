@@ -137,15 +137,19 @@ Security и app behavior:
   - `SPLITIK_LLM_BASE_URL`
   - `SPLITIK_LLM_API_KEY`
   - `SPLITIK_PRIMARY_MODEL`
+  - `SPLITIK_INTENT_MODEL` — optional small routing model; use `deepseek-v4-flash`
+    for the pre-planner intent classifier.
   - `SPLITIK_VERIFICATION_MODEL`
   - `SPLITIK_ESCALATION_MODEL`
   - `SPLITIK_LLM_TIMEOUT_SECONDS`
   - `SPLITIK_LLM_MODEL` — legacy fallback только для primary model.
 
 `SPLITIK_LLM_MODEL` или `SPLITIK_PRIMARY_MODEL` достаточно для обычных Splitik
-chat replies. AI receipt drafts дополнительно требуют `SPLITIK_VERIFICATION_MODEL`
-и `SPLITIK_ESCALATION_MODEL`; если они отсутствуют, configuration error возвращает
-только draft endpoint, а backend и обычный Splitik chat продолжают работать.
+chat replies. `SPLITIK_INTENT_MODEL` можно не задавать, тогда pre-planner intent
+classifier использует primary model. AI receipt drafts дополнительно требуют
+`SPLITIK_VERIFICATION_MODEL` и `SPLITIK_ESCALATION_MODEL`; если они отсутствуют,
+configuration error возвращает только draft endpoint, а backend и обычный
+Splitik chat продолжают работать.
 Model IDs должны жить в environment variables, а не в коде, чтобы provider/model
 mix можно было менять без rebuild backend.
 
