@@ -792,7 +792,7 @@ export default function SplitAppPage() {
   };
 
   return (
-    <main className="min-h-dvh w-full overflow-x-hidden bg-[#f5f5f7] text-slate-950">
+    <main className="min-h-dvh w-full overflow-x-hidden bg-[#1f3d8f] text-slate-950">
       {!tokens ? (
         <AuthScreen onLogin={startYandexLogin} />
       ) : (
@@ -802,7 +802,7 @@ export default function SplitAppPage() {
           onBack={goBack}
           onHome={goHome}
           onNavigate={navigate}
-          showHeader={view === "home"}
+          showHeader={false}
           showBack={view !== "home"}
           onNotifications={() => navigate("notifications")}
           onLogout={logout}
@@ -997,7 +997,7 @@ function PhoneShell({
   onLogout: () => void;
 }) {
   return (
-    <div className="min-h-dvh w-full overflow-x-hidden bg-[#f5f5f7]">
+    <div className="min-h-dvh w-full overflow-x-hidden bg-[#1f3d8f]">
       {showHeader && loggedIn ? (
         <header className="sticky top-0 z-30 flex items-end justify-between gap-2 bg-[#1f3d8f] px-4 pb-4 pt-[max(env(safe-area-inset-top),16px)] text-white">
           <div className="flex min-w-0 items-center gap-2">
@@ -1219,7 +1219,7 @@ function WorkspaceScreen({
     <AnimatePresence mode="wait">
       <motion.div
         key={view}
-        className="min-h-[calc(100dvh-74px)] w-full overflow-hidden rounded-t-[24px] bg-[#f5f5f7] pb-5 pt-3"
+        className="min-h-[calc(100dvh-74px)] w-full overflow-hidden bg-[#1f3d8f]"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10 }}
@@ -1293,7 +1293,7 @@ function HomeScreen({
 }) {
   const mainEvent = events[0] ?? null;
   const balance = (owedToMe || 0) - (iOwe || 0);
-  const activityItems = events.slice(0, 3).map((event) => ({
+  const activityItems = events.map((event) => ({
     title: eventTitle(event),
     detail: `${event.participants_count ?? event.participants?.length ?? 0} участника`,
     amount: money(event.total_kopecks ?? 0),
@@ -1301,7 +1301,7 @@ function HomeScreen({
   }));
   return (
     <div data-testid="home-balance-screen" className="grid min-h-[calc(100dvh-92px)] w-full overflow-hidden content-start bg-[#1f3d8f] text-white">
-      <section className="mx-auto grid w-[var(--content-width)] gap-[var(--home-hero-gap)] pb-[clamp(1.5rem,5dvh,2.25rem)] pt-[clamp(1.5rem,5dvh,2.25rem)]">
+      <section className="mx-auto grid w-[var(--content-width)] gap-[var(--home-hero-gap)] pb-[clamp(1.5rem,5dvh,2.25rem)] pt-[max(env(safe-area-inset-top),clamp(1.5rem,5dvh,2.25rem))]">
         <p className="break-words text-center font-black leading-none tracking-normal" style={{ fontSize: "var(--balance-font)" }}>{money(balance)}</p>
         <div className="flex flex-wrap justify-center gap-x-[clamp(1rem,5vw,1.75rem)] gap-y-3 text-[clamp(0.9375rem,4.7vw,1.25rem)] font-black leading-none">
           <span className="inline-flex items-center gap-2">
@@ -1340,11 +1340,10 @@ function HomeScreen({
 
       <section className="rounded-t-[28px] bg-[#f5f5f7] pb-[var(--bottom-nav-reserve)] pt-[clamp(1.5rem,5vw,2rem)] text-slate-950">
         <div className="mx-auto w-[var(--content-width)]">
-        <div className="mb-[clamp(1.25rem,5vw,1.75rem)] flex items-center justify-between gap-4">
+        <div className="mb-[clamp(1.25rem,5vw,1.75rem)]">
           <h3 className="text-[clamp(1.625rem,7vw,1.875rem)] font-black leading-none">Активность</h3>
-          <Badge className="rounded-full bg-[#d2d6e6] px-4 py-1.5 text-base font-black text-[#1f3d8f]">Все</Badge>
         </div>
-        <div className="grid gap-0">
+        <div data-testid="home-activity-list" className="grid max-h-[min(38dvh,360px)] gap-0 overflow-y-auto overscroll-contain pr-1">
         {activityItems.map(({ title, detail, amount, tone }) => (
           <div key={title} className="grid grid-cols-[var(--activity-avatar-size)_minmax(0,1fr)] items-center gap-3 border-b border-slate-200 py-4 last:border-b-0 sm:grid-cols-[var(--activity-avatar-size)_minmax(0,1fr)_auto]">
             <ActivityAvatar>{title[0]}</ActivityAvatar>
@@ -1403,12 +1402,12 @@ function QuickAction({
   showBadge?: boolean;
 }) {
   return (
-    <Button type="button" onClick={onClick} variant="ghost" className="grid h-auto min-h-[var(--action-min-height)] min-w-0 place-items-center rounded-2xl p-0 text-center text-[clamp(0.75rem,3.9vw,1rem)] font-bold leading-tight text-white hover:bg-white/10 hover:text-white">
-      <span className="relative grid place-items-center rounded-full bg-[#111111]" style={{ width: "var(--action-icon-size)", height: "var(--action-icon-size)" }}>
+    <Button type="button" onClick={onClick} variant="ghost" className="grid h-auto min-h-[var(--action-min-height)] min-w-0 grid-rows-[var(--action-icon-size)_auto] justify-items-center gap-3 rounded-2xl p-0 text-center text-[clamp(0.75rem,3.9vw,1rem)] font-bold leading-tight text-white hover:bg-white/10 hover:text-white">
+      <span className="relative grid place-items-center self-center rounded-full bg-[#111111]" style={{ width: "var(--action-icon-size)", height: "var(--action-icon-size)" }}>
         <Icon style={{ width: "var(--action-icon-svg)", height: "var(--action-icon-svg)" }} strokeWidth={2.2} />
         {showBadge ? <span className="absolute right-5 top-5 h-4 w-4 rounded-full bg-red-500" /> : null}
       </span>
-      <span>{label}</span>
+      <span className="flex min-h-[2.5em] items-start justify-center">{label}</span>
     </Button>
   );
 }
@@ -2037,35 +2036,22 @@ function SplitikScreen({
   onConfirmDraft: (draftId: string) => void;
 }) {
   return (
-    <SvgScreenFrame
-      testId="splitik-screen"
-      title="Сплитик"
-      sheetClassName="flex min-h-[calc(100dvh-148px)] flex-col pt-4"
-      hero={
-        <div className="grid justify-items-center py-1">
-          <div className="grid h-24 w-24 place-items-center rounded-[28px] border-4 border-white/90 bg-white/8 text-white">
-            <Bot className="h-12 w-12" strokeWidth={2.5} />
-          </div>
+    <div data-testid="splitik-chat-screen" className="flex min-h-[calc(100dvh-92px)] bg-[#1f3d8f] text-white">
+      <section className="mx-auto flex min-h-0 w-[var(--content-width)] flex-1 flex-col pb-[calc(160px+env(safe-area-inset-bottom))] pt-[max(env(safe-area-inset-top),1.5rem)]">
+        <div className="mb-4 flex min-h-12 items-center justify-between gap-4">
+          <h2 className="text-[32px] font-black leading-none tracking-normal">Сплитик</h2>
+          <span className="grid h-14 w-14 place-items-center rounded-[18px] border-2 border-white/86 bg-white/8 text-white">
+            <Bot className="h-7 w-7" strokeWidth={2.5} />
+          </span>
         </div>
-      }
-    >
-      <div data-testid="splitik-chat-shell" className="flex min-h-0 flex-1 flex-col pb-[112px]">
-        <div data-testid="splitik-message-list" className="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto px-1 pb-3 pt-2">
-          <div data-testid="splitik-intro-card" className="mb-1 grid justify-items-center gap-3 rounded-[28px] bg-white px-4 py-5">
-            <div className="grid h-20 w-20 place-items-center rounded-[24px] border-4 border-[#111111] bg-[#f5f5f7] text-[#111111]">
-              <Bot className="h-10 w-10" strokeWidth={2.6} />
-            </div>
-            <div className="mr-auto grid gap-3">
-              <div className="w-fit max-w-[92%] rounded-[18px] bg-[#eef1f7] px-4 py-3 text-base font-black leading-6 text-slate-900">Привет! Я Сплитик, чем могу помочь?</div>
-              <div className="w-fit max-w-[92%] rounded-[18px] bg-[#eef1f7] px-4 py-3 text-base font-black leading-6 text-slate-900">Могу разобрать чек, спросить кто что ел или напомнить кому вернуть долг.</div>
-            </div>
-          </div>
-          {messages.slice(2).map((item) => (
+        <div data-testid="splitik-chat-shell" className="flex min-h-0 flex-1 flex-col">
+          <div data-testid="splitik-message-list" className="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto px-1 pb-3 pt-2">
+          {messages.map((item) => (
             <div key={item.id} className={cn("grid gap-2", item.from === "user" ? "justify-items-end" : "justify-items-start")}>
               <div
                 className={cn(
                   "max-w-[86%] rounded-2xl px-3 py-2 text-[15px] leading-6",
-                  item.from === "user" ? "ml-auto bg-[#1f3d8f] font-bold text-white" : "mr-auto bg-[#eef1f7] font-medium text-slate-900"
+                  item.from === "user" ? "ml-auto bg-white font-bold text-[#1f3d8f]" : "mr-auto bg-[#eef1f7] font-medium text-slate-900"
                 )}
               >
                 {item.from === "splitik" ? <MarkdownMessage text={item.text} /> : item.text}
@@ -2145,7 +2131,8 @@ function SplitikScreen({
           </Button>
         </form>
       </div>
-    </SvgScreenFrame>
+      </section>
+    </div>
   );
 }
 
