@@ -103,7 +103,7 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v19";
+const clientShellVersion = "splitapp-next-pwa-v20";
 
 const navItems: Array<{ id: View; label: string; icon: React.ElementType }> = [
   { id: "home", label: "Главная", icon: Home },
@@ -1060,7 +1060,8 @@ function PhoneShell({
       {loggedIn ? (
         <nav
           data-platform-nav="ios-tab-bar"
-          className="fixed bottom-0 left-1/2 z-30 w-[var(--nav-width)] -translate-x-1/2 rounded-[28px] border border-white/50 bg-white/72 p-1.5 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_18px_46px_rgba(31,61,143,0.22)] backdrop-blur-[22px] supports-[backdrop-filter]:bg-white/62"
+          data-liquid-glass-nav="true"
+          className="fixed bottom-0 left-1/2 z-30 w-[var(--nav-width)] -translate-x-1/2 rounded-[30px] border border-white/35 bg-[#4A5565]/[.83] p-1.5 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_18px_60px_rgba(15,23,42,0.22)] backdrop-blur-[34px] backdrop-saturate-[1.85] supports-[backdrop-filter]:bg-[#4A5565]/[.72]"
         >
           <div className="grid grid-cols-5 gap-1">
             {navItems.map((item) => (
@@ -1088,10 +1089,10 @@ function BottomNavButton({
       asChild
       variant="ghost"
       className={cn(
-        "grid min-h-[54px] place-items-center rounded-[18px] px-1 py-1 text-[10px] font-bold text-slate-950 transition-all duration-200 active:scale-[0.97]",
+        "grid min-h-[54px] place-items-center rounded-[22px] px-1 py-1 text-[10px] font-bold text-white/[.86] transition-all duration-200 active:scale-[0.97]",
         active
-          ? "bg-white/82 text-slate-950 shadow-[0_8px_22px_rgba(31,61,143,0.18)] ring-1 ring-white/90"
-          : "hover:bg-white/30 hover:text-slate-950"
+          ? "bg-white/72 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_8px_24px_rgba(15,23,42,0.16)] ring-1 ring-white/80"
+          : "hover:bg-white/20 hover:text-white"
       )}
     >
       <a

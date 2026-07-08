@@ -31,8 +31,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v19/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v19"/);
+  assert.match(sw, /splitapp-next-pwa-v20/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v20"/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
 });
@@ -106,9 +106,12 @@ test("profile screen shows the authenticated Yandex user instead of a hardcoded 
 });
 
 test("bottom navigation active tab stays readable with a liquid glass state", () => {
-  assert.match(page, /backdrop-blur-\[22px\]/);
-  assert.match(page, /bg-white\/82 text-slate-950/);
-  assert.match(page, /text-slate-950 transition-all/);
+  assert.match(page, /data-liquid-glass-nav="true"/);
+  assert.match(page, /backdrop-blur-\[34px\]/);
+  assert.match(page, /backdrop-saturate-\[1\.85\]/);
+  assert.match(page, /bg-\[#4A5565\]\/\[\.83\]/);
+  assert.match(page, /bg-white\/72 text-slate-950/);
+  assert.match(page, /text-white\/\[\.86\] transition-all/);
   assert.doesNotMatch(page, /active && "bg-white\/22 text-white"/);
 });
 
@@ -136,7 +139,7 @@ test("PWA surfaces are built on shadcn primitives instead of one-off controls", 
 
 test("iOS mobile shell uses a safe-area glass tab bar instead of a generic nav slab", () => {
   assert.match(page, /data-platform-nav="ios-tab-bar"/);
-  assert.match(page, /supports-\[backdrop-filter\]:bg-white\/62/);
+  assert.match(page, /supports-\[backdrop-filter\]:bg-\[#4A5565\]\/\[\.72\]/);
   assert.match(page, /pb-\[max\(env\(safe-area-inset-bottom\),12px\)\]/);
   assert.match(layout, /statusBarStyle: "black-translucent"/);
   assert.match(globals, /html \{[\s\S]*background:\s*#1f3d8f;/);
