@@ -108,6 +108,7 @@ def _set_llm_env(monkeypatch):
     monkeypatch.setenv("SPLITIK_LLM_BASE_URL", "https://ai.example/v1")
     monkeypatch.setenv("SPLITIK_LLM_API_KEY", "test-key")
     monkeypatch.setenv("SPLITIK_PRIMARY_MODEL", "primary-model")
+    monkeypatch.delenv("SPLITIK_INTENT_MODEL", raising=False)
     monkeypatch.setenv("SPLITIK_VERIFICATION_MODEL", "verification-model")
     monkeypatch.setenv("SPLITIK_ESCALATION_MODEL", "escalation-model")
 
@@ -283,6 +284,40 @@ def test_splitik_llm_timeout_can_be_overridden(monkeypatch):
     assert requests[0]["timeout"] == 35
 
 
+def test_splitik_intent_router_uses_small_runtime_model(monkeypatch):
+    _set_llm_env(monkeypatch)
+    monkeypatch.setenv("SPLITIK_INTENT_MODEL", "deepseek-v4-flash")
+    requests = []
+
+    def fake_post(url, headers, json, timeout):
+        requests.append(json)
+        return _FakeResponse(
+            body={
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"intent":"explain","confidence":0.91,"reason":"user asks why"}'
+                            )
+                        }
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr(splitik_llm.httpx, "post", fake_post)
+
+    candidate = splitik_llm.generate_splitik_intent_candidate(
+        user_message="Почему я должен?",
+        context={"mode": "event"},
+    )
+
+    assert candidate["model_role"] == "intent"
+    assert candidate["model_id"] == "deepseek-v4-flash"
+    assert candidate["content"]["intent"] == "explain"
+    assert requests[0]["model"] == "deepseek-v4-flash"
+
+
 def test_splitik_chat_supports_legacy_primary_model_without_receipt_models(monkeypatch):
     monkeypatch.setenv("SPLITIK_LLM_BASE_URL", "https://ai.example/v1")
     monkeypatch.setenv("SPLITIK_LLM_API_KEY", "test-key")
@@ -320,6 +355,7 @@ def test_splitik_chat_supports_legacy_primary_model_without_receipt_models(monke
 
 def test_splitik_startup_validation_accepts_available_runtime_models(monkeypatch):
     _set_llm_env(monkeypatch)
+    monkeypatch.setenv("SPLITIK_INTENT_MODEL", "deepseek-v4-flash")
     requests = []
 
     def fake_get(url, headers, timeout):
@@ -328,6 +364,7 @@ def test_splitik_startup_validation_accepts_available_runtime_models(monkeypatch
             body={
                 "data": [
                     {"id": "primary-model"},
+                    {"id": "deepseek-v4-flash"},
                     {"id": "verification-model"},
                     {"id": "escalation-model"},
                 ]
@@ -343,6 +380,7 @@ def test_splitik_startup_validation_accepts_available_runtime_models(monkeypatch
 
 def test_splitik_startup_validation_rejects_unavailable_runtime_model(monkeypatch):
     _set_llm_env(monkeypatch)
+    monkeypatch.setenv("SPLITIK_INTENT_MODEL", "deepseek-v4-flash")
 
     def fake_get(url, headers, timeout):
         return _FakeResponse(body={"data": [{"id": "primary-model"}, {"id": "verification-model"}]})

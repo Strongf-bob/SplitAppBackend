@@ -10,6 +10,8 @@
 - `SPLITIK_LLM_BASE_URL`
 - `SPLITIK_LLM_API_KEY`
 - `SPLITIK_PRIMARY_MODEL` - primary model for Splitik replies and receipt understanding.
+- `SPLITIK_INTENT_MODEL` - optional small model for the intent-router request before planner;
+  recommended `deepseek-v4-flash`. Falls back to `SPLITIK_PRIMARY_MODEL`.
 - `SPLITIK_VERIFICATION_MODEL` - independent verification model for receipt understanding cross-checks.
 - `SPLITIK_ESCALATION_MODEL` - escalation model used when primary and verification results disagree.
 - `SPLITIK_LLM_TIMEOUT_SECONDS`
