@@ -14,6 +14,7 @@ ALLOWED_METADATA_KEYS = frozenset(
         "screen_label",
         "action",
         "error_name",
+        "error_message",
     }
 )
 

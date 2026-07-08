@@ -2097,6 +2097,7 @@ def test_client_report_sanitizes_sensitive_metadata_and_stores_actor(db):
                 "api_status": 500,
                 "api_path": "/api/events",
                 "component": "EventsView",
+                "error_message": "Splitik LLM request failed.",
                 "Authorization": "Bearer secret",
                 "access_token": "secret",
                 "raw_response": {"detail": "database password leaked"},
@@ -2114,6 +2115,7 @@ def test_client_report_sanitizes_sensitive_metadata_and_stores_actor(db):
         "api_status": 500,
         "api_path": "/api/events",
         "component": "EventsView",
+        "error_message": "Splitik LLM request failed.",
     }
     assert "Bearer secret" not in str(stored)
     assert "database password leaked" not in str(stored)
