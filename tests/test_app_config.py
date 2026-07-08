@@ -341,6 +341,21 @@ def test_pwa_contains_friendly_problem_report_surface():
     assert "/api/client-reports" in splitapp_api
 
 
+def test_production_diagnostics_workflow_fetches_sanitized_reports():
+    workflow = (
+        PROJECT_ROOT / ".github" / "workflows" / "production-diagnostics.yml"
+    ).read_text()
+
+    assert "workflow_dispatch" in workflow
+    assert "DEPLOY_SSH_KEY" in workflow
+    assert "docker compose exec -T" in workflow
+    assert "client_feedback_reports" in workflow
+    assert "splitik_interactions" in workflow
+    assert "sanitized_user_message" not in workflow
+    assert "upload-artifact" in workflow
+    assert "production-diagnostics" in workflow
+
+
 def test_client_report_endpoint_accepts_guest_feedback(db):
     api = FastAPI(dependencies=[Depends(require_auth_token)])
     api.dependency_overrides[get_db] = lambda: db
