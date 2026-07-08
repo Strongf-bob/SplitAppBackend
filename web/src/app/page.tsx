@@ -103,7 +103,8 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v20";
+const clientShellVersion = "splitapp-next-pwa-v21";
+const initialSyncRetryDelayMs = 900;
 
 const navItems: Array<{ id: View; label: string; icon: React.ElementType }> = [
   { id: "home", label: "Главная", icon: Home },
@@ -384,59 +385,77 @@ export default function SplitAppPage() {
 
   useEffect(() => {
     if (!tokens) return;
-    Promise.allSettled([
-      authedApi<HomeSummary>("/api/home/summary"),
-      authedApi<EventPage>("/api/events"),
-      authedApi<UserProfile>("/api/users/me"),
-      authedApi<FriendshipPage>("/api/friends?status=accepted&limit=50")
-    ])
-      .then(([summaryResult, eventResult, userResult, friendshipResult]) => {
-        const results = [summaryResult, eventResult, userResult, friendshipResult];
-        const authError = results.find((result) => result.status === "rejected" && isAuthError(result.reason));
-        if (authError?.status === "rejected") {
-          handleInitialDataError(authError.reason);
-          return;
-        }
+    let cancelled = false;
+    let retryTimer: number | undefined;
 
-        if (summaryResult.status === "fulfilled") {
-          setSummary(summaryResult.value);
-        }
-        if (eventResult.status === "fulfilled") {
-          const nextEvents = pageItems(eventResult.value).map(normalizeEvent);
-          setEvents((current) => [
-            ...current.filter((event) => event.status === "invite"),
-            ...nextEvents.filter((event) => !current.some((currentEvent) => currentEvent.token && currentEvent.token === event.token))
-          ]);
-        }
-        if (userResult.status === "fulfilled") {
-          setCurrentUser(userResult.value);
-        }
-        if (friendshipResult.status === "fulfilled") {
-          setFriendships(pageItems(friendshipResult.value));
-        }
+    const runInitialSync = (attempt = 0) => {
+      Promise.allSettled([
+        authedApi<HomeSummary>("/api/home/summary"),
+        authedApi<EventPage>("/api/events"),
+        authedApi<UserProfile>("/api/users/me"),
+        authedApi<FriendshipPage>("/api/friends?status=accepted&limit=50")
+      ])
+        .then(([summaryResult, eventResult, userResult, friendshipResult]) => {
+          if (cancelled) return;
 
-        const failed = results.filter((result) => result.status === "rejected");
-        if (!failed.length) return;
-        const failedParts = results
-          .map((result, index) => (result.status === "rejected" ? initialSyncPartLabel(index) : ""))
-          .filter(Boolean);
+          const results = [summaryResult, eventResult, userResult, friendshipResult];
+          const authError = results.find((result) => result.status === "rejected" && isAuthError(result.reason));
+          if (authError?.status === "rejected") {
+            handleInitialDataError(authError.reason);
+            return;
+          }
 
-        void reportProblem({
-          screen: "home",
-          message: "Не удалось синхронизировать часть данных.",
-          mode: "automatic_error",
-          metadata: {
-            action: "initial_sync_partial",
-            failed_count: failed.length,
-            failed_parts: failedParts
+          if (summaryResult.status === "fulfilled") {
+            setSummary(summaryResult.value);
+          }
+          if (eventResult.status === "fulfilled") {
+            const nextEvents = pageItems(eventResult.value).map(normalizeEvent);
+            setEvents((current) => [
+              ...current.filter((event) => event.status === "invite"),
+              ...nextEvents.filter((event) => !current.some((currentEvent) => currentEvent.token && currentEvent.token === event.token))
+            ]);
+          }
+          if (userResult.status === "fulfilled") {
+            setCurrentUser(userResult.value);
+          }
+          if (friendshipResult.status === "fulfilled") {
+            setFriendships(pageItems(friendshipResult.value));
+          }
+
+          const failed = results.filter((result) => result.status === "rejected");
+          if (!failed.length) return;
+          const failedParts = results
+            .map((result, index) => (result.status === "rejected" ? initialSyncPartLabel(index) : ""))
+            .filter(Boolean);
+
+          void reportProblem({
+            screen: "home",
+            message: "Не удалось синхронизировать часть данных.",
+            mode: "automatic_error",
+            metadata: {
+              action: "initial_sync_partial",
+              failed_count: failed.length,
+              failed_parts: failedParts
+            }
+          });
+
+          const criticalFailed = [summaryResult, eventResult, userResult].every((result) => result.status === "rejected");
+          if (criticalFailed && failed[0]?.status === "rejected") {
+            if (attempt === 0) {
+              retryTimer = window.setTimeout(() => runInitialSync(attempt + 1), initialSyncRetryDelayMs);
+              return;
+            }
+            handleInitialDataError(failed[0].reason);
           }
         });
+    };
 
-        const criticalFailed = [summaryResult, eventResult, userResult].every((result) => result.status === "rejected");
-        if (criticalFailed && failed[0]?.status === "rejected") {
-          handleInitialDataError(failed[0].reason);
-        }
-      });
+    runInitialSync();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
+    };
   }, [authedApi, handleInitialDataError, reportProblem, tokens]);
 
   useEffect(() => {

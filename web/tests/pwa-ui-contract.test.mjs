@@ -31,8 +31,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v20/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v20"/);
+  assert.match(sw, /splitapp-next-pwa-v21/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v21"/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
 });
@@ -162,6 +162,13 @@ test("authenticated startup refreshes expired access tokens instead of showing a
   assert.doesNotMatch(page, /Backend недоступен, показан локальный срез PWA\./);
 });
 
+test("parallel authenticated startup requests share one token refresh", () => {
+  assert.match(api, /let refreshInFlight: Promise<SplitAppTokens> \| null = null/);
+  assert.match(api, /refreshTokensOnce\(tokens\)/);
+  assert.match(api, /refreshInFlight \?\?=/);
+  assert.match(api, /refreshInFlight = null/);
+});
+
 test("authenticated startup tolerates malformed page payloads without crashing the route", () => {
   assert.match(page, /Promise\.allSettled\(\[/);
   assert.match(page, /initial_sync_partial/);
@@ -172,6 +179,13 @@ test("authenticated startup tolerates malformed page payloads without crashing t
   assert.doesNotMatch(page, /Promise\.all\(\[\s*authedApi<HomeSummary>/);
   assert.doesNotMatch(page, /eventPage\.items\.length/);
   assert.doesNotMatch(page, /friendshipPage\.items \?\? \[\]/);
+});
+
+test("initial data sync retries once before warning the user", () => {
+  assert.match(page, /const initialSyncRetryDelayMs = 900/);
+  assert.match(page, /const runInitialSync = \(attempt = 0\) =>/);
+  assert.match(page, /retryTimer = window\.setTimeout\(\(\) => runInitialSync\(attempt \+ 1\), initialSyncRetryDelayMs\)/);
+  assert.match(page, /return \(\) => \{[\s\S]*window\.clearTimeout\(retryTimer\)/);
 });
 
 test("production startup never replaces missing backend data with demo trips", () => {
