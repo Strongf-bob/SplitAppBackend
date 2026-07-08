@@ -30,7 +30,7 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v15/);
+  assert.match(sw, /splitapp-next-pwa-v16/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
