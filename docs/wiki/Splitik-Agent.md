@@ -147,23 +147,28 @@ Splitik message processing is backend-controlled:
 5. Backend builds bounded context: actor-visible events, entry point, recent
    session messages, event-scoped active draft, and sanitized attachment
    metadata.
-6. `app/services/splitik_llm.py::generate_splitik_plan_candidate` asks the LLM
+6. `app/services/splitik_llm.py::generate_splitik_intent_candidate` asks the
+   LLM for a tiny JSON route: `explain`, `chat`, or `mutation`. This step does
+   not create drafts and cannot write to the database. If the user only asks to
+   explain something, Splitik skips the planner JSON and goes straight to the
+   chat/explanation flow.
+7. For `mutation` requests only, `app/services/splitik_llm.py::generate_splitik_plan_candidate` asks the LLM
    for a strict JSON plan. The model can only propose allowlisted actions such
    as `create_event_draft`, `create_receipt_draft`, `update_receipt_draft`, or
    `ask_clarifying_question`.
-7. `app/services/splitik.py` caps planner output by draft count and pending
+8. `app/services/splitik.py` caps planner output by draft count and pending
    draft count before any new draft write.
-8. `app/services/splitik_guardrails.py::evaluate_planner_action` rejects
+9. `app/services/splitik_guardrails.py::evaluate_planner_action` rejects
    unsupported action types, raw database/tool operations, Mongo-style
    operators, deletes, payments, and direct money-state changes.
-9. `app/services/splitik_tools.py` validates allowed planner actions with
+10. `app/services/splitik_tools.py` validates allowed planner actions with
    existing domain schemas and access checks, then writes only pending
    `splitik_drafts`.
-10. If no safe draft action is produced, Splitik falls back to chat/explanation
+11. If no safe draft action is produced, Splitik falls back to chat/explanation
    behavior or returns clarifying questions.
-11. Assistant text is checked by post-LLM guardrails, then the message and
+12. Assistant text is checked by post-LLM guardrails, then the message and
    diagnostics are stored in `splitik_sessions` and `splitik_interactions`.
-12. Real event or receipt documents are created only later through
+13. Real event or receipt documents are created only later through
     `POST /api/splitik/drafts/{id}/commit`.
 
 ## Model context and backend tools

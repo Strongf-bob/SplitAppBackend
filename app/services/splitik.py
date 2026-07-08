@@ -662,6 +662,88 @@ def _planner_draft_result(
     )
 
 
+def _intent_router_context(payload: schemas.SplitikMessageRequest) -> dict:
+    return {
+        "mode": payload.mode.strip().lower(),
+        "entry_point": _entry_point_summary(payload),
+        "attachment_count": len(payload.attachment_ids),
+        "human_review_required_for_mutations": True,
+        "route_options": ["explain", "chat", "mutation"],
+    }
+
+
+def _heuristic_user_intent(payload: schemas.SplitikMessageRequest) -> str:
+    lowered = payload.message.casefold()
+    if payload.attachment_ids:
+        return "mutation"
+    mutation_markers = (
+        "создай",
+        "создать",
+        "добавь",
+        "добавить",
+        "измени",
+        "изменить",
+        "поменяй",
+        "поменять",
+        "обнови",
+        "обновить",
+        "удали",
+        "удалить",
+        "распарси",
+        "распарсить",
+        "разбери чек",
+        "разобрать чек",
+        "добавить чек",
+        "создать событие",
+        "я платил",
+        "я платила",
+        "платил я",
+        "платила я",
+        "были все",
+        "делим",
+        "create",
+        "add receipt",
+    )
+    if any(marker in lowered for marker in mutation_markers):
+        return "mutation"
+    explanation_markers = (
+        "почему",
+        "поясни",
+        "объясни",
+        "объяснить",
+        "сколько",
+        "кто кому",
+        "кто мне должен",
+        "кому я должен",
+        "why",
+        "explain",
+    )
+    if _is_expense_explanation_request(payload.message) or any(
+        marker in lowered for marker in explanation_markers
+    ):
+        return "explain"
+    return "chat"
+
+
+def _classify_user_intent(payload: schemas.SplitikMessageRequest) -> tuple[str, str | None]:
+    try:
+        candidate = splitik_llm.generate_splitik_intent_candidate(
+            user_message=payload.message,
+            context=_intent_router_context(payload),
+        )
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            return _heuristic_user_intent(payload), None
+        raise
+
+    content = candidate.get("content", {})
+    intent = str(content.get("intent") if isinstance(content, dict) else "").strip().lower()
+    if intent not in {"explain", "chat", "mutation"}:
+        intent = _heuristic_user_intent(payload)
+    model_id = candidate.get("model_id")
+    return intent, str(model_id) if model_id else None
+
+
 def _maybe_create_draft(
     db: Database,
     payload: schemas.SplitikMessageRequest,
@@ -670,12 +752,24 @@ def _maybe_create_draft(
 ) -> dict:
     mode = payload.mode.strip().lower()
     lowered = payload.message.casefold()
+    user_intent, intent_model_id = _classify_user_intent(payload)
+    if user_intent != "mutation":
+        result = _empty_draft_result()
+        if intent_model_id:
+            result["model_ids"] = [intent_model_id]
+        return result
+
     planner_result = _planner_draft_result(
         db,
         payload=payload,
         actor_user_id=actor_user_id,
         session_id=session_id,
     )
+    if intent_model_id:
+        planner_result["model_ids"] = [
+            *planner_result.get("model_ids", []),
+            intent_model_id,
+        ]
     if (
         planner_result["drafts"]
         or planner_result["questions"]
