@@ -1,0 +1,140 @@
+name: Production Diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      since_minutes:
+        description: Minutes of production diagnostics to fetch.
+        required: false
+        default: "180"
+      limit:
+        description: Maximum rows per diagnostic collection.
+        required: false
+        default: "30"
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    name: Fetch production diagnostics
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      SINCE_MINUTES: ${{ inputs.since_minutes || '180' }}
+      DIAGNOSTIC_LIMIT: ${{ inputs.limit || '30' }}
+    steps:
+      - name: Validate deploy access
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_SSH_KEY"
+          test -n "$DEPLOY_PATH"
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${DEPLOY_PORT:-22}" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Prepare Mongo diagnostic query
+        run: |
+          cat > diagnostics-query.js <<'MONGOJS'
+          const sinceMinutes = Math.max(1, Number(process.env.SINCE_MINUTES || 180));
+          const rowLimit = Math.min(100, Math.max(1, Number(process.env.DIAGNOSTIC_LIMIT || 30)));
+          const since = new Date(Date.now() - sinceMinutes * 60 * 1000);
+
+          const asIso = (value) => {
+            if (!value) return null;
+            if (typeof value.toISOString === "function") return value.toISOString();
+            return String(value);
+          };
+
+          const clientReports = db.client_feedback_reports
+            .find({ created_at: { $gte: since } })
+            .sort({ created_at: -1 })
+            .limit(rowLimit)
+            .toArray()
+            .map((report) => ({
+              id: report.id,
+              created_at: asIso(report.created_at),
+              kind: report.kind,
+              severity: report.severity,
+              screen: report.screen,
+              message: report.message,
+              request_id: report.request_id,
+              client_trace_id: report.client_trace_id,
+              app_version: report.app_version,
+              url_path: report.url_path,
+              online: report.online,
+              status: report.status,
+              actor_present: Boolean(report.actor_user_id),
+              metadata: report.metadata || {},
+            }));
+
+          const splitikErrors = db.splitik_interactions
+            .find({ created_at: { $gte: since }, status: "error" })
+            .sort({ created_at: -1 })
+            .limit(rowLimit)
+            .toArray()
+            .map((interaction) => ({
+              id: interaction.id,
+              created_at: asIso(interaction.created_at),
+              request_id: interaction.request_id,
+              session_present: Boolean(interaction.session_id),
+              message_id: interaction.message_id,
+              status: interaction.status,
+              stage: interaction.stage,
+              intent: interaction.intent,
+              context_scope: interaction.context_scope,
+              model_ids: interaction.model_ids || [],
+              latency_ms: interaction.latency_ms,
+              error: interaction.error || null,
+              guardrail_reason: interaction.guardrail_decision?.reason || null,
+              tool_calls: interaction.tool_calls || [],
+              draft_count: Array.isArray(interaction.draft_ids) ? interaction.draft_ids.length : 0,
+            }));
+
+          print(
+            JSON.stringify(
+              {
+                generated_at: new Date().toISOString(),
+                since_minutes: sinceMinutes,
+                limit: rowLimit,
+                client_reports: clientReports,
+                splitik_errors: splitikErrors,
+              },
+              null,
+              2,
+            ),
+          );
+          MONGOJS
+
+      - name: Fetch sanitized diagnostics over SSH
+        run: |
+          mkdir -p diagnostics
+          SSH_PORT="${DEPLOY_PORT:-22}"
+          scp -i ~/.ssh/deploy_key -P "$SSH_PORT" diagnostics-query.js "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/.diagnostics-query.js"
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "set -euo pipefail; cd '$DEPLOY_PATH'; \
+            DB_NAME=\$(sed -n 's/^MONGODB_DB_NAME=//p' .env | tail -1); DB_NAME=\${DB_NAME:-splitapp}; \
+            docker compose cp .diagnostics-query.js mongo:/tmp/diagnostics-query.js >/dev/null; \
+            SINCE_MINUTES='$SINCE_MINUTES' DIAGNOSTIC_LIMIT='$DIAGNOSTIC_LIMIT' \
+              docker compose exec -T -e SINCE_MINUTES='$SINCE_MINUTES' -e DIAGNOSTIC_LIMIT='$DIAGNOSTIC_LIMIT' \
+              mongo mongosh --quiet \"\$DB_NAME\" /tmp/diagnostics-query.js; \
+            rm -f .diagnostics-query.js; \
+            docker compose exec -T mongo rm -f /tmp/diagnostics-query.js >/dev/null" \
+            > diagnostics/production-diagnostics.json
+
+      - name: Upload diagnostics artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-diagnostics
+          path: diagnostics/production-diagnostics.json
+          retention-days: 3
