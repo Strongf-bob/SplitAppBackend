@@ -7,6 +7,7 @@ const api = readFileSync(new URL("../src/lib/splitapp-api.ts", import.meta.url),
 const sw = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
 const globals = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../src/app/layout.tsx", import.meta.url), "utf8");
+const pwaCache = readFileSync(new URL("../src/lib/pwa-cache.ts", import.meta.url), "utf8");
 
 test("PWA implements the SVG screen set as navigable app views", () => {
   for (const view of ["home", "events", "people", "profile", "notifications", "splitik"]) {
@@ -128,12 +129,41 @@ test("bottom navigation active tab stays readable with a liquid glass state", ()
   assert.doesNotMatch(page, /active && "bg-white\/22 text-white"/);
 });
 
-test("bottom navigation selection follows the rendered screen after transition", () => {
+test("bottom navigation selection follows the requested screen immediately", () => {
   assert.match(page, /const \[activeView, setActiveView\] = useState<View>\("home"\)/);
   assert.match(page, /<PhoneShell[\s\S]*view=\{activeView\}[\s\S]*onNavigate=\{navigate\}/);
-  assert.match(page, /<WorkspaceScreen[\s\S]*view=\{view\}[\s\S]*onViewSettled=\{setActiveView\}/);
-  assert.match(page, /onAnimationComplete=\{\(\) => onViewSettled\(view\)\}/);
+  assert.match(page, /<WorkspaceScreen[\s\S]*view=\{view\}/);
+  assert.match(page, /setActiveView\(nextView\)/);
   assert.match(page, /event\.preventDefault\(\)/);
+});
+
+test("bottom navigation switches tabs immediately without waiting for exit animation", () => {
+  assert.match(page, /setActiveView\(nextView\)/);
+  assert.match(page, /<AnimatePresence initial=\{false\}>/);
+  assert.doesNotMatch(page, /<AnimatePresence mode="wait">/);
+  assert.doesNotMatch(page, /onAnimationComplete=\{\(\) => onViewSettled\(view\)\}/);
+});
+
+test("PWA hydrates startup data from a user-scoped snapshot cache before network refresh", () => {
+  assert.match(pwaCache, /export type PwaAppSnapshot/);
+  assert.match(pwaCache, /export function loadPwaSnapshot/);
+  assert.match(pwaCache, /export function savePwaSnapshot/);
+  assert.match(pwaCache, /export function clearPwaSnapshot/);
+  assert.match(pwaCache, /splitapp\.pwaSnapshot\.v1/);
+  assert.match(page, /loadPwaSnapshot\(storedTokens\?\.user\?\.id\)/);
+  assert.match(page, /hydrateFromSnapshot/);
+  assert.match(page, /savePwaSnapshot\(tokens\.user\?\.id/);
+  assert.match(page, /document\.addEventListener\("visibilitychange", refreshWhenVisible\)/);
+});
+
+test("mutations update local state and snapshot cache before background reconciliation", () => {
+  assert.match(page, /persistSnapshot/);
+  assert.match(page, /setEventsAndCache/);
+  assert.match(page, /const optimisticEvent: EventSummary/);
+  assert.match(page, /temp-event-/);
+  assert.match(page, /rollbackEvents/);
+  assert.match(page, /setChatMessagesAndCache/);
+  assert.match(page, /setFriendshipsAndCache/);
 });
 
 test("PWA surfaces are built on shadcn primitives instead of one-off controls", () => {
@@ -186,9 +216,10 @@ test("authenticated startup tolerates malformed page payloads without crashing t
   assert.match(page, /Promise\.allSettled\(\[/);
   assert.match(page, /initial_sync_partial/);
   assert.match(page, /function pageItems<T>\(page: \{ items\?: T\[\] \} \| null \| undefined\)/);
-  assert.match(page, /const nextEvents = pageItems\(eventResult\.value\)\.map\(normalizeEvent\)/);
+  assert.match(page, /const syncedEvents = pageItems\(eventResult\.value\)\.map\(normalizeEvent\)/);
   assert.match(page, /setEvents\(nextEvents\)/);
-  assert.match(page, /setFriendships\(pageItems\(friendshipResult\.value\)\)/);
+  assert.match(page, /nextFriendships = pageItems\(friendshipResult\.value\)/);
+  assert.match(page, /setFriendships\(nextFriendships\)/);
   assert.doesNotMatch(page, /Promise\.all\(\[\s*authedApi<HomeSummary>/);
   assert.doesNotMatch(page, /eventPage\.items\.length/);
   assert.doesNotMatch(page, /friendshipPage\.items \?\? \[\]/);

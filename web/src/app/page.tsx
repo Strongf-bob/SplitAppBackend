@@ -51,6 +51,7 @@ import {
   UserPage,
   UserProfile
 } from "@/lib/splitapp-api";
+import { clearPwaSnapshot, loadPwaSnapshot, PwaAppSnapshot, savePwaSnapshot } from "@/lib/pwa-cache";
 import { cn } from "@/lib/utils";
 
 type View = "home" | "events" | "people" | "notifications" | "profile" | "splitik";
@@ -160,20 +161,29 @@ export default function SplitAppPage() {
   const [isProblemSending, setIsProblemSending] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const handledInviteTokenRef = useRef<string | null>(null);
+  const snapshotStateRef = useRef<Omit<PwaAppSnapshot, "version" | "updatedAt">>({
+    summary: null,
+    events: [],
+    currentUser: null,
+    friendships: [],
+    chatMessages: []
+  });
 
   const navigate = useCallback((nextView: View) => {
     setView(nextView);
+    setActiveView(nextView);
     window.history.replaceState(null, "", `#${nextView}`);
   }, []);
 
   const clearExpiredSession = useCallback(() => {
+    clearPwaSnapshot(tokens?.user?.id ?? currentUser?.id);
     clearTokens();
     setTokens(null);
     setCurrentUser(null);
     setSummary(null);
     navigate("home");
     setMessage("Сессия истекла. Войдите через Яндекс еще раз.");
-  }, [navigate]);
+  }, [currentUser?.id, navigate, tokens?.user?.id]);
 
   const authedApi = useCallback(<T,>(path: string, init: RequestInit = {}) => {
     return api<T>(path, tokens, init, (nextTokens) => {
@@ -181,6 +191,53 @@ export default function SplitAppPage() {
       setCurrentUser(nextTokens.user ?? null);
     });
   }, [tokens]);
+
+  useEffect(() => {
+    snapshotStateRef.current = { summary, events, currentUser, friendships, chatMessages };
+  }, [chatMessages, currentUser, events, friendships, summary]);
+
+  const persistSnapshot = useCallback((partial: Partial<Omit<PwaAppSnapshot, "version" | "updatedAt">> = {}) => {
+    if (!tokens) return;
+    savePwaSnapshot(tokens.user?.id ?? currentUser?.id, {
+      ...snapshotStateRef.current,
+      ...partial
+    });
+  }, [currentUser?.id, tokens]);
+
+  const hydrateFromSnapshot = useCallback((snapshot: PwaAppSnapshot | null) => {
+    if (!snapshot) return;
+    setSummary(snapshot.summary);
+    setEvents(snapshot.events);
+    setCurrentUser((current) => current ?? snapshot.currentUser);
+    setFriendships(snapshot.friendships);
+    if (snapshot.chatMessages.length) {
+      setChatMessages((current) => (current.length > 2 ? current : snapshot.chatMessages));
+    }
+  }, []);
+
+  const setEventsAndCache = useCallback((updater: EventSummary[] | ((current: EventSummary[]) => EventSummary[])) => {
+    setEvents((current) => {
+      const nextEvents = typeof updater === "function" ? updater(current) : updater;
+      persistSnapshot({ events: nextEvents });
+      return nextEvents;
+    });
+  }, [persistSnapshot]);
+
+  const setFriendshipsAndCache = useCallback((updater: Friendship[] | ((current: Friendship[]) => Friendship[])) => {
+    setFriendships((current) => {
+      const nextFriendships = typeof updater === "function" ? updater(current) : updater;
+      persistSnapshot({ friendships: nextFriendships });
+      return nextFriendships;
+    });
+  }, [persistSnapshot]);
+
+  const setChatMessagesAndCache = useCallback((updater: ChatMessage[] | ((current: ChatMessage[]) => ChatMessage[])) => {
+    setChatMessages((current) => {
+      const nextMessages = typeof updater === "function" ? updater(current) : updater;
+      persistSnapshot({ chatMessages: nextMessages });
+      return nextMessages;
+    });
+  }, [persistSnapshot]);
 
   const reportProblem = useCallback(
     async ({
@@ -318,6 +375,7 @@ export default function SplitAppPage() {
     const storedTokens = loadTokens();
     setTokens(storedTokens);
     setCurrentUser(storedTokens?.user ?? null);
+    hydrateFromSnapshot(loadPwaSnapshot(storedTokens?.user?.id));
 
     const hashView = parseHashView(window.location.hash);
     if (hashView) setView(hashView);
@@ -372,7 +430,7 @@ export default function SplitAppPage() {
       window.removeEventListener("error", onUnhandledError);
       window.removeEventListener("unhandledrejection", onUnhandledRejection);
     };
-  }, [notifyProblem]);
+  }, [hydrateFromSnapshot, notifyProblem]);
 
   useEffect(() => {
     if (!tokens) return;
@@ -401,22 +459,39 @@ export default function SplitAppPage() {
             return;
           }
 
+          let nextSummary = snapshotStateRef.current.summary;
+          let nextEvents = snapshotStateRef.current.events;
+          let nextUser = snapshotStateRef.current.currentUser;
+          let nextFriendships = snapshotStateRef.current.friendships;
+          const nextChatMessages = snapshotStateRef.current.chatMessages;
+
           if (summaryResult.status === "fulfilled") {
-            setSummary(summaryResult.value);
+            nextSummary = summaryResult.value;
+            setSummary(nextSummary);
           }
           if (eventResult.status === "fulfilled") {
-            const nextEvents = pageItems(eventResult.value).map(normalizeEvent);
-            setEvents((current) => [
-              ...current.filter((event) => event.status === "invite"),
-              ...nextEvents.filter((event) => !current.some((currentEvent) => currentEvent.token && currentEvent.token === event.token))
-            ]);
+            const syncedEvents = pageItems(eventResult.value).map(normalizeEvent);
+            nextEvents = [
+              ...snapshotStateRef.current.events.filter((event) => event.status === "invite"),
+              ...syncedEvents.filter((event) => !snapshotStateRef.current.events.some((currentEvent) => currentEvent.token && currentEvent.token === event.token))
+            ];
+            setEvents(nextEvents);
           }
           if (userResult.status === "fulfilled") {
-            setCurrentUser(userResult.value);
+            nextUser = userResult.value;
+            setCurrentUser(nextUser);
           }
           if (friendshipResult.status === "fulfilled") {
-            setFriendships(pageItems(friendshipResult.value));
+            nextFriendships = pageItems(friendshipResult.value);
+            setFriendships(nextFriendships);
           }
+          savePwaSnapshot(tokens.user?.id ?? nextUser?.id, {
+            summary: nextSummary,
+            events: nextEvents,
+            currentUser: nextUser,
+            friendships: nextFriendships,
+            chatMessages: nextChatMessages
+          });
 
           const failed = results.filter((result) => result.status === "rejected");
           if (!failed.length) return;
@@ -447,10 +522,15 @@ export default function SplitAppPage() {
     };
 
     runInitialSync();
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") runInitialSync();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
 
     return () => {
       cancelled = true;
       if (retryTimer) window.clearTimeout(retryTimer);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [authedApi, handleInitialDataError, reportProblem, tokens]);
 
@@ -659,7 +739,7 @@ export default function SplitAppPage() {
         body: JSON.stringify({ user_id: peer.id })
       });
       if (friendship.status === "accepted") {
-        setFriendships((current) => upsertFriendship(current, friendship));
+        setFriendshipsAndCache((current) => upsertFriendship(current, friendship));
         setMessage(`${peer.name} уже у вас в друзьях.`);
       } else {
         setMessage(`Запрос дружбы отправлен: ${peer.name}.`);
@@ -719,12 +799,32 @@ export default function SplitAppPage() {
     event?.preventDefault();
     const name = newEventName.trim();
     if (!tokens || !name) return;
+    const selectedUserIds = selectedEventFriendIds;
+    const optimisticEvent: EventSummary = {
+      id: `temp-event-${Date.now()}`,
+      title: name,
+      name,
+      status: "active",
+      total_kopecks: 0,
+      participants_count: selectedUserIds.length + 1,
+      participants: selectedUserIds.map((userId) => ({ user_id: userId, role: "member", status: "accepted" }))
+    };
+    let rollbackEvents: EventSummary[] = [];
+    setEventsAndCache((current) => {
+      rollbackEvents = current;
+      return [optimisticEvent, ...current];
+    });
+    setNewEventName("");
+    setSelectedEventFriendIds([]);
+    setIsCreatingEvent(false);
+    setEventTab("active");
+    setSelectedEventId(optimisticEvent.id);
+    setMessage("Событие создается...");
     try {
       const created = await authedApi<EventSummary>("/api/events", {
         method: "POST",
         body: JSON.stringify({ name })
       });
-      const selectedUserIds = selectedEventFriendIds;
       let nextEvent = normalizeEvent(created);
       if (selectedUserIds.length) {
         await authedApi<UserProfile[]>(`/api/events/${created.id}/participants`, {
@@ -733,10 +833,7 @@ export default function SplitAppPage() {
         });
         nextEvent = normalizeEvent(eventWithAddedParticipants(nextEvent, selectedUserIds));
       }
-      setEvents((current) => [nextEvent, ...current]);
-      setNewEventName("");
-      setSelectedEventFriendIds([]);
-      setIsCreatingEvent(false);
+      setEventsAndCache((current) => current.map((item) => (item.id === optimisticEvent.id ? nextEvent : item)));
       setEventTab("active");
       setSelectedEventId(created.id);
       setMessage("Событие создано.");
@@ -746,24 +843,35 @@ export default function SplitAppPage() {
         clearExpiredSession();
         return;
       }
+      setEventsAndCache(rollbackEvents);
+      setSelectedEventId(null);
+      setIsCreatingEvent(true);
+      setNewEventName(name);
+      setSelectedEventFriendIds(selectedUserIds);
       notifyProblem(error, "events", "Не удалось создать событие.", { action: "create_event", component: "EventCreateScreen" });
     }
   };
 
   const decideInvite = async (event: EventSummary, decision: "accept" | "decline") => {
     if (!event.token) {
-      setEvents((current) => current.filter((item) => item.id !== event.id));
+      setEventsAndCache((current) => current.filter((item) => item.id !== event.id));
       setSelectedEventId(null);
       setMessage(decision === "accept" ? "Приглашение принято." : "Приглашение отклонено.");
       return;
     }
     if (!tokens) return;
+    let rollbackEvents: EventSummary[] = [];
+    setEventsAndCache((current) => {
+      rollbackEvents = current;
+      return current.filter((item) => item.id !== event.id);
+    });
+    setSelectedEventId(null);
+    setMessage(decision === "accept" ? "Приглашение принимается..." : "Приглашение отклоняется...");
     try {
       await authedApi(`/api/invites/${event.token}/${decision}`, { method: "POST" });
-      setEvents((current) => current.filter((item) => item.id !== event.id));
-      setSelectedEventId(null);
       setMessage(decision === "accept" ? "Приглашение принято." : "Приглашение отклонено.");
     } catch {
+      setEventsAndCache(rollbackEvents);
       notifyProblem(undefined, "events", "Не удалось обработать приглашение.", { action: "decide_invite", component: "EventsScreen" });
     }
   };
@@ -781,7 +889,7 @@ export default function SplitAppPage() {
         ? `${messageText}\n\n${splitikAttachments.map((attachment) => `Фото: ${attachment.filename}`).join("\n")}`
         : messageText
     };
-    setChatMessages((items) => [...items, userMessage]);
+    setChatMessagesAndCache((items) => [...items, userMessage]);
     setChatDraft("");
     setSplitikAttachments([]);
     setIsSplitikSending(true);
@@ -797,7 +905,7 @@ export default function SplitAppPage() {
         })
       });
       setSplitikSessionId(response.session_id);
-      setChatMessages((items) => [
+      setChatMessagesAndCache((items) => [
         ...items,
         {
           id: response.message_id || `s-${Date.now()}`,
@@ -822,7 +930,7 @@ export default function SplitAppPage() {
         }
       });
       setMessage("Сплитик сейчас не смог ответить. Попробуйте еще раз чуть позже.");
-      setChatMessages((items) => [
+      setChatMessagesAndCache((items) => [
         ...items,
         { id: `s-${Date.now()}`, from: "splitik", text: splitikErrorMessage(error) }
       ]);
@@ -835,7 +943,7 @@ export default function SplitAppPage() {
     if (!tokens) return;
     try {
       await authedApi(`/api/splitik/drafts/${draftId}/commit`, { method: "POST" });
-      setChatMessages((items) =>
+      setChatMessagesAndCache((items) =>
         items.map((item) => ({
           ...item,
           drafts: item.drafts?.map((draft) => (draft.id === draftId ? { ...draft, status: "committed" } : draft))
@@ -843,7 +951,7 @@ export default function SplitAppPage() {
       );
       const eventPage = await authedApi<EventPage>("/api/events");
       const nextEvents = pageItems(eventPage).map(normalizeEvent);
-      setEvents(nextEvents);
+      setEventsAndCache(nextEvents);
       setMessage("Черновик подтвержден.");
     } catch (error) {
       setMessage(splitikErrorMessage(error));
@@ -895,7 +1003,6 @@ export default function SplitAppPage() {
         >
           <WorkspaceScreen
             view={view}
-            onViewSettled={setActiveView}
             events={events}
             friendOptions={friendOptions}
             eventTab={eventTab}
@@ -1168,7 +1275,6 @@ function AuthScreen({ onLogin }: { onLogin: () => void }) {
 
 function WorkspaceScreen({
   view,
-  onViewSettled,
   events,
   friendOptions,
   eventTab,
@@ -1211,7 +1317,6 @@ function WorkspaceScreen({
   onNavigate
 }: {
   view: View;
-  onViewSettled: (view: View) => void;
   events: EventSummary[];
   friendOptions: FriendOption[];
   eventTab: EventTab;
@@ -1254,15 +1359,14 @@ function WorkspaceScreen({
   onNavigate: (view: View) => void;
 }) {
   return (
-    <AnimatePresence mode="wait">
+    <AnimatePresence initial={false}>
       <motion.div
         key={view}
         className="min-h-[calc(100dvh-74px)] w-full overflow-hidden bg-[#1f3d8f]"
-        initial={{ opacity: 0, y: 16 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -10 }}
-        transition={{ duration: 0.2 }}
-        onAnimationComplete={() => onViewSettled(view)}
+        exit={{ opacity: 0, y: -6 }}
+        transition={{ duration: 0.1 }}
       >
         {view === "home" ? (
           <HomeScreen events={events} owedToMe={owedToMe} iOwe={iOwe} onNavigate={onNavigate} onCreateEventOpen={onCreateEventOpen} />
