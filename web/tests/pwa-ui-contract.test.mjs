@@ -342,6 +342,15 @@ test("event detail exposes invite code, participants, receipts and add actions",
   assert.doesNotMatch(page, /Загружаем чеки\.\.\.<\/p>/);
 });
 
+test("invite links from shared URLs are loaded through preview before accept or decline", () => {
+  assert.match(page, /new URLSearchParams\(window\.location\.search\)/);
+  assert.match(page, /const inviteToken = searchParams\.get\("invite"\)/);
+  assert.match(page, /authedApi<EventInvitePreview>\(`\/api\/invites\/\$\{encodeURIComponent\(inviteToken\)\}\/preview`\)/);
+  assert.match(page, /status: "invite"/);
+  assert.match(page, /token: inviteToken/);
+  assert.match(api, /window\.location\.pathname \+ window\.location\.search/);
+});
+
 test("event invite codes are stable six-digit event codes", () => {
   assert.match(page, /function eventInviteDisplayCode/);
   assert.match(page, /return String\(numericCode\)\.padStart\(6, "0"\)/);

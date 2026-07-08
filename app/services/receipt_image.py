@@ -41,6 +41,13 @@ def _presigned_image_url(s3: Any, bucket: str, key: str) -> str:
     )
 
 
+def _assert_receipt_image_owner(event: dict, receipt: dict, actor_user_id: str) -> None:
+    if actor_user_id not in {event["creator_id"], receipt["payer_id"]}:
+        raise HTTPException(
+            status_code=403, detail="Only creator or payer can modify receipt image."
+        )
+
+
 @track_service_operation("receipt_images.upload")
 def upload_receipt_image(
     db: Database,
@@ -53,6 +60,7 @@ def upload_receipt_image(
     receipt = get_receipt_or_404(db, receipt_id)
     event = assert_event_access(db, receipt["event_id"], actor_user_id)
     assert_event_open(event)
+    _assert_receipt_image_owner(event, receipt, actor_user_id)
 
     if len(body) > _MAX_IMAGE_BYTES:
         raise HTTPException(status_code=413, detail="Image too large (max 10 MB).")
@@ -98,6 +106,7 @@ def delete_receipt_image(db: Database, s3: Any, receipt_id: str, actor_user_id: 
     receipt = get_receipt_or_404(db, receipt_id)
     event = assert_event_access(db, receipt["event_id"], actor_user_id)
     assert_event_open(event)
+    _assert_receipt_image_owner(event, receipt, actor_user_id)
 
     bucket = _bucket_name()
     if not bucket:
