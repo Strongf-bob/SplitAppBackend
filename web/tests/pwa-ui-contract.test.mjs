@@ -30,7 +30,7 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v16/);
+  assert.match(sw, /splitapp-next-pwa-v17/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {
@@ -219,7 +219,7 @@ test("refreshed tokens update React state, not only localStorage", () => {
 test("Splitik composer is fixed above the bottom nav and keyboard viewport", () => {
   assert.match(page, /data-testid="splitik-composer"/);
   assert.match(page, /fixed inset-x-4 bottom-\[calc\(86px\+env\(safe-area-inset-bottom\)\)\]/);
-  assert.match(page, /pb-\[112px\]/);
+  assert.match(page, /pb-\[calc\(160px\+env\(safe-area-inset-bottom\)\)\]/);
   assert.match(page, /max-w-\[calc\(100vw-2rem\)\]/);
 });
 
@@ -303,7 +303,10 @@ test("app surfaces use responsive layout rails instead of raw viewport edges", (
 test("Splitik chat uses a messenger-style bottom anchored message list", () => {
   assert.match(page, /data-testid="splitik-chat-shell"/);
   assert.match(page, /data-testid="splitik-message-list"/);
+  assert.match(page, /data-testid="splitik-chat-screen"/);
+  assert.match(page, /min-h-\[calc\(100dvh-92px\)\] bg-\[#1f3d8f\]/);
   assert.match(page, /flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto/);
+  assert.doesNotMatch(page, /data-testid="splitik-intro-card"/);
   assert.doesNotMatch(page, /grid min-h-\[690px\] gap-3 pb-\[112px\]/);
   assert.doesNotMatch(page, /grid content-end gap-3 overflow-hidden rounded-2xl bg-white p-3/);
 });
@@ -367,13 +370,17 @@ test("home screen follows the Figma balance card and activity sheet composition"
   assert.match(page, /Сканировать чек/);
   assert.match(page, /Добавить платеж/);
   assert.match(page, /rounded-t-\[28px\]/);
+  assert.match(page, /data-testid="home-activity-list"/);
+  assert.match(page, /overflow-y-auto/);
+  assert.doesNotMatch(page, />Все<\/Badge>/);
+  assert.doesNotMatch(page, /showHeader=\{view === "home"\}/);
   assert.doesNotMatch(page, /Синхрониз\./);
 });
 
 test("home shell covers the viewport instead of exposing the dark page background", () => {
   assert.match(globals, /--background:\s*240 11% 96%/);
-  assert.match(page, /<main className="min-h-dvh w-full overflow-x-hidden bg-\[#f5f5f7\]/);
-  assert.match(page, /<div className="min-h-dvh w-full overflow-x-hidden bg-\[#f5f5f7\]">/);
+  assert.match(page, /<main className="min-h-dvh w-full overflow-x-hidden bg-\[#1f3d8f\]/);
+  assert.match(page, /<div className="min-h-dvh w-full overflow-x-hidden bg-\[#1f3d8f\]">/);
   assert.match(page, /className="min-h-\[calc\(100dvh-74px\)\] w-full overflow-hidden/);
 });
 
@@ -395,7 +402,7 @@ test("friends screen exposes add-by-code affordance", () => {
 });
 
 test("friends screen owns its title without duplicating the global app header", () => {
-  assert.match(page, /showHeader=\{view === "home"\}/);
+  assert.match(page, /showHeader=\{false\}/);
   assert.match(page, /showHeader: boolean/);
   assert.match(page, /showHeader && loggedIn \? \(/);
   assert.match(page, /testId="friends-screen"[\s\S]*title="Друзья"/);
@@ -416,8 +423,7 @@ test("shared SVG app screens use a blue header with a white bottom sheet", () =>
     "friends-screen",
     "events-screen",
     "notifications-screen",
-    "profile-screen",
-    "splitik-screen"
+    "profile-screen"
   ]) {
     assert.match(page, new RegExp(`testId="${testId}"`), `missing ${testId}`);
   }
@@ -432,10 +438,11 @@ test("friends add-by-code is a compact expandable control, not an always-open fo
   assert.match(page, /isFriendCodeOpen \? \(/);
 });
 
-test("Splitik keeps the SVG intro card while anchoring conversation to the composer", () => {
-  assert.match(page, /data-testid="splitik-intro-card"/);
+test("Splitik uses a continuous Telegram-style chat surface", () => {
+  assert.match(page, /data-testid="splitik-chat-screen"/);
   assert.match(page, /flex min-h-0 flex-1 flex-col justify-end/);
   assert.match(page, /fixed inset-x-4 bottom-\[calc\(86px\+env\(safe-area-inset-bottom\)\)\]/);
+  assert.doesNotMatch(page, /rounded-\[28px\] bg-white px-4 py-5/);
 });
 
 test("Splitik failures are reported silently and shown inline instead of blocking the chat", () => {
