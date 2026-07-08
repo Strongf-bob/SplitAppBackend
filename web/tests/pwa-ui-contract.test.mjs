@@ -32,8 +32,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v24/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v24"/);
+  assert.match(sw, /splitapp-next-pwa-v25/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v25"/);
   assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
@@ -118,11 +118,13 @@ test("profile screen shows the authenticated Yandex user instead of a hardcoded 
 
 test("bottom navigation active tab stays readable with a liquid glass state", () => {
   assert.match(page, /data-liquid-glass-nav="true"/);
-  assert.match(page, /backdrop-blur-\[34px\]/);
-  assert.match(page, /backdrop-saturate-\[1\.85\]/);
-  assert.match(page, /bg-\[#4A5565\]\/\[\.83\]/);
+  assert.match(page, /className="liquid-tabbar fixed bottom-\[max\(env\(safe-area-inset-bottom\),2\.25rem\)\]/);
+  assert.match(globals, /\.liquid-tabbar \{/);
+  assert.match(globals, /-webkit-backdrop-filter: blur\(30px\) saturate\(1\.9\) brightness\(1\.08\)/);
+  assert.match(globals, /backdrop-filter: blur\(30px\) saturate\(1\.9\) brightness\(1\.08\)/);
+  assert.match(globals, /\.liquid-tabbar__item--active::before/);
   assert.match(page, /flex h-\[58px\] w-full min-w-0 justify-self-center flex-col items-center justify-center gap-\[2px\]/);
-  assert.match(page, /w-\[78px\] bg-white\/32 text-white/);
+  assert.match(page, /liquid-tabbar__item--active w-\[78px\] text-white/);
   assert.match(page, /text-white\/\[\.9\] transition-all/);
   assert.match(page, /figmaHomeAsset\("nav-home\.png"\)/);
   assert.match(page, /figmaHomeAsset\("nav-add\.png"\)/);
@@ -182,7 +184,8 @@ test("PWA surfaces are built on shadcn primitives instead of one-off controls", 
 
 test("iOS mobile shell uses a safe-area glass tab bar instead of a generic nav slab", () => {
   assert.match(page, /data-platform-nav="ios-tab-bar"/);
-  assert.match(page, /supports-\[backdrop-filter\]:bg-\[#4A5565\]\/\[\.72\]/);
+  assert.match(page, /liquid-tabbar__shine/);
+  assert.match(globals, /@supports not \(\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)\)/);
   assert.match(page, /bottom-\[max\(env\(safe-area-inset-bottom\),2\.25rem\)\]/);
   assert.match(layout, /statusBarStyle: "black-translucent"/);
   assert.match(globals, /html \{[\s\S]*background:\s*#1f3d8f;/);

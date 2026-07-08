@@ -98,7 +98,7 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v24";
+const clientShellVersion = "splitapp-next-pwa-v25";
 const initialSyncRetryDelayMs = 900;
 
 const figmaHomeAsset = (name: string) => `/assets/figma-home/${name}`;
@@ -1183,9 +1183,10 @@ function PhoneShell({
         <nav
           data-platform-nav="ios-tab-bar"
           data-liquid-glass-nav="true"
-          className="fixed bottom-[max(env(safe-area-inset-bottom),2.25rem)] left-1/2 z-30 w-[var(--nav-width)] -translate-x-1/2 rounded-[30px] border border-white/35 bg-[#4A5565]/[.83] px-1.5 py-1.5 shadow-[0_18px_60px_rgba(15,23,42,0.22)] backdrop-blur-[34px] backdrop-saturate-[1.85] supports-[backdrop-filter]:bg-[#4A5565]/[.72]"
+          className="liquid-tabbar fixed bottom-[max(env(safe-area-inset-bottom),2.25rem)] left-1/2 z-30 w-[var(--nav-width)] -translate-x-1/2 rounded-[30px] px-1.5 py-1.5"
         >
-          <div className="grid grid-cols-5 gap-1">
+          <span className="liquid-tabbar__shine" aria-hidden="true" />
+          <div className="liquid-tabbar__items grid grid-cols-5 gap-1">
             {navItems.map((item) => (
               <BottomNavButton key={item.id} item={item} active={view === item.id} onNavigate={onNavigate} />
             ))}
@@ -1210,10 +1211,10 @@ function BottomNavButton({
       asChild
       variant="ghost"
       className={cn(
-        "flex h-[58px] w-full min-w-0 justify-self-center flex-col items-center justify-center gap-[2px] rounded-[29px] px-1.5 py-1 text-[10px] font-extrabold leading-[12px] text-white/[.9] transition-all duration-200 active:scale-[0.97]",
+        "liquid-tabbar__item flex h-[58px] w-full min-w-0 justify-self-center flex-col items-center justify-center gap-[2px] rounded-[29px] px-1.5 py-1 text-[10px] font-extrabold leading-[12px] text-white/[.9] transition-all duration-200 active:scale-[0.97]",
         active
-          ? "w-[78px] bg-white/32 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.58),0_8px_24px_rgba(15,23,42,0.1)] ring-1 ring-white/38"
-          : "hover:bg-white/20 hover:text-white"
+          ? "liquid-tabbar__item--active w-[78px] text-white"
+          : "hover:bg-white/[.14] hover:text-white"
       )}
     >
       <a
