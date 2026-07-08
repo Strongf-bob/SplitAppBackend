@@ -1,0 +1,57 @@
+name: Reset Production MongoDB
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type drop-splitapp-db to delete the production MongoDB database."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  reset-production-db:
+    name: Drop production MongoDB database
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - name: Validate confirmation and deploy secrets
+        run: |
+          test "$CONFIRM" = "drop-splitapp-db"
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_SSH_KEY"
+          test -n "$DEPLOY_PATH"
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${DEPLOY_PORT:-22}" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Drop MongoDB database
+        run: |
+          SSH_PORT="${DEPLOY_PORT:-22}"
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "set -euo pipefail; \
+            cd '$DEPLOY_PATH'; \
+            DB_NAME=\$(sed -n 's/^MONGODB_DB_NAME=//p' .env | tail -1); \
+            DB_NAME=\${DB_NAME:-splitapp}; \
+            docker compose exec -T mongo mongosh --quiet \"\$DB_NAME\" --eval 'printjson(db.dropDatabase())'; \
+            docker compose restart api; \
+            HOST_PORT=\$(sed -n 's/^HOST_PORT=//p' .env | tail -1); \
+            HOST_PORT=\${HOST_PORT:-8080}; \
+            for attempt in \$(seq 1 20); do curl -fsS \"http://127.0.0.1:\${HOST_PORT}/api/ping\" && exit 0; sleep 3; done; \
+            docker compose logs --tail=80 api; \
+            exit 1"
