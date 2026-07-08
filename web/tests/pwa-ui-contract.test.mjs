@@ -32,8 +32,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v26/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v26"/);
+  assert.match(sw, /splitapp-next-pwa-v27/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v27"/);
   assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
@@ -144,6 +144,7 @@ test("bottom navigation selection follows the requested screen immediately", () 
   assert.match(page, /<PhoneShell[\s\S]*view=\{activeView\}[\s\S]*onNavigate=\{navigate\}/);
   assert.match(page, /<WorkspaceScreen[\s\S]*view=\{view\}/);
   assert.match(page, /setActiveView\(nextView\)/);
+  assert.match(page, /window\.scrollTo\(\{ top: 0, left: 0, behavior: "instant" \}\)/);
   assert.match(page, /event\.preventDefault\(\)/);
 });
 
@@ -453,11 +454,14 @@ test("home add action opens a dedicated event creation screen", () => {
 
 test("home screen follows the Figma balance card and activity sheet composition", () => {
   assert.match(page, /data-testid="home-balance-screen"/);
-  assert.match(page, /relative min-h-dvh w-full overflow-hidden bg-\[#1f387c\]/);
+  assert.match(page, /relative min-h-dvh w-full overflow-hidden bg-\[#1f3d8f\]/);
+  assert.match(page, /pt-\[max\(env\(safe-area-inset-top\),clamp\(3\.25rem,8dvh,4\.75rem\)\)\]/);
   assert.match(page, /fontSize: "var\(--home-balance-font\)"/);
   assert.match(page, /figmaHomeAsset\("up\.png"\)/);
   assert.match(page, /figmaHomeAsset\("down\.png"\)/);
   assert.match(page, /data-testid="home-event-card"/);
+  assert.match(page, /mainEvent \? <span className="min-w-0 break-words pb-1 text-right font-black text-white\/38"/);
+  assert.doesNotMatch(page, /money\(mainEvent\?\.total_kopecks \?\? 0\)/);
   assert.match(page, /function AvatarStack/);
   assert.match(page, /Сканировать чек/);
   assert.match(page, /Добавить платеж/);
@@ -517,7 +521,7 @@ test("friends screen owns its title without duplicating the global app header", 
 
 test("SVG auth screen is a clean first screen before Yandex OAuth", () => {
   assert.match(page, /data-testid="svg-auth-screen"/);
-  assert.match(page, /grid min-h-dvh overflow-hidden bg-\[#1f387c\]/);
+  assert.match(page, /grid min-h-dvh overflow-hidden bg-\[#1f3d8f\]/);
   assert.match(page, /mt-\[clamp\(14rem,36dvh,22rem\)\]/);
   assert.match(page, /pb-\[calc\(max\(env\(safe-area-inset-bottom\),0px\)\+clamp\(3\.5rem,8\.5dvh,5rem\)\)\]/);
   assert.match(page, /--auth-logo-font/);
@@ -540,6 +544,11 @@ test("shared SVG app screens use a blue header with a white bottom sheet", () =>
   }
   assert.match(page, /data-testid="svg-screen-sheet"/);
   assert.match(page, /rounded-t-\[28px\]/);
+});
+
+test("PWA uses one primary blue shell color across screens", () => {
+  assert.match(page, /bg-\[#1f3d8f\]/);
+  assert.doesNotMatch(page, /#1f387c/);
 });
 
 test("friends add-by-code is a compact expandable control, not an always-open form", () => {
