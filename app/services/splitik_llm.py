@@ -100,7 +100,7 @@ def _role_timeout(config: SplitikLLMConfig, model_role: str) -> float:
     }
     raw_timeout = timeout_by_role.get(model_role)
     if model_role == "fast_chat" and not raw_timeout:
-        return min(config.timeout_seconds, 8)
+        return min(config.timeout_seconds, 12)
     if not raw_timeout:
         return config.timeout_seconds
     try:

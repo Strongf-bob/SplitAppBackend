@@ -285,7 +285,7 @@ def test_splitik_llm_fast_chat_defaults_to_deepseek_flash(monkeypatch):
 
     assert reply == "Привет!"
     assert requests[0]["json"]["model"] == "deepseek-v4-flash"
-    assert requests[0]["timeout"] == 8
+    assert requests[0]["timeout"] == 12
 
 
 def test_splitik_llm_timeout_can_be_overridden(monkeypatch):
