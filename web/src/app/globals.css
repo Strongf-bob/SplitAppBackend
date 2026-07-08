@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: var(--font-montserrat), Montserrat, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --background: 240 11% 96%;
   --foreground: 220 24% 96%;
   --card: 0 0% 100%;
@@ -26,24 +26,33 @@
   --content-max: 34rem;
   --content-width: min(calc(100vw - var(--screen-pad) * 2), var(--content-max));
   --rail-x: max(var(--screen-pad), calc((100vw - var(--content-max)) / 2));
-  --nav-width: min(calc(100vw - var(--screen-pad) * 2), 32rem);
+  --nav-width: min(calc(100vw - 2rem), clamp(21.5rem, 88vw, 23rem));
   --page-x: clamp(0.875rem, 4.4vw, 1.5rem);
   --sheet-x: clamp(1rem, 4.6vw, 1.5rem);
-  --bottom-nav-reserve: calc(92px + env(safe-area-inset-bottom));
+  --bottom-nav-reserve: calc(132px + env(safe-area-inset-bottom));
   --balance-font: clamp(2.75rem, 14.2vw, 4.125rem);
-  --home-total-font: clamp(1rem, 4.8vw, 1.375rem);
+  --home-balance-font: clamp(3rem, 13vw, 3.5rem);
+  --home-total-font: clamp(1rem, 4.8vw, 1.2rem);
   --home-hero-gap: clamp(1.125rem, 4.8dvh, 2rem);
+  --home-event-card-height: clamp(5.8rem, 24vw, 6.25rem);
   --home-event-min-height: clamp(7.25rem, 31vw, 9.25rem);
   --home-event-radius: clamp(1.25rem, 6vw, 1.75rem);
-  --action-icon-size: clamp(3.5rem, 17vw, 5.75rem);
-  --action-icon-svg: clamp(1.65rem, 7.2vw, 2.5rem);
-  --action-min-height: clamp(5.5rem, 24vw, 7rem);
-  --avatar-stack-size: clamp(2.75rem, 12.5vw, 3.875rem);
-  --avatar-stack-font: clamp(1rem, 5vw, 1.5rem);
-  --activity-avatar-size: clamp(2.875rem, 13vw, 4.25rem);
-  --activity-title-font: clamp(1rem, 4.8vw, 1.375rem);
-  --activity-detail-font: clamp(0.875rem, 4.2vw, 1.125rem);
+  --action-icon-size: clamp(3.45rem, 15.3vw, 3.85rem);
+  --action-icon-svg: clamp(1.85rem, 8.2vw, 2.5rem);
+  --action-min-height: clamp(5.3rem, 21vw, 5.75rem);
+  --avatar-stack-size: clamp(2.35rem, 10vw, 2.55rem);
+  --avatar-stack-font: clamp(.95rem, 4.2vw, 1.1rem);
+  --activity-avatar-size: clamp(3rem, 12.8vw, 3.25rem);
+  --activity-title-font: clamp(.95rem, 4.1vw, 1.05rem);
+  --activity-detail-font: clamp(.78rem, 3.4vw, .86rem);
   --profile-avatar-size: clamp(5rem, 26vw, 7rem);
+  --auth-gutter: clamp(1.5rem, 7vw, 3rem);
+  --auth-content-max: 33rem;
+  --auth-logo-font: clamp(5.75rem, 25.5vw, 7.25rem);
+  --auth-subtitle-font: clamp(1.15rem, 5.1vw, 1.45rem);
+  --auth-button-width: min(100%, clamp(18.25rem, 75vw, 21rem));
+  --auth-button-height: clamp(3.55rem, 15vw, 4.125rem);
+  --auth-button-font: clamp(1rem, 4.35vw, 1.2rem);
 }
 
 * {
