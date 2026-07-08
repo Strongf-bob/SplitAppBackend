@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass
 import json
+import time
 from typing import Literal
 
 import httpx
@@ -31,6 +32,14 @@ class SplitikLLMConfig:
             }
             if model
         }
+
+
+@dataclass(frozen=True)
+class SplitikLLMSmokeResult:
+    model_role: str
+    model_id: str
+    elapsed_ms: float
+    timeout_seconds: float
 
 
 def _env(name: str) -> str:
@@ -119,11 +128,99 @@ def _model_for_role(
     return model
 
 
+def _configured_model_roles(config: SplitikLLMConfig) -> list[str]:
+    roles = ["primary", "fast_chat"]
+    if config.intent_model:
+        roles.append("intent")
+    if config.verification_model:
+        roles.append("verification")
+    if config.escalation_model:
+        roles.append("escalation")
+    return roles
+
+
 def _chat_completions_url(base_url: str) -> str:
     normalized = base_url.rstrip("/")
     if normalized.endswith("/chat/completions"):
         return normalized
     return f"{normalized}/chat/completions"
+
+
+def smoke_check_configured_models(
+    *,
+    model_roles: list[str] | None = None,
+) -> list[SplitikLLMSmokeResult]:
+    config = load_config()
+    roles = model_roles or _configured_model_roles(config)
+    results: list[SplitikLLMSmokeResult] = []
+
+    for role in roles:
+        if role not in {"primary", "fast_chat", "intent", "verification", "escalation"}:
+            raise RuntimeError(f"Splitik LLM smoke role is invalid: {role}")
+
+        model = _model_for_role(config, role)  # type: ignore[arg-type]
+        timeout_seconds = _role_timeout(config, role)
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Return a short health-check response. No private data.",
+                },
+                {"role": "user", "content": "health check"},
+            ],
+            "temperature": 0,
+        }
+
+        started = time.monotonic()
+        try:
+            response = httpx.post(
+                _chat_completions_url(config.base_url),
+                headers={
+                    "Authorization": f"Bearer {config.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=timeout_seconds,
+            )
+        except httpx.TimeoutException as exc:
+            raise RuntimeError(
+                f"Splitik LLM smoke {role} model {model} exceeded SLA {timeout_seconds:.2f}s."
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"Splitik LLM smoke {role} model {model} request failed.") from exc
+
+        elapsed_seconds = time.monotonic() - started
+        if elapsed_seconds > timeout_seconds:
+            raise RuntimeError(
+                f"Splitik LLM smoke {role} model {model} exceeded SLA "
+                f"{timeout_seconds:.2f}s: {elapsed_seconds:.2f}s."
+            )
+        if response.status_code in {401, 403}:
+            raise RuntimeError(f"Splitik LLM smoke {role} model {model} credentials rejected.")
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"Splitik LLM smoke {role} model {model} provider returned "
+                f"HTTP {response.status_code}."
+            )
+
+        try:
+            content = _extract_chat_content(response.json())
+        except (HTTPException, ValueError) as exc:
+            raise RuntimeError(f"Splitik LLM smoke {role} model {model} response invalid.") from exc
+        if not content:
+            raise RuntimeError(f"Splitik LLM smoke {role} model {model} response empty.")
+
+        results.append(
+            SplitikLLMSmokeResult(
+                model_role=role,
+                model_id=model,
+                elapsed_ms=round(elapsed_seconds * 1000, 2),
+                timeout_seconds=timeout_seconds,
+            )
+        )
+
+    return results
 
 
 def _extract_chat_content(response_body: object) -> str:
