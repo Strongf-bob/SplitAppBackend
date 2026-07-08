@@ -154,10 +154,22 @@ test("authenticated startup refreshes expired access tokens instead of showing a
 test("authenticated startup tolerates malformed page payloads without crashing the route", () => {
   assert.match(page, /function pageItems<T>\(page: \{ items\?: T\[\] \} \| null \| undefined\)/);
   assert.match(page, /const nextEvents = pageItems\(eventPage\)\.map\(normalizeEvent\)/);
-  assert.match(page, /setEvents\(nextEvents\.length \? nextEvents : fallbackEvents\)/);
+  assert.match(page, /setEvents\(nextEvents\)/);
   assert.match(page, /setFriendships\(pageItems\(friendshipPage\)\)/);
   assert.doesNotMatch(page, /eventPage\.items\.length/);
   assert.doesNotMatch(page, /friendshipPage\.items \?\? \[\]/);
+});
+
+test("production startup never replaces missing backend data with demo trips", () => {
+  for (const demoMarker of ["Поездка в Карпаты", "День рождения Кати", "Новый год", "demo-1", "demo-2", "demo-3"]) {
+    assert.doesNotMatch(page, new RegExp(demoMarker, "u"));
+  }
+
+  assert.match(page, /const \[events, setEvents\] = useState<EventSummary\[\]>\(\[\]\)/);
+  assert.match(page, /setEvents\(\[\]\)/);
+  assert.doesNotMatch(page, /setEvents\(fallbackEvents\)/);
+  assert.doesNotMatch(page, /events \?\? fallbackEvents/);
+  assert.doesNotMatch(page, /notifyProblem\(error, "home", "Не удалось синхронизировать данные\.", \{ action: "initial_sync" \}\)/);
 });
 
 test("client error reports include a sanitized error message for production diagnosis", () => {

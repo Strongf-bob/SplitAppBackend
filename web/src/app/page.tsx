@@ -113,24 +113,9 @@ const navItems: Array<{ id: View; label: string; icon: React.ElementType }> = [
   { id: "profile", label: "Профиль", icon: User }
 ];
 
-const fallbackEvents: EventSummary[] = [
-  { id: "demo-1", title: "Поездка в Карпаты", total_kopecks: 3840000, participants_count: 4, status: "active" },
-  { id: "demo-2", title: "День рождения Кати", total_kopecks: 720000, participants_count: 5, status: "invite" },
-  { id: "demo-3", title: "Новый год", total_kopecks: 295000, participants_count: 3, status: "closed" }
-];
-
-const fallbackFriends: FriendOption[] = [
-  { id: "demo-alina", initials: "А", name: "Алина Табакеева", subtitle: "вы должны", amount: -1480, tone: "text-red-600" },
-  { id: "demo-maxim", initials: "М", name: "Максим Демин", subtitle: "должен вам", amount: 1488, tone: "text-emerald-600" },
-  { id: "demo-ivan", initials: "И", name: "Иван Соловьев", subtitle: "ровно", amount: 0, tone: "text-slate-500" }
-];
-
 const notifications = {
-  incoming: [
-    { title: "Максим вернул долг", detail: "Перевод ожидает подтверждения", badge: "+650 ₽" },
-    { title: "Катя приглашает вас", detail: "День рождения Кати", badge: "invite" }
-  ],
-  read: [{ title: "Чек добавлен", detail: "Сплитик подготовил черновик", badge: "ok" }]
+  incoming: [] as Array<{ title: string; detail: string; badge: string }>,
+  read: [] as Array<{ title: string; detail: string; badge: string }>
 };
 
 const initialPermissionState: PermissionState = {
@@ -156,7 +141,7 @@ export default function SplitAppPage() {
   const [notificationTab, setNotificationTab] = useState<NotificationTab>("incoming");
   const [summary, setSummary] = useState<HomeSummary | null>(null);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [events, setEvents] = useState<EventSummary[]>(fallbackEvents);
+  const [events, setEvents] = useState<EventSummary[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [eventReceipts, setEventReceipts] = useState<EventReceipts>({});
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
@@ -282,13 +267,27 @@ export default function SplitAppPage() {
   );
 
   const handleInitialDataError = useCallback((error: unknown) => {
-    setEvents(fallbackEvents);
+    setEvents([]);
+    setFriendships([]);
+    setSummary(null);
     if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
       clearExpiredSession();
       return;
     }
-    notifyProblem(error, "home", "Не удалось синхронизировать данные.", { action: "initial_sync" });
-  }, [clearExpiredSession, notifyProblem]);
+    const requestId = error instanceof ApiError ? error.requestId : undefined;
+    void reportProblem({
+      screen: "home",
+      message: "Не удалось синхронизировать данные.",
+      mode: "automatic_error",
+      requestId,
+      metadata: {
+        action: "initial_sync",
+        error_name: error instanceof Error ? error.name : "UnknownError",
+        error_message: error instanceof Error ? error.message : String(error ?? "unknown")
+      }
+    });
+    setMessage("Не удалось синхронизировать данные. Проверьте подключение и обновите экран.");
+  }, [clearExpiredSession, reportProblem]);
 
   useEffect(() => {
     const storedTokens = loadTokens();
@@ -346,7 +345,7 @@ export default function SplitAppPage() {
         setSummary(nextSummary);
         setCurrentUser(user);
         const nextEvents = pageItems(eventPage).map(normalizeEvent);
-        setEvents(nextEvents.length ? nextEvents : fallbackEvents);
+        setEvents(nextEvents);
         setFriendships(pageItems(friendshipPage));
       })
       .catch(handleInitialDataError);
@@ -358,8 +357,8 @@ export default function SplitAppPage() {
     return () => clearTimeout(timeout);
   }, [message]);
 
-  const owedToMe = summary?.confirmed?.receivable_kopecks ?? 720000;
-  const iOwe = summary?.confirmed?.owed_kopecks ?? 295000;
+  const owedToMe = summary?.confirmed?.receivable_kopecks ?? 0;
+  const iOwe = summary?.confirmed?.owed_kopecks ?? 0;
   const friendOptions = useMemo(() => friendshipsToOptions(friendships), [friendships]);
 
   const goBack = () => navigate(previousView === view ? "home" : previousView);
@@ -642,7 +641,7 @@ export default function SplitAppPage() {
         });
         nextEvent = normalizeEvent(eventWithAddedParticipants(nextEvent, selectedUserIds));
       }
-      setEvents((current) => [nextEvent, ...current.filter((item) => !item.id.startsWith("demo-"))]);
+      setEvents((current) => [nextEvent, ...current]);
       setNewEventName("");
       setSelectedEventFriendIds([]);
       setIsCreatingEvent(false);
@@ -752,7 +751,7 @@ export default function SplitAppPage() {
       );
       const eventPage = await authedApi<EventPage>("/api/events");
       const nextEvents = pageItems(eventPage).map(normalizeEvent);
-      setEvents(nextEvents.length ? nextEvents : fallbackEvents);
+      setEvents(nextEvents);
       setMessage("Черновик подтвержден.");
     } catch (error) {
       setMessage(splitikErrorMessage(error));
@@ -1292,8 +1291,14 @@ function HomeScreen({
   onNavigate: (view: View) => void;
   onCreateEventOpen: () => void;
 }) {
-  const mainEvent = events?.[0] ?? fallbackEvents[0];
+  const mainEvent = events[0] ?? null;
   const balance = (owedToMe || 0) - (iOwe || 0);
+  const activityItems = events.slice(0, 3).map((event) => ({
+    title: eventTitle(event),
+    detail: `${event.participants_count ?? event.participants?.length ?? 0} участника`,
+    amount: money(event.total_kopecks ?? 0),
+    tone: "text-slate-500"
+  }));
   return (
     <div data-testid="home-balance-screen" className="grid min-h-[calc(100dvh-92px)] w-full overflow-hidden content-start bg-[#1f3d8f] text-white">
       <section className="mx-auto grid w-[var(--content-width)] gap-[var(--home-hero-gap)] pb-[clamp(1.5rem,5dvh,2.25rem)] pt-[clamp(1.5rem,5dvh,2.25rem)]">
@@ -1316,14 +1321,14 @@ function HomeScreen({
           data-testid="home-event-card"
           type="button"
           size={null}
-          onClick={() => onNavigate("events")}
+          onClick={() => (mainEvent ? onNavigate("events") : onCreateEventOpen())}
           className="grid h-auto w-full min-w-0 max-w-full justify-stretch gap-[clamp(0.875rem,3.6vw,1.25rem)] bg-[#111111] px-[clamp(1.25rem,6vw,2rem)] py-[clamp(1.125rem,5vw,1.5rem)] text-left text-white hover:bg-[#111111]/92"
           style={{ minHeight: "var(--home-event-min-height)", borderRadius: "var(--home-event-radius)" }}
         >
-          <span className="break-words text-[clamp(1.125rem,5.6vw,1.625rem)] font-black leading-tight">{eventTitle(mainEvent)}</span>
+          <span className="break-words text-[clamp(1.125rem,5.6vw,1.625rem)] font-black leading-tight">{mainEvent ? eventTitle(mainEvent) : "Создайте первое событие"}</span>
           <span className="flex items-end justify-between gap-3">
-            <AvatarStack count={mainEvent.participants_count ?? mainEvent.participants?.length ?? 0} />
-            <span className="min-w-0 break-words pb-1 text-right font-black text-white/38" style={{ fontSize: "var(--home-total-font)" }}>{money(mainEvent.total_kopecks ?? 0)}</span>
+            {mainEvent ? <AvatarStack count={mainEvent.participants_count ?? mainEvent.participants?.length ?? 0} /> : <span className="text-sm font-bold text-white/50">Пока нет активных расходов</span>}
+            <span className="min-w-0 break-words pb-1 text-right font-black text-white/38" style={{ fontSize: "var(--home-total-font)" }}>{money(mainEvent?.total_kopecks ?? 0)}</span>
           </span>
         </Button>
         <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-[clamp(0.5rem,3vw,1rem)]">
@@ -1340,11 +1345,7 @@ function HomeScreen({
           <Badge className="rounded-full bg-[#d2d6e6] px-4 py-1.5 text-base font-black text-[#1f3d8f]">Все</Badge>
         </div>
         <div className="grid gap-0">
-        {[
-          ["Алина добавила Ужин", "Карпаты", "-1488 ₽", "text-red-600"],
-          ["Максим вернул долг", "Перевод сегодня", "+650 ₽", "text-emerald-600"],
-          ["Иван создал событие", "Новое событие 3 мин", "-", "text-slate-500"]
-        ].map(([title, detail, amount, tone]) => (
+        {activityItems.map(({ title, detail, amount, tone }) => (
           <div key={title} className="grid grid-cols-[var(--activity-avatar-size)_minmax(0,1fr)] items-center gap-3 border-b border-slate-200 py-4 last:border-b-0 sm:grid-cols-[var(--activity-avatar-size)_minmax(0,1fr)_auto]">
             <ActivityAvatar>{title[0]}</ActivityAvatar>
             <div className="min-w-0">
@@ -1354,6 +1355,7 @@ function HomeScreen({
             <span className={cn("col-start-2 text-[clamp(1rem,5vw,1.375rem)] font-black sm:col-start-auto", tone)}>{amount}</span>
           </div>
         ))}
+        {!activityItems.length ? <p className="py-6 text-center text-base font-bold text-slate-500">Пока нет активности</p> : null}
         </div>
         </div>
       </section>
@@ -1362,13 +1364,13 @@ function HomeScreen({
 }
 
 function AvatarStack({ count }: { count: number }) {
-  const visible = fallbackFriends.slice(0, 3);
+  const visible = Array.from({ length: Math.min(Math.max(count, 0), 3) }, (_, index) => index);
   const overflow = Math.max(0, count - visible.length);
   return (
     <span className="flex items-center pl-1">
-      {visible.map((friend, index) => (
+      {visible.map((_, index) => (
         <span
-          key={friend.id}
+          key={index}
           className={cn(
             "-ml-2 grid place-items-center rounded-full border-2 border-[#111111] font-black",
             index === 0 && "ml-0 bg-[#bbb2d5] text-[#654da1]",
@@ -1377,7 +1379,7 @@ function AvatarStack({ count }: { count: number }) {
           )}
           style={{ width: "var(--avatar-stack-size)", height: "var(--avatar-stack-size)", fontSize: "var(--avatar-stack-font)" }}
         >
-          {friend.initials}
+          {index + 1}
         </span>
       ))}
       {overflow ? (
@@ -1464,7 +1466,7 @@ function PeopleScreen({
   const [friendCode, setFriendCode] = useState("");
   const [isFriendCodeOpen, setIsFriendCodeOpen] = useState(false);
   const [isAddingFriend, setIsAddingFriend] = useState(false);
-  const visibleFriends = (friendOptions.length ? friendOptions : fallbackFriends).filter((friend) => friend.name.toLowerCase().includes(friendSearch.trim().toLowerCase()));
+  const visibleFriends = friendOptions.filter((friend) => friend.name.toLowerCase().includes(friendSearch.trim().toLowerCase()));
   const myCode = currentUser ? friendCodeForUser(currentUser) : "";
   const addFriend = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1553,7 +1555,7 @@ function PeopleScreen({
             <span className={cn("text-[20px] font-black", friend.tone)}>{friend.amount > 0 ? "+" : ""}{friend.amount} ₽</span>
           </Button>
         ))}
-          {!visibleFriends.length ? <p className="py-8 text-center text-base font-bold text-slate-500">Ничего не найдено</p> : null}
+          {!visibleFriends.length ? <p className="py-8 text-center text-base font-bold text-slate-500">{friendSearch.trim() ? "Ничего не найдено" : "Пока нет добавленных друзей"}</p> : null}
         </div>
       </div>
     </SvgScreenFrame>
@@ -1599,13 +1601,13 @@ function EventsScreen({
   onCreateEvent: (event?: FormEvent<HTMLFormElement>) => void;
   onCancelCreateEvent: () => void;
 }) {
-  const filtered = (events ?? fallbackEvents).filter((event) => {
+  const filtered = events.filter((event) => {
     if (activeTab === "active") return !event.is_closed && event.status !== "closed" && event.status !== "invite";
     if (activeTab === "closed") return event.is_closed || event.status === "closed";
     return event.status === "invite";
   });
-  const visible = filtered.length ? filtered : activeTab === "closed" ? [fallbackEvents[2]] : [fallbackEvents[1]];
-  const selectedEvent = selectedEventId ? (events ?? fallbackEvents).find((event) => event.id === selectedEventId) : null;
+  const visible = filtered;
+  const selectedEvent = selectedEventId ? events.find((event) => event.id === selectedEventId) : null;
 
   if (isCreatingEvent) {
     return (
@@ -1665,6 +1667,14 @@ function EventsScreen({
           </Button>
         </Card>
       ))}
+      {!visible.length ? (
+        <Card className="rounded-[28px] border-0 bg-white p-6 text-center shadow-sm">
+          <p className="text-xl font-black leading-tight text-slate-900">
+            {activeTab === "active" ? "Активных событий пока нет" : activeTab === "closed" ? "Завершенных событий пока нет" : "Приглашений пока нет"}
+          </p>
+          <p className="mt-2 text-sm font-bold text-slate-500">Когда данные загрузятся с сервера, они появятся здесь.</p>
+        </Card>
+      ) : null}
       </div>
     </SvgScreenFrame>
   );
@@ -1861,7 +1871,7 @@ function NotificationsScreen({
     <SvgScreenFrame
       testId="notifications-screen"
       title="Входящие"
-      action={<Badge className="rounded-full bg-white/16 px-4 py-2 text-sm font-black text-white">{notifications.incoming.length}</Badge>}
+      action={notifications.incoming.length ? <Badge className="rounded-full bg-white/16 px-4 py-2 text-sm font-black text-white">{notifications.incoming.length}</Badge> : null}
       hero={
       <SegmentedControl
         name="notification-tab"
@@ -1886,6 +1896,7 @@ function NotificationsScreen({
             <Badge className="h-fit rounded-full bg-[#eef1f7] px-3 py-2 text-xs font-black text-[#1f3d8f]">{item.badge}</Badge>
           </div>
         ))}
+        {!notifications[activeTab].length ? <p className="py-8 text-center text-base font-bold text-slate-500">Пока нет уведомлений</p> : null}
         </div>
       </div>
     </SvgScreenFrame>
@@ -2452,7 +2463,17 @@ function eventParticipants(event: EventSummary, friendOptions: FriendOption[]): 
   const byUserId = new Map(friendOptions.map((friend) => [friend.id, friend]));
   const participants = event.participants ?? [];
   if (!participants.length) {
-    return fallbackFriends.slice(0, Math.max(1, Math.min(event.participants_count ?? 1, fallbackFriends.length)));
+    return Array.from({ length: Math.max(1, Math.min(event.participants_count ?? 1, 3)) }, (_, index) => {
+      const name = index === 0 ? "Участник" : `Участник ${index + 1}`;
+      return {
+        id: `${event.id}-participant-${index}`,
+        initials: initialsFor(name),
+        name,
+        subtitle: "участник",
+        amount: 0,
+        tone: "text-slate-500"
+      };
+    });
   }
   return participants.map((participant, index) => {
     const friend = byUserId.get(participant.user_id);
