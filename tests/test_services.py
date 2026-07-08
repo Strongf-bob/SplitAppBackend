@@ -1470,6 +1470,39 @@ def test_payment_request_deadline_acknowledge_extension_cancel_and_dispute(db):
     assert cancelled["cancelled_at"] is not None
 
 
+def test_cancelling_paid_payment_request_voids_linked_pending_payment(db):
+    seed_event(db)
+    request = payments.create_payment_request(
+        db,
+        EVENT_ID,
+        schemas.PaymentRequestCreate(
+            debtor_id=USER_B,
+            creditor_id=USER_A,
+            amount_kopecks=5000,
+        ),
+        USER_A,
+        idempotency_key="request-cancel-linked-payment",
+    )
+    payment = payments.mark_payment_request_paid(
+        db,
+        request["id"],
+        USER_B,
+        idempotency_key="mark-paid-cancel-linked-payment",
+    )
+
+    cancelled = payments.cancel_payment_request(db, request["id"], USER_A)
+
+    stored_payment = db.payments.find_one({"id": payment["id"]})
+    assert cancelled["status"] == "cancelled"
+    assert stored_payment["deleted_at"] is not None
+    try:
+        payments.confirm_payment(db, payment["id"], USER_A)
+    except Exception as exc:
+        assert_status(exc, 404)
+    else:
+        raise AssertionError("Expected cancelled linked payment confirmation to fail")
+
+
 def test_home_summary_separates_confirmed_pending_and_disputed_money(db):
     seed_event(db)
     confirmed_receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
@@ -1755,6 +1788,63 @@ def test_receipt_delete_soft_deletes_and_hides_from_reads(db):
     assert stored["deleted_at"] is not None
     assert receipts.list_receipts_by_event(db, EVENT_ID, USER_A, limit=50, offset=0)["items"] == []
     assert db.audit_events.find_one({"action": "receipt.deleted", "resource_id": receipt["id"]})
+
+
+def test_receipt_delete_requires_creator_or_payer(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+
+    try:
+        receipts.delete_receipt(db, receipt["id"], USER_B)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-payer member receipt delete to fail")
+
+    assert "deleted_at" not in db.receipts.find_one({"id": receipt["id"]})
+
+
+def test_confirmed_receipt_cannot_be_deleted(db):
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
+
+    try:
+        receipts.delete_receipt(db, receipt["id"], USER_A)
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected confirmed receipt delete to fail")
+
+    assert "deleted_at" not in db.receipts.find_one({"id": receipt["id"]})
+    assert balances.get_event_balances(db, EVENT_ID, USER_A)[0]["amount_kopecks"] == 5000
+
+
+def test_receipt_image_write_requires_creator_or_payer(db, fake_s3, monkeypatch):
+    monkeypatch.setenv("S3_BUCKET", "split-bucket")
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+
+    for action in (
+        lambda: receipt_image.upload_receipt_image(
+            db,
+            fake_s3,
+            receipt["id"],
+            b"\xff\xd8\xffjpeg",
+            "image/jpeg",
+            USER_B,
+        ),
+        lambda: receipt_image.delete_receipt_image(db, fake_s3, receipt["id"], USER_B),
+    ):
+        try:
+            action()
+        except Exception as exc:
+            assert_status(exc, 403)
+        else:
+            raise AssertionError("Expected non-payer member receipt image write to fail")
+
+    assert "image_key" not in db.receipts.find_one({"id": receipt["id"]})
+    assert fake_s3.objects == {}
 
 
 def test_event_access_blocks_non_members(db):

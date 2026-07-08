@@ -34,6 +34,7 @@ import {
   api,
   clearTokens,
   EventInvite,
+  EventInvitePreview,
   EventPage,
   Friendship,
   FriendshipPage,
@@ -161,6 +162,7 @@ export default function SplitAppPage() {
   const [problemDraft, setProblemDraft] = useState("");
   const [isProblemSending, setIsProblemSending] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
+  const handledInviteTokenRef = useRef<string | null>(null);
 
   const navigate = useCallback((nextView: View) => {
     setView(nextView);
@@ -249,6 +251,35 @@ export default function SplitAppPage() {
     },
     [reportProblem]
   );
+
+  const loadInviteFromQuery = useCallback(async () => {
+    if (!tokens || typeof window === "undefined") return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const inviteToken = searchParams.get("invite");
+    if (!inviteToken || handledInviteTokenRef.current === inviteToken) return;
+    handledInviteTokenRef.current = inviteToken;
+
+    try {
+      const preview = await authedApi<EventInvitePreview>(`/api/invites/${encodeURIComponent(inviteToken)}/preview`);
+      const inviteEvent = normalizeEvent({
+        id: `invite:${inviteToken}`,
+        title: preview.event_name,
+        name: preview.event_name,
+        status: "invite",
+        is_closed: false,
+        participants_count: preview.participant_count,
+        token: inviteToken
+      });
+      setEvents((current) => [inviteEvent, ...current.filter((event) => event.token !== inviteToken && event.id !== inviteEvent.id)]);
+      setSelectedEventId(inviteEvent.id);
+      setEventTab("invites");
+      navigate("events");
+      setMessage("Приглашение найдено. Проверьте событие и примите его.");
+    } catch (error) {
+      handledInviteTokenRef.current = null;
+      notifyProblem(error, "events", "Не удалось открыть приглашение.", { action: "invite_preview", component: "InviteDeepLink" });
+    }
+  }, [authedApi, navigate, notifyProblem, tokens]);
 
   const openProblemReport = useCallback(
     (screen: ClientReportScreen = viewToReportScreen(view), mode: "automatic_error" | "manual_feedback" = "manual_feedback") => {
@@ -348,6 +379,11 @@ export default function SplitAppPage() {
 
   useEffect(() => {
     if (!tokens) return;
+    void loadInviteFromQuery();
+  }, [loadInviteFromQuery, tokens]);
+
+  useEffect(() => {
+    if (!tokens) return;
     Promise.allSettled([
       authedApi<HomeSummary>("/api/home/summary"),
       authedApi<EventPage>("/api/events"),
@@ -367,7 +403,10 @@ export default function SplitAppPage() {
         }
         if (eventResult.status === "fulfilled") {
           const nextEvents = pageItems(eventResult.value).map(normalizeEvent);
-          setEvents(nextEvents);
+          setEvents((current) => [
+            ...current.filter((event) => event.status === "invite"),
+            ...nextEvents.filter((event) => !current.some((currentEvent) => currentEvent.token && currentEvent.token === event.token))
+          ]);
         }
         if (userResult.status === "fulfilled") {
           setCurrentUser(userResult.value);

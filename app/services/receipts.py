@@ -131,6 +131,11 @@ def _assert_can_confirm_receipt(event: dict, receipt: dict, actor_user_id: str) 
         )
 
 
+def _assert_receipt_owner(event: dict, receipt: dict, actor_user_id: str) -> None:
+    if actor_user_id not in {event["creator_id"], receipt["payer_id"]}:
+        raise HTTPException(status_code=403, detail="Only creator or payer can modify receipt.")
+
+
 def _receipt_to_api(receipt: dict, *, include_internal_shares: bool = False) -> dict:
     cleaned = strip_mongo_id(receipt)
     cleaned["status"] = cleaned.get("status", "confirmed")
@@ -546,6 +551,9 @@ def delete_receipt(db: Database, receipt_id: str, actor_user_id: str) -> None:
     receipt = get_receipt_or_404(db, receipt_id)
     event = assert_event_access(db, receipt["event_id"], actor_user_id)
     assert_event_open(event)
+    _assert_receipt_owner(event, receipt, actor_user_id)
+    if receipt.get("status", "confirmed") == "confirmed":
+        raise HTTPException(status_code=409, detail="Confirmed receipts must be voided.")
     now = utc_now()
     db.receipts.update_one(
         active_filter({"id": receipt_id}),

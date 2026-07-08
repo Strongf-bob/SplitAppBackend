@@ -447,6 +447,22 @@ def cancel_payment_request(db: Database, payment_request_id: str, actor_user_id:
         raise HTTPException(status_code=409, detail="Payment request cannot be cancelled.")
 
     now = utc_now()
+    if payment_request["status"] == "paid" and payment_request.get("payment_id"):
+        linked_payment = db.payments.find_one(active_filter({"id": payment_request["payment_id"]}))
+        if linked_payment and linked_payment.get("confirmed"):
+            raise HTTPException(
+                status_code=409, detail="Confirmed payment request cannot be cancelled."
+            )
+        db.payments.update_one(
+            active_filter({"id": payment_request["payment_id"]}),
+            {
+                "$set": {
+                    "deleted_at": now,
+                    "deleted_by": actor_user_id,
+                    "updated_at": now,
+                }
+            },
+        )
     db.payment_requests.update_one(
         {"id": payment_request_id},
         {"$set": {"status": "cancelled", "cancelled_at": now, "updated_at": now}},

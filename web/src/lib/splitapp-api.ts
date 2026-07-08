@@ -72,6 +72,15 @@ export type EventInvite = {
   expires_at?: string;
 };
 
+export type EventInvitePreview = {
+  event_id: string;
+  event_name: string;
+  creator_id: string;
+  expires_at: string;
+  participant_count: number;
+  actor_decision?: string | null;
+};
+
 export type HomeSummary = {
   confirmed?: { owed_kopecks?: number; receivable_kopecks?: number };
   pending?: { owed_kopecks?: number; receivable_kopecks?: number };
@@ -211,7 +220,7 @@ export async function handleYandexOAuthCallback(): Promise<SplitAppTokens | null
   const accessToken = params.get("access_token");
   const returnedState = params.get("state");
   const expectedState = window.sessionStorage.getItem(yandexOAuthStateKey);
-  window.history.replaceState({}, document.title, window.location.pathname);
+  window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
 
   if (!accessToken || !expectedState || returnedState !== expectedState) return null;
   window.sessionStorage.removeItem(yandexOAuthStateKey);
