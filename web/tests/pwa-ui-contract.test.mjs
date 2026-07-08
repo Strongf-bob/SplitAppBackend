@@ -31,7 +31,10 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v18/);
+  assert.match(sw, /splitapp-next-pwa-v19/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v19"/);
+  assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
+  assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
 });
 
 test("local preview does not send Yandex OAuth to an unregistered loopback callback", () => {

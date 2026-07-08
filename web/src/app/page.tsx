@@ -102,6 +102,7 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
+const clientShellVersion = "splitapp-next-pwa-v19";
 
 const navItems: Array<{ id: View; label: string; icon: React.ElementType }> = [
   { id: "home", label: "Главная", icon: Home },
@@ -308,8 +309,23 @@ export default function SplitAppPage() {
     window.addEventListener("error", onUnhandledError);
     window.addEventListener("unhandledrejection", onUnhandledRejection);
 
+    let removeServiceWorkerListener: (() => void) | undefined;
     if ("serviceWorker" in navigator) {
+      let refreshing = false;
+      const reloadOnControllerChange = () => {
+        if (refreshing) return;
+        const reloadKey = "splitapp-sw-reload-version";
+        if (sessionStorage.getItem(reloadKey) === clientShellVersion) return;
+        refreshing = true;
+        sessionStorage.setItem(reloadKey, clientShellVersion);
+        window.location.reload();
+      };
+
+      navigator.serviceWorker.addEventListener("controllerchange", reloadOnControllerChange);
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+      removeServiceWorkerListener = () => {
+        navigator.serviceWorker.removeEventListener("controllerchange", reloadOnControllerChange);
+      };
     }
 
     handleYandexOAuthCallback()
@@ -323,6 +339,7 @@ export default function SplitAppPage() {
       .catch((error) => setMessage(error instanceof Error ? error.message : "Не удалось войти."));
 
     return () => {
+      removeServiceWorkerListener?.();
       window.removeEventListener("hashchange", onHashChange);
       window.removeEventListener("error", onUnhandledError);
       window.removeEventListener("unhandledrejection", onUnhandledRejection);
