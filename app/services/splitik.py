@@ -1186,14 +1186,14 @@ def send_splitik_message(
         check_rate_limit(
             "splitik.messages.hour",
             actor_user_id,
-            max_requests=_env_int("SPLITIK_MESSAGE_HOURLY_LIMIT", 10),
+            max_requests=_env_int("SPLITIK_MESSAGE_HOURLY_LIMIT", 60),
             window_seconds=_SECONDS_PER_HOUR,
             detail="Splitik hourly message limit exceeded.",
         )
         check_rate_limit(
             "splitik.messages.day",
             actor_user_id,
-            max_requests=_env_int("SPLITIK_MESSAGE_DAILY_LIMIT", 30),
+            max_requests=_env_int("SPLITIK_MESSAGE_DAILY_LIMIT", 200),
             window_seconds=_SECONDS_PER_DAY,
             detail="Splitik daily message limit exceeded.",
         )

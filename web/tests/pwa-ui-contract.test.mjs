@@ -32,8 +32,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v29/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v29"/);
+  assert.match(sw, /splitapp-next-pwa-v30/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v30"/);
   assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
@@ -578,11 +578,20 @@ test("Splitik uses a continuous Telegram-style chat surface", () => {
 
 test("Splitik failures are reported silently and shown inline instead of blocking the chat", () => {
   assert.match(page, /void reportProblem\(\{\s*screen: "splitik"/);
-  assert.match(page, /setMessage\("Сплитик сейчас не смог ответить\. Попробуйте еще раз чуть позже\."\)/);
+  assert.match(page, /setMessage\(splitikErrorMessage\(error\)\)/);
   assert.match(page, /const splitikMessageTimeoutMs = 15000/);
   assert.match(page, /const controller = new AbortController\(\)/);
   assert.match(page, /window\.setTimeout\(\(\) => controller\.abort\(\), splitikMessageTimeoutMs\)/);
   assert.match(page, /signal: controller\.signal/);
   assert.match(page, /Сплитик не успел ответить за 15 секунд/);
   assert.doesNotMatch(page, /notifyProblem\(error, "splitik"/);
+});
+
+test("Splitik rate limits are shown as recoverable user messages without false crash reports", () => {
+  assert.match(page, /function shouldReportSplitikError\(error: unknown\)/);
+  assert.match(page, /error instanceof ApiError && error\.status === 429/);
+  assert.match(page, /return false/);
+  assert.match(page, /Слишком много сообщений подряд/);
+  assert.match(page, /Сплитик еще отвечает на прошлое сообщение/);
+  assert.match(page, /if \(shouldReportSplitikError\(error\)\) \{/);
 });
