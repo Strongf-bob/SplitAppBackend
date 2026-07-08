@@ -32,8 +32,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v31/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v31"/);
+  assert.match(sw, /splitapp-next-pwa-v32/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v32"/);
   assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
@@ -340,6 +340,8 @@ test("Splitik renders interactive draft cards returned by the backend", () => {
   assert.match(page, /drafts: response\.drafts \?\? \[\]/);
   assert.match(page, /function SplitikDraftCard/);
   assert.match(page, /data-testid="splitik-draft-card"/);
+  assert.match(page, /data-testid="splitik-draft-open"/);
+  assert.match(page, />\s*Открыть черновик\s*</);
   assert.match(page, /data-testid="splitik-draft-confirm"/);
   assert.match(page, /\/api\/splitik\/drafts\/\$\{draftId\}\/commit/);
   assert.doesNotMatch(page, /JSON\.stringify\(draft\.payload, null, 2\)/);
@@ -404,7 +406,11 @@ test("Splitik chat uses a messenger-style bottom anchored message list", () => {
   assert.match(page, /data-testid="splitik-chat-screen"/);
   assert.match(page, /min-h-\[calc\(100dvh-92px\)\] bg-\[#1f3d8f\]/);
   assert.match(page, /flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto/);
+  assert.match(page, /<textarea[\s\S]*data-testid="splitik-message-input"/);
+  assert.match(page, /max-h-\[132px\][\s\S]*resize-y[\s\S]*overflow-y-auto/);
+  assert.match(page, /const messageInputRef = useRef<HTMLTextAreaElement \| null>\(null\)/);
   assert.doesNotMatch(page, /data-testid="splitik-intro-card"/);
+  assert.doesNotMatch(page, /<Input[\s\S]{0,300}data-testid="splitik-message-input"/);
   assert.doesNotMatch(page, /grid min-h-\[690px\] gap-3 pb-\[112px\]/);
   assert.doesNotMatch(page, /grid content-end gap-3 overflow-hidden rounded-2xl bg-white p-3/);
 });
