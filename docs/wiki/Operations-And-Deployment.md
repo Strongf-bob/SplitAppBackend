@@ -158,6 +158,15 @@ model. AI receipt drafts дополнительно требуют `SPLITIK_VERI
 Model IDs должны жить в environment variables, а не в коде, чтобы provider/model
 mix можно было менять без rebuild backend.
 
+CI runs an `LLM Smoke` job on every push before production deploy. The job sends
+short health-check requests to configured Splitik model roles and fails if a
+model does not answer within its role timeout. Required GitHub secrets are
+`SPLITIK_LLM_BASE_URL`, `SPLITIK_LLM_API_KEY`, and `SPLITIK_PRIMARY_MODEL`
+(`OCR_LLM_URL`, `OCR_LLM_AUTH_TOKEN`, and `OCR_LLM_MODEL` are accepted as
+legacy fallbacks). Optional secrets/vars configure `SPLITIK_FAST_CHAT_MODEL`,
+`SPLITIK_INTENT_MODEL`, `SPLITIK_VERIFICATION_MODEL`,
+`SPLITIK_ESCALATION_MODEL`, and per-role timeout vars.
+
 PWA:
 
 - `web/` содержит installable SplitApp web client.
