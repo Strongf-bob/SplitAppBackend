@@ -98,7 +98,7 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v31";
+const clientShellVersion = "splitapp-next-pwa-v32";
 const initialSyncRetryDelayMs = 900;
 const splitikMessageTimeoutMs = 15000;
 
@@ -2221,6 +2221,21 @@ function SplitikScreen({
   onAttachReceipt: (file: File) => void;
   onConfirmDraft: (draftId: string) => void;
 }) {
+  const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const updateDraft = (value: string) => {
+    onDraft(value);
+    window.requestAnimationFrame(() => {
+      const input = messageInputRef.current;
+      if (!input) return;
+      input.style.height = "auto";
+      input.style.height = `${Math.min(input.scrollHeight, 132)}px`;
+    });
+  };
+  const applyDraftPrompt = (value: string) => {
+    updateDraft(value);
+    window.requestAnimationFrame(() => messageInputRef.current?.focus());
+  };
+
   return (
     <div data-testid="splitik-chat-screen" className="flex min-h-[calc(100dvh-92px)] bg-[#1f3d8f] text-white">
       <section className="mx-auto flex min-h-0 w-[var(--content-width)] flex-1 flex-col pb-[calc(160px+env(safe-area-inset-bottom))] pt-[max(env(safe-area-inset-top),1.5rem)]">
@@ -2245,7 +2260,7 @@ function SplitikScreen({
               {item.from === "splitik" && item.drafts?.length ? (
                 <div className="grid w-full max-w-[92%] gap-2">
                   {item.drafts.map((draftItem) => (
-                    <SplitikDraftCard key={draftItem.id} draft={draftItem} onConfirm={onConfirmDraft} onEdit={onDraft} />
+                    <SplitikDraftCard key={draftItem.id} draft={draftItem} onConfirm={onConfirmDraft} onEdit={applyDraftPrompt} />
                   ))}
                 </div>
               ) : null}
@@ -2299,13 +2314,15 @@ function SplitikScreen({
               />
             </label>
           </Button>
-          <Input
+          <textarea
+            ref={messageInputRef}
             aria-label="Сообщение Сплитику"
             data-testid="splitik-message-input"
-            className="min-h-12 flex-1 rounded-xl border-slate-200 bg-white px-3 text-sm text-slate-950 focus-visible:ring-[#1f3d8f]"
+            rows={1}
+            className="min-h-12 max-h-[132px] flex-1 resize-y overflow-y-auto rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold leading-5 text-slate-950 outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
             placeholder="Напишите сообщение..."
             value={draft}
-            onChange={(event) => onDraft(event.target.value)}
+            onChange={(event) => updateDraft(event.target.value)}
           />
           <Button
             type="submit"
@@ -2385,19 +2402,26 @@ function SplitikDraftCard({
             Нужно уточнить: {draft.questions.map((question) => question.text).join(" · ")}
           </div>
         ) : null}
-        <div className="grid grid-cols-3 gap-2">
-          <Button type="button" variant="ghost" className="h-10 rounded-xl bg-[#eef1f7] px-2 text-xs font-black text-[#1f3d8f]" onClick={() => onEdit(`Покажи подробнее черновик ${draft.id}`)}>
+        <div className="grid gap-2">
+          <Button
+            data-testid="splitik-draft-open"
+            type="button"
+            className="min-h-11 rounded-xl bg-[#1f3d8f] px-3 text-sm font-black text-white hover:bg-[#1f3d8f]/90"
+            onClick={() => onEdit(`Покажи подробнее черновик ${draft.id}`)}
+          >
             <ExternalLink className="mr-1 h-4 w-4" />
-            Открыть
+            Открыть черновик
           </Button>
-          <Button type="button" variant="ghost" className="h-10 rounded-xl bg-[#eef1f7] px-2 text-xs font-black text-[#1f3d8f]" onClick={() => onEdit(`Измени черновик ${draft.id}: `)}>
-            <PencilLine className="mr-1 h-4 w-4" />
-            Изменить
-          </Button>
-          <Button data-testid="splitik-draft-confirm" type="button" disabled={isCommitted} className="h-10 rounded-xl bg-[#1f3d8f] px-2 text-xs font-black text-white hover:bg-[#1f3d8f]/90 disabled:bg-slate-300" onClick={() => onConfirm(draft.id)}>
-            <Check className="mr-1 h-4 w-4" />
-            OK
-          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" variant="ghost" className="h-10 rounded-xl bg-[#eef1f7] px-2 text-xs font-black text-[#1f3d8f]" onClick={() => onEdit(`Измени черновик ${draft.id}: `)}>
+              <PencilLine className="mr-1 h-4 w-4" />
+              Изменить
+            </Button>
+            <Button data-testid="splitik-draft-confirm" type="button" disabled={isCommitted} className="h-10 rounded-xl bg-[#111111] px-2 text-xs font-black text-white hover:bg-[#111111]/90 disabled:bg-slate-300" onClick={() => onConfirm(draft.id)}>
+              <Check className="mr-1 h-4 w-4" />
+              OK
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
