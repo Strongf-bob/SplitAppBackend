@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import {
@@ -98,7 +98,7 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v28";
+const clientShellVersion = "splitapp-next-pwa-v29";
 const initialSyncRetryDelayMs = 900;
 const splitikMessageTimeoutMs = 15000;
 
@@ -161,6 +161,7 @@ export default function SplitAppPage() {
   const [problemDraft, setProblemDraft] = useState("");
   const [isProblemSending, setIsProblemSending] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
+  const appScrollRef = useRef<HTMLDivElement | null>(null);
   const handledInviteTokenRef = useRef<string | null>(null);
   const snapshotStateRef = useRef<Omit<PwaAppSnapshot, "version" | "updatedAt">>({
     summary: null,
@@ -170,12 +171,24 @@ export default function SplitAppPage() {
     chatMessages: []
   });
 
+  const resetAppScroll = useCallback(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    document.scrollingElement?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    appScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
+
   const navigate = useCallback((nextView: View) => {
     setView(nextView);
     setActiveView(nextView);
     window.history.replaceState(null, "", `/app#${nextView}`);
-    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
-  }, []);
+    resetAppScroll();
+  }, [resetAppScroll]);
+
+  useLayoutEffect(() => {
+    resetAppScroll();
+  }, [activeView, resetAppScroll]);
 
   const clearExpiredSession = useCallback(() => {
     clearPwaSnapshot(tokens?.user?.id ?? currentUser?.id);
@@ -384,7 +397,7 @@ export default function SplitAppPage() {
       setView(routeView);
       setActiveView(routeView);
       normalizeAppRoute(routeView);
-      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+      resetAppScroll();
     }
 
     const onHashChange = () => {
@@ -393,7 +406,7 @@ export default function SplitAppPage() {
       setView(nextView);
       setActiveView(nextView);
       normalizeAppRoute(nextView);
-      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+      resetAppScroll();
     };
 
     window.addEventListener("hashchange", onHashChange);
@@ -441,7 +454,7 @@ export default function SplitAppPage() {
       window.removeEventListener("error", onUnhandledError);
       window.removeEventListener("unhandledrejection", onUnhandledRejection);
     };
-  }, [hydrateFromSnapshot, notifyProblem]);
+  }, [hydrateFromSnapshot, notifyProblem, resetAppScroll]);
 
   useEffect(() => {
     if (!tokens) return;
@@ -1015,6 +1028,7 @@ export default function SplitAppPage() {
           view={activeView}
           onNavigate={navigate}
           loggedIn={Boolean(tokens)}
+          scrollRootRef={appScrollRef}
         >
           <WorkspaceScreen
             view={view}
@@ -1183,15 +1197,17 @@ function PhoneShell({
   view,
   loggedIn,
   children,
-  onNavigate
+  onNavigate,
+  scrollRootRef
 }: {
   view: View;
   loggedIn: boolean;
   children: React.ReactNode;
   onNavigate: (view: View) => void;
+  scrollRootRef: React.RefObject<HTMLDivElement | null>;
 }) {
   return (
-    <div className="min-h-dvh w-full overflow-x-hidden bg-[#1f3d8f]">
+    <div ref={scrollRootRef} data-testid="app-scroll-root" className="min-h-dvh w-full overflow-x-hidden bg-[#1f3d8f]">
       <section className="relative z-10">{children}</section>
 
       {loggedIn ? (

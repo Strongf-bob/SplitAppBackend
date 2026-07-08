@@ -32,8 +32,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v28/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v28"/);
+  assert.match(sw, /splitapp-next-pwa-v29/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v29"/);
   assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
@@ -144,7 +144,7 @@ test("bottom navigation selection follows the requested screen immediately", () 
   assert.match(page, /<PhoneShell[\s\S]*view=\{activeView\}[\s\S]*onNavigate=\{navigate\}/);
   assert.match(page, /<WorkspaceScreen[\s\S]*view=\{view\}/);
   assert.match(page, /setActiveView\(nextView\)/);
-  assert.match(page, /window\.scrollTo\(\{ top: 0, left: 0, behavior: "instant" \}\)/);
+  assert.match(page, /resetAppScroll\(\)/);
   assert.match(page, /event\.preventDefault\(\)/);
 });
 
@@ -153,6 +153,17 @@ test("bottom navigation switches tabs immediately without waiting for exit anima
   assert.match(page, /<AnimatePresence initial=\{false\}>/);
   assert.doesNotMatch(page, /<AnimatePresence mode="wait">/);
   assert.doesNotMatch(page, /onAnimationComplete=\{\(\) => onViewSettled\(view\)\}/);
+});
+
+test("bottom navigation resets the app scroll root after each tab commit", () => {
+  assert.match(page, /useLayoutEffect/);
+  assert.match(page, /const appScrollRef = useRef<HTMLDivElement \| null>\(null\)/);
+  assert.match(page, /scrollRootRef=\{appScrollRef\}/);
+  assert.match(page, /data-testid="app-scroll-root"/);
+  assert.match(page, /resetAppScroll/);
+  assert.match(page, /document\.scrollingElement/);
+  assert.match(page, /appScrollRef\.current\?\.scrollTo\(\{ top: 0, left: 0, behavior: "auto" \}\)/);
+  assert.match(page, /useLayoutEffect\(\(\) => \{\s*resetAppScroll\(\);\s*\}, \[activeView, resetAppScroll\]\)/);
 });
 
 test("PWA hydrates startup data from a user-scoped snapshot cache before network refresh", () => {
@@ -480,7 +491,7 @@ test("home screen follows the Figma balance card and activity sheet composition"
 test("home shell covers the viewport instead of exposing the dark page background", () => {
   assert.match(globals, /--background:\s*240 11% 96%/);
   assert.match(page, /<main className="min-h-dvh w-full overflow-x-hidden bg-\[#1f3d8f\]/);
-  assert.match(page, /<div className="min-h-dvh w-full overflow-x-hidden bg-\[#1f3d8f\]">/);
+  assert.match(page, /<div ref=\{scrollRootRef\} data-testid="app-scroll-root" className="min-h-dvh w-full overflow-x-hidden bg-\[#1f3d8f\]">/);
   assert.match(page, /className="min-h-\[calc\(100dvh-74px\)\] w-full bg-\[#1f3d8f\]"/);
   assert.doesNotMatch(page, /className="min-h-\[calc\(100dvh-74px\)\] w-full overflow-hidden/);
   assert.doesNotMatch(page, /loggedIn && "pb-\[var\(--bottom-nav-reserve\)\]"/);
