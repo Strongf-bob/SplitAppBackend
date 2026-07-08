@@ -302,6 +302,14 @@ def test_deploy_syncs_splitik_llm_env_checked_by_smoke_gate():
     assert "SPLITIK_FAST_CHAT_MODEL_VALUE" in workflow
     assert "deepseek-v4-flash" in workflow
     assert "SPLITIK_INTENT_MODEL_VALUE" in workflow
+    assert (
+        "SPLITIK_INTENT_TIMEOUT_SECONDS: ${{ vars.SPLITIK_INTENT_TIMEOUT_SECONDS || '12' }}"
+        in workflow
+    )
+    assert (
+        "SPLITIK_INTENT_TIMEOUT_SECONDS_VALUE: ${{ vars.SPLITIK_INTENT_TIMEOUT_SECONDS || '12' }}"
+        in workflow
+    )
     assert ".splitik.env.incoming" in workflow
     assert "while IFS='=' read -r KEY VALUE" in workflow
 
