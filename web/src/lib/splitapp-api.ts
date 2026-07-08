@@ -16,6 +16,8 @@ type RefreshTokensResponse = {
   expires_in: number;
 };
 
+let refreshInFlight: Promise<SplitAppTokens> | null = null;
+
 export type UserProfile = {
   id: string;
   name: string;
@@ -247,9 +249,7 @@ export async function api<T>(
   if (response.ok) return (await response.json()) as T;
 
   if (response.status === 401 && tokens?.refresh_token) {
-    const refreshedTokens = await refreshAccessToken(tokens.refresh_token);
-    const nextTokens = { ...tokens, ...refreshedTokens };
-    saveTokens(nextTokens);
+    const nextTokens = await refreshTokensOnce(tokens);
     onTokensRefreshed?.(nextTokens);
     const retry = await fetchWithAuth(path, nextTokens, init);
     if (retry.ok) return (await retry.json()) as T;
@@ -276,6 +276,20 @@ async function refreshAccessToken(refreshToken: string): Promise<RefreshTokensRe
   });
   if (!response.ok) throw new ApiError(response.status, await responseErrorMessage(response), response.headers.get("X-Request-ID") ?? undefined);
   return (await response.json()) as RefreshTokensResponse;
+}
+
+async function refreshTokensOnce(tokens: SplitAppTokens): Promise<SplitAppTokens> {
+  refreshInFlight ??= refreshAccessToken(tokens.refresh_token ?? "")
+    .then((refreshedTokens) => {
+      const nextTokens = { ...tokens, ...refreshedTokens };
+      saveTokens(nextTokens);
+      return nextTokens;
+    })
+    .finally(() => {
+      refreshInFlight = null;
+    });
+
+  return refreshInFlight;
 }
 
 export async function reportClientIssue(
