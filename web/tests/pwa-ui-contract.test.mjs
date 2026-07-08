@@ -361,7 +361,7 @@ test("home add action opens a dedicated event creation screen", () => {
 
 test("home screen follows the Figma balance card and activity sheet composition", () => {
   assert.match(page, /data-testid="home-balance-screen"/);
-  assert.match(page, /w-full grid-rows-\[auto_1fr\] overflow-hidden/);
+  assert.match(page, /min-h-dvh w-full grid-rows-\[auto_1fr\] overflow-hidden/);
   assert.match(page, /fontSize: "var\(--balance-font\)"/);
   assert.match(page, /ArrowUp/);
   assert.match(page, /ArrowDown/);
