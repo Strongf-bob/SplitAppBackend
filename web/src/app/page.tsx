@@ -98,7 +98,7 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v30";
+const clientShellVersion = "splitapp-next-pwa-v31";
 const initialSyncRetryDelayMs = 900;
 const splitikMessageTimeoutMs = 15000;
 
@@ -387,6 +387,8 @@ export default function SplitAppPage() {
   }, [clearExpiredSession, reportProblem]);
 
   useEffect(() => {
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
     const storedTokens = loadTokens();
     setTokens(storedTokens);
     setCurrentUser(storedTokens?.user ?? null);
@@ -449,6 +451,7 @@ export default function SplitAppPage() {
       .catch((error) => setMessage(error instanceof Error ? error.message : "Не удалось войти."));
 
     return () => {
+      window.history.scrollRestoration = previousScrollRestoration;
       removeServiceWorkerListener?.();
       window.removeEventListener("hashchange", onHashChange);
       window.removeEventListener("error", onUnhandledError);
@@ -1393,7 +1396,7 @@ function WorkspaceScreen({
   onNavigate: (view: View) => void;
 }) {
   return (
-    <AnimatePresence initial={false}>
+    <AnimatePresence initial={false} mode="popLayout">
       <motion.div
         key={view}
         className="min-h-[calc(100dvh-74px)] w-full bg-[#1f3d8f]"
