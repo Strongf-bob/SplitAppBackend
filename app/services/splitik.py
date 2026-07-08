@@ -726,6 +726,10 @@ def _heuristic_user_intent(payload: schemas.SplitikMessageRequest) -> str:
 
 
 def _classify_user_intent(payload: schemas.SplitikMessageRequest) -> tuple[str, str | None]:
+    heuristic_intent = _heuristic_user_intent(payload)
+    if heuristic_intent == "chat":
+        return "chat", None
+
     try:
         candidate = splitik_llm.generate_splitik_intent_candidate(
             user_message=payload.message,
@@ -733,13 +737,13 @@ def _classify_user_intent(payload: schemas.SplitikMessageRequest) -> tuple[str, 
         )
     except HTTPException as exc:
         if exc.status_code == 503:
-            return _heuristic_user_intent(payload), None
+            return heuristic_intent, None
         raise
 
     content = candidate.get("content", {})
     intent = str(content.get("intent") if isinstance(content, dict) else "").strip().lower()
     if intent not in {"explain", "chat", "mutation"}:
-        intent = _heuristic_user_intent(payload)
+        intent = heuristic_intent
     model_id = candidate.get("model_id")
     return intent, str(model_id) if model_id else None
 
@@ -1371,10 +1375,12 @@ def send_splitik_message(
             ]
 
         stage = "llm.generate_reply"
+        reply_model_role = "primary" if explanation_requested else "fast_chat"
         reply = splitik_llm.generate_splitik_reply(
             system_prompt=_SYSTEM_PROMPT,
             user_message=payload.message,
             context=context,
+            model_role=reply_model_role,
         )
         reply = strip_disallowed_emoji(reply)
         stage = "guardrail.assistant"
@@ -1418,7 +1424,7 @@ def send_splitik_message(
             request_id=request_id,
             status="success",
             stage="completed",
-            model_ids=["primary"],
+            model_ids=[reply_model_role],
             context_summary=_context_summary(
                 payload,
                 mode=mode,

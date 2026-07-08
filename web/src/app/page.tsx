@@ -98,8 +98,9 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v27";
+const clientShellVersion = "splitapp-next-pwa-v28";
 const initialSyncRetryDelayMs = 900;
+const splitikMessageTimeoutMs = 15000;
 
 const figmaHomeAsset = (name: string) => `/assets/figma-home/${name}`;
 
@@ -903,9 +904,12 @@ export default function SplitAppPage() {
     setChatDraft("");
     setSplitikAttachments([]);
     setIsSplitikSending(true);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), splitikMessageTimeoutMs);
     try {
       const response = await authedApi<SplitikMessageResponse>("/api/splitik/messages", {
         method: "POST",
+        signal: controller.signal,
         body: JSON.stringify({
           session_id: splitikSessionId,
           mode: splitikEventId ? "event" : "general",
@@ -945,6 +949,7 @@ export default function SplitAppPage() {
         { id: `s-${Date.now()}`, from: "splitik", text: splitikErrorMessage(error) }
       ]);
     } finally {
+      window.clearTimeout(timeoutId);
       setIsSplitikSending(false);
     }
   };
@@ -2514,6 +2519,9 @@ function Avatar({ children }: { children: React.ReactNode }) {
 }
 
 function splitikErrorMessage(error: unknown) {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "Сплитик не успел ответить за 15 секунд. Я остановил ожидание, попробуйте отправить еще раз.";
+  }
   if (error instanceof ApiError) {
     if (error.status === 401) return "Сессия истекла. Войдите через Яндекс еще раз.";
     return "Сплитик сейчас не смог ответить. Мы уже получили отчет, попробуйте еще раз чуть позже.";

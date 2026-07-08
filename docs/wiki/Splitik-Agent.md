@@ -10,11 +10,14 @@
 - `SPLITIK_LLM_BASE_URL`
 - `SPLITIK_LLM_API_KEY`
 - `SPLITIK_PRIMARY_MODEL` - primary model for Splitik replies and receipt understanding.
+- `SPLITIK_FAST_CHAT_MODEL` - fast model for plain chat replies; defaults to
+  `deepseek-v4-flash`.
 - `SPLITIK_INTENT_MODEL` - optional small model for the intent-router request before planner;
   recommended `deepseek-v4-flash`. Falls back to `SPLITIK_PRIMARY_MODEL`.
 - `SPLITIK_VERIFICATION_MODEL` - independent verification model for receipt understanding cross-checks.
 - `SPLITIK_ESCALATION_MODEL` - escalation model used when primary and verification results disagree.
-- `SPLITIK_LLM_TIMEOUT_SECONDS`
+- `SPLITIK_LLM_TIMEOUT_SECONDS` - default `12`.
+- `SPLITIK_FAST_CHAT_TIMEOUT_SECONDS` - default `8` for plain chat replies.
 - `SPLITIK_MESSAGE_HOURLY_LIMIT` - default `10` Splitik messages per user per hour.
 - `SPLITIK_MESSAGE_DAILY_LIMIT` - default `30` Splitik messages per user per day.
 - `SPLITIK_MESSAGE_CONCURRENT_LIMIT` - default `1` active Splitik message per user.

@@ -25,12 +25,13 @@ from tests.conftest import EVENT_ID, USER_A, USER_B, USER_C, seed_event, seed_us
 def _mock_llm(monkeypatch):
     calls = []
 
-    def fake_reply(*, system_prompt, user_message, context):
+    def fake_reply(*, system_prompt, user_message, context, model_role="primary"):
         calls.append(
             {
                 "system_prompt": system_prompt,
                 "user_message": user_message,
                 "context": context,
+                "model_role": model_role,
             }
         )
         return "Сплитик: готово."
@@ -108,6 +109,7 @@ def _set_llm_env(monkeypatch):
     monkeypatch.setenv("SPLITIK_LLM_BASE_URL", "https://ai.example/v1")
     monkeypatch.setenv("SPLITIK_LLM_API_KEY", "test-key")
     monkeypatch.setenv("SPLITIK_PRIMARY_MODEL", "primary-model")
+    monkeypatch.delenv("SPLITIK_FAST_CHAT_MODEL", raising=False)
     monkeypatch.delenv("SPLITIK_INTENT_MODEL", raising=False)
     monkeypatch.setenv("SPLITIK_VERIFICATION_MODEL", "verification-model")
     monkeypatch.setenv("SPLITIK_ESCALATION_MODEL", "escalation-model")
@@ -261,7 +263,29 @@ def test_splitik_llm_uses_runtime_primary_model(monkeypatch):
     assert reply == "Сплитик: готово."
     assert requests[0]["url"] == "https://ai.example/v1/chat/completions"
     assert requests[0]["json"]["model"] == "primary-model"
-    assert requests[0]["timeout"] == 60
+    assert requests[0]["timeout"] == 12
+
+
+def test_splitik_llm_fast_chat_defaults_to_deepseek_flash(monkeypatch):
+    _set_llm_env(monkeypatch)
+    requests = []
+
+    def fake_post(url, headers, json, timeout):
+        requests.append({"json": json, "timeout": timeout})
+        return _FakeResponse(body={"choices": [{"message": {"content": "Привет!"}}]})
+
+    monkeypatch.setattr(splitik_llm.httpx, "post", fake_post)
+
+    reply = splitik_llm.generate_splitik_reply(
+        system_prompt="system",
+        user_message="привет",
+        context={"allowed": True},
+        model_role="fast_chat",
+    )
+
+    assert reply == "Привет!"
+    assert requests[0]["json"]["model"] == "deepseek-v4-flash"
+    assert requests[0]["timeout"] == 8
 
 
 def test_splitik_llm_timeout_can_be_overridden(monkeypatch):
@@ -509,14 +533,14 @@ def test_splitik_logs_request_context_summary_and_request_id(db, monkeypatch):
     assert log["context_summary"]["entry_point_type"] == "event"
     assert log["context_summary"]["event_id"] == EVENT_ID
     assert log["context_summary"]["context_counts"]["receipts"] == 0
-    assert log["model_ids"] == ["primary"]
+    assert log["model_ids"] == ["fast_chat"]
     assert log["error"] is None
 
 
 def test_splitik_logs_llm_error_for_later_debugging(db, monkeypatch):
     seed_users(db)
 
-    def fake_reply(*, system_prompt, user_message, context):
+    def fake_reply(*, system_prompt, user_message, context, model_role="primary"):
         raise HTTPException(status_code=502, detail="Splitik LLM provider returned an error.")
 
     monkeypatch.setattr(splitik_llm, "generate_splitik_reply", fake_reply)
@@ -569,7 +593,7 @@ def test_splitik_message_endpoint_passes_request_id_to_interaction_log(db, monke
 def test_splitik_blocks_llm_claiming_direct_state_change(db, monkeypatch):
     seed_users(db)
 
-    def fake_reply(*, system_prompt, user_message, context):
+    def fake_reply(*, system_prompt, user_message, context, model_role="primary"):
         return "Готово, я удалил событие и изменил баланс."
 
     monkeypatch.setattr(splitik_llm, "generate_splitik_reply", fake_reply)
@@ -594,7 +618,7 @@ def test_splitik_blocks_llm_claiming_direct_state_change(db, monkeypatch):
 def test_splitik_blocks_llm_private_friend_spending_leak(db, monkeypatch):
     seed_users(db)
 
-    def fake_reply(*, system_prompt, user_message, context):
+    def fake_reply(*, system_prompt, user_message, context, model_role="primary"):
         return "Bob тратит деньги на бары и такси вне ваших общих событий."
 
     monkeypatch.setattr(splitik_llm, "generate_splitik_reply", fake_reply)
@@ -1256,6 +1280,7 @@ def test_splitik_prompt_requires_markdown_and_no_emoji(db, monkeypatch):
     )
 
     system_prompt = calls[-1]["system_prompt"]
+    assert calls[-1]["model_role"] == "fast_chat"
     assert "Markdown" in system_prompt
     assert "emoji" in system_prompt
     assert "без emoji" in system_prompt
@@ -1263,8 +1288,28 @@ def test_splitik_prompt_requires_markdown_and_no_emoji(db, monkeypatch):
     assert "маркированные списки" in system_prompt
 
 
+def test_splitik_plain_chat_skips_intent_router(db, monkeypatch):
+    calls = _mock_llm(monkeypatch)
+    seed_event(db)
+
+    def fail_intent_router(*, user_message, context):
+        raise AssertionError("plain chat should go directly to the fast chat model")
+
+    monkeypatch.setattr(splitik_llm, "generate_splitik_intent_candidate", fail_intent_router)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(mode="general", message="привет"),
+        USER_A,
+    )
+
+    assert response["intent"] == "chat"
+    assert response["assistant_message"] == "Сплитик: готово."
+    assert calls[-1]["model_role"] == "fast_chat"
+
+
 def test_splitik_strips_emoji_from_llm_reply(db, monkeypatch):
-    def fake_reply(*, system_prompt, user_message, context):
+    def fake_reply(*, system_prompt, user_message, context, model_role="primary"):
         return "Привет! 👋\n\n- Создам черновик 🙂\n- Попрошу подтвердить"
 
     monkeypatch.setattr(splitik_llm, "generate_splitik_reply", fake_reply)
