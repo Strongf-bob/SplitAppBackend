@@ -355,6 +355,30 @@ def generate_splitik_plan_candidate(*, user_message: str, context: dict) -> dict
     )
 
 
+def generate_splitik_intent_candidate(*, user_message: str, context: dict) -> dict:
+    return _generate_json_candidate(
+        model_role="primary",
+        system_prompt=(
+            "Ты intent-router Splitik. Перед JSON planner нужно понять, что хочет "
+            "пользователь. Верни только JSON. "
+            "intent должен быть одним из: explain, chat, mutation. "
+            "mutation - пользователь просит создать событие, добавить чек, изменить "
+            "черновик, разобрать фото чека или выполнить действие с данными SplitApp. "
+            "explain - пользователь просит пояснить, почему он должен, кто кому должен, "
+            "как посчиталась сумма, что произошло в событии, или просит краткую сводку. "
+            "chat - обычный вопрос/ответ без создания или изменения данных. "
+            "Если сомневаешься между explain/chat и mutation, выбирай mutation только "
+            "при явном глаголе действия: создай, добавь, измени, обнови, распарси, "
+            "разбери чек, загрузи. "
+            'Форма ответа: {"intent":"explain|chat|mutation","confidence":0.0,'
+            '"reason":"короткая причина без персональных данных"}.'
+        ),
+        user_label="Сообщение пользователя",
+        user_message=user_message,
+        context=context,
+    )
+
+
 def generate_receipt_image_candidate(
     *,
     model_role: str,

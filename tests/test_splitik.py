@@ -76,6 +76,25 @@ def _mock_plan_candidate(monkeypatch, content):
     return calls
 
 
+def _mock_intent_candidate(monkeypatch, *, intent: str, confidence: float = 0.9):
+    calls = []
+
+    def fake_candidate(*, user_message, context):
+        calls.append({"user_message": user_message, "context": context})
+        return {
+            "model_role": "primary",
+            "model_id": "primary-model",
+            "content": {
+                "intent": intent,
+                "confidence": confidence,
+                "reason": "test",
+            },
+        }
+
+    monkeypatch.setattr(splitik_llm, "generate_splitik_intent_candidate", fake_candidate)
+    return calls
+
+
 class _FakeResponse:
     def __init__(self, status_code=200, body=None):
         self.status_code = status_code
@@ -356,6 +375,33 @@ def test_splitik_llm_is_mocked_and_receives_bounded_event_context(db, monkeypatc
         USER_A,
         USER_B,
     }
+
+
+def test_splitik_explanation_intent_skips_json_planner(db, monkeypatch):
+    calls = _mock_llm(monkeypatch)
+    intent_calls = _mock_intent_candidate(monkeypatch, intent="explain")
+    seed_event(db)
+
+    def fail_planner(*, user_message, context):
+        raise AssertionError("explanation requests should not call the JSON planner")
+
+    monkeypatch.setattr(splitik_llm, "generate_splitik_plan_candidate", fail_planner)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Почему я должен?",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+        ),
+        USER_A,
+    )
+
+    assert response["intent"] == "explain"
+    assert response["assistant_message"] == "Сплитик: готово."
+    assert response["drafts"] == []
+    assert len(intent_calls) == 1
+    assert calls[0]["context"]["event"]["id"] == EVENT_ID
 
 
 def test_splitik_refuses_homework_and_logs_interaction(db, monkeypatch):
@@ -681,6 +727,7 @@ def test_splitik_rejects_instruction_text_as_event_name(db, monkeypatch):
 def test_splitik_planner_creates_multiple_event_drafts(db, monkeypatch):
     seed_users(db)
     _mock_llm(monkeypatch)
+    intent_calls = _mock_intent_candidate(monkeypatch, intent="mutation")
     _mock_plan_candidate(
         monkeypatch,
         {
@@ -709,6 +756,7 @@ def test_splitik_planner_creates_multiple_event_drafts(db, monkeypatch):
     ]
     assert response["assistant_message"] == "Подготовил два черновика событий."
     assert db.events.count_documents({}) == 0
+    assert len(intent_calls) == 1
 
 
 def test_splitik_planner_limits_drafts_per_request_before_writes(db, monkeypatch):
