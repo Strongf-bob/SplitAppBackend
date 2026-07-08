@@ -186,18 +186,18 @@ export class ApiError extends Error {
 export function loadTokens(): SplitAppTokens | null {
   if (typeof window === "undefined") return null;
   try {
-    return JSON.parse(window.localStorage.getItem(tokenKey) || "null") as SplitAppTokens | null;
+    return JSON.parse(window.sessionStorage.getItem(tokenKey) || "null") as SplitAppTokens | null;
   } catch {
     return null;
   }
 }
 
 export function saveTokens(tokens: SplitAppTokens) {
-  window.localStorage.setItem(tokenKey, JSON.stringify(tokens));
+  window.sessionStorage.setItem(tokenKey, JSON.stringify(tokens));
 }
 
 export function clearTokens() {
-  window.localStorage.removeItem(tokenKey);
+  window.sessionStorage.removeItem(tokenKey);
 }
 
 export function yandexRedirectUri() {

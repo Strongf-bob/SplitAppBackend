@@ -9,6 +9,12 @@ from app.services.common import new_uuid, strip_mongo_id, utc_now
 
 _MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 _IMAGE_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+_IMAGE_MAGIC_PREFIXES = {
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/jpg": (b"\xff\xd8\xff",),
+    "image/png": (b"\x89PNG\r\n\x1a\n",),
+    "image/webp": (b"RIFF",),
+}
 
 
 def _bucket_name() -> str | None:
@@ -29,6 +35,13 @@ def _public_metadata(attachment: dict) -> dict:
     cleaned.pop("key", None)
     cleaned.pop("content", None)
     return cleaned
+
+
+def _content_matches_type(content_type: str, content: bytes) -> bool:
+    prefixes = _IMAGE_MAGIC_PREFIXES.get(content_type, ())
+    if content_type == "image/webp":
+        return len(content) >= 12 and content.startswith(b"RIFF") and content[8:12] == b"WEBP"
+    return any(content.startswith(prefix) for prefix in prefixes)
 
 
 def create_attachment(
@@ -52,6 +65,8 @@ def create_attachment(
     normalized_content_type = content_type.strip().lower()
     if normalized_content_type not in _IMAGE_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="Attachment must be an image.")
+    if not _content_matches_type(normalized_content_type, content):
+        raise HTTPException(status_code=400, detail="Attachment content does not match image type.")
     attachment_id = new_uuid()
     extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
     now = utc_now()

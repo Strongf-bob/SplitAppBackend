@@ -178,7 +178,22 @@ def test_api_paths_still_require_bearer_token():
     assert response.status_code == 401
 
 
-def test_pwa_static_routes_are_registered():
+def test_pwa_static_routes_are_registered(monkeypatch, tmp_path):
+    web_root = tmp_path / "web"
+    out_root = web_root / "out"
+    assets_root = out_root / "assets"
+    next_static_root = out_root / "_next" / "static" / "chunks"
+    assets_root.mkdir(parents=True)
+    next_static_root.mkdir(parents=True)
+    (out_root / "index.html").write_text("<!doctype html><title>SplitApp</title>")
+    (out_root / "manifest.webmanifest").write_text(
+        json.dumps({"name": "SplitApp", "short_name": "SplitApp"})
+    )
+    (out_root / "sw.js").write_text('const CACHE_NAME = "splitapp-next-pwa-test";')
+    (assets_root / "icon.svg").write_text("<svg />")
+    (next_static_root / "main-app.js").write_text("console.log('next');")
+    monkeypatch.setattr(app_main, "WEB_ROOT", web_root)
+
     api = FastAPI(dependencies=[Depends(require_auth_token)])
     configure_pwa(api)
 
@@ -195,6 +210,32 @@ def test_pwa_static_routes_are_registered():
     assert "CACHE_NAME" in service_worker.text
     next_asset = client.get("/_next/static/chunks/main-app.js")
     assert next_asset.status_code in {200, 404}
+
+
+def test_legacy_vanilla_pwa_shell_is_not_tracked():
+    legacy_paths = [
+        PROJECT_ROOT / "web" / "index.html",
+        PROJECT_ROOT / "web" / "sw.js",
+        PROJECT_ROOT / "web" / "manifest.webmanifest",
+        PROJECT_ROOT / "web" / "assets" / "app.js",
+        PROJECT_ROOT / "web" / "assets" / "app.css",
+    ]
+
+    assert [path for path in legacy_paths if path.exists()] == []
+
+
+def test_pwa_routes_are_not_registered_without_export(monkeypatch, tmp_path):
+    web_root = tmp_path / "web"
+    web_root.mkdir()
+    monkeypatch.setattr(app_main, "WEB_ROOT", web_root)
+
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+    configure_pwa(api)
+    client = TestClient(api)
+
+    assert client.get("/").status_code == 404
+    assert client.get("/app").status_code == 404
+    assert client.get("/manifest.webmanifest").status_code == 404
 
 
 def test_public_root_is_install_landing_page():
@@ -215,7 +256,22 @@ def test_public_root_is_install_landing_page():
     assert "motion" in app_page
 
 
-def test_pwa_static_routes_support_head_smoke_checks():
+def test_pwa_static_routes_support_head_smoke_checks(monkeypatch, tmp_path):
+    web_root = tmp_path / "web"
+    out_root = web_root / "out"
+    assets_root = out_root / "assets"
+    next_static_root = out_root / "_next" / "static" / "chunks"
+    assets_root.mkdir(parents=True)
+    next_static_root.mkdir(parents=True)
+    (out_root / "index.html").write_text("<!doctype html><title>SplitApp</title>")
+    (out_root / "manifest.webmanifest").write_text(
+        json.dumps({"name": "SplitApp", "short_name": "SplitApp"})
+    )
+    (out_root / "sw.js").write_text('const CACHE_NAME = "splitapp-next-pwa-test";')
+    (assets_root / "icon.svg").write_text("<svg />")
+    (next_static_root / "main-app.js").write_text("console.log('next');")
+    monkeypatch.setattr(app_main, "WEB_ROOT", web_root)
+
     api = FastAPI(dependencies=[Depends(require_auth_token)])
     configure_pwa(api)
 
@@ -281,6 +337,24 @@ def test_openapi_exposes_domain_enums_for_write_payloads():
         "payment_request",
     }
     assert set(splitik_message["mode"]["enum"]) == {"general", "event", "receipt", "member"}
+
+
+def test_openapi_bounds_user_controlled_write_strings():
+    schema = app_main.app.openapi()["components"]["schemas"]
+
+    assert schema["UserUpdate"]["properties"]["name"]["anyOf"][0]["maxLength"] == 120
+    assert schema["UserUpdate"]["properties"]["email"]["anyOf"][0]["maxLength"] == 254
+    assert schema["UserUpdate"]["properties"]["avatar_url"]["anyOf"][0]["maxLength"] == 500
+    assert schema["UserUpdate"]["properties"]["payment_phone"]["anyOf"][0]["maxLength"] == 32
+    assert schema["EventCreate"]["properties"]["name"]["maxLength"] == 120
+    assert schema["EventUpdate"]["properties"]["name"]["anyOf"][0]["maxLength"] == 120
+    assert schema["CreateReceiptItemRequest-Input"]["properties"]["name"]["maxLength"] == 160
+    assert schema["CreateReceiptRequest-Input"]["properties"]["title"]["maxLength"] == 160
+    assert schema["UpdateReceiptRequest"]["properties"]["title"]["anyOf"][0]["maxLength"] == 160
+    assert schema["PaymentRequestCreate"]["properties"]["note"]["maxLength"] == 500
+    assert schema["DisputeCreate"]["properties"]["reason"]["maxLength"] == 1000
+    assert schema["DisputeResolve"]["properties"]["resolution_note"]["maxLength"] == 1000
+    assert schema["ReceiptShareReviewDispute"]["properties"]["reason"]["maxLength"] == 1000
 
 
 def test_ci_runs_format_and_security_audit_gates():

@@ -1,6 +1,6 @@
 # SplitApp Project Backlog
 
-Дата сверки: 2026-06-29.
+Дата сверки: 2026-07-09.
 
 Этот файл разделяет исходный список задач на четыре группы:
 
@@ -15,7 +15,7 @@
 
 - [x] **AGENTS.md для backend** — правила работы Codex добавлены в репозиторий.
 - [x] **Backend wiki в репозитории** — добавлены страницы в `docs/wiki`.
-- [x] **README с локальным запуском и server-runbook** — описаны `.env`, MongoDB, `make run-dev`, systemd.
+- [x] **README с локальным запуском и server-runbook** — описаны `.env`, MongoDB, `make run-dev`, Docker Compose и legacy systemd path.
 - [x] **Security baseline** — добавлен `docs/security-baseline.md`.
 - [x] **Remediation report** — добавлен `docs/remediation-report.md`.
 - [x] **Backend TODO** — этот файл ведет backlog по backend scope.
@@ -45,7 +45,8 @@
 - [x] **Backend CI** — добавлен GitHub Actions workflow для lint/test.
 - [x] **Structured logging** — request logs и request/correlation ID добавлены.
 - [x] **Backend metrics** — Prometheus `/api/metrics` и optional Sentry через `SENTRY_DSN`.
-- [x] **Systemd deployment path** — добавлен `deploy/splitapp-backend.service`.
+- [x] **Docker Compose deployment path** — Dockerfile, Compose runtime и GitHub Actions deploy используют основной production-контур.
+- [x] **Systemd deployment path** — `deploy/splitapp-backend.service` оставлен как legacy ручной вариант.
 - [x] **Backend pagination** — list endpoints переведены на `items` / `limit` / `offset` / `total`.
 - [x] **OpenAPI sync** — `openapi.yaml` обновлен под текущие backend contracts.
 
@@ -83,7 +84,7 @@
 - [ ] **GitHub environments** — production environment с approvals.
 - [ ] **Repository secrets** — production SSH host/user/key, env path, Sentry DSN и другие deploy secrets.
 - [ ] **CD activation** — workflow есть, но деплой требует secrets и production server setup.
-- [ ] **Production server setup** — `/opt/splitapp/backend`, `/etc/splitapp/backend.env`, systemd enable/start.
+- [ ] **Production server setup** — `DEPLOY_PATH/.env`, Docker/Compose доступ для `DEPLOY_USER`, health/smoke checks после deploy.
 - [ ] **Grafana/Sentry/alerts** — реальные dashboards, alert rules и error project setup.
 - [ ] **Wiki publication check** — workflow синхронизации есть; нужно проверить, что GitHub Wiki включена и action может пушить в `.wiki.git`.
 - [ ] **AI-агент для ревью коммитов** — выбрать GitHub app/action и правила запуска на PR.
@@ -116,7 +117,6 @@
 ## Предлагаемый Порядок Работы
 
 1. Закрыть GitHub setup: branch protection, templates, labels, environments, secrets.
-2. Довести production deploy: server env, systemd, CD secrets, smoke check после deploy.
-3. Добавить Docker для локальной разработки, если текущий compose/runtime недостаточен для команды.
-4. Перейти во frontend-репозиторий и закрыть интеграцию уже готовых backend endpoints: payments, receipt delete/images, pagination, invites, friends, categories, export.
-5. После этого брать новые product features: recurring receipts, PDF export, multicurrency, push notifications.
+2. Довести production deploy: server env, Docker Compose runtime, CD secrets, smoke check после deploy.
+3. Перейти во frontend-репозиторий и закрыть интеграцию уже готовых backend endpoints: payments, receipt delete/images, pagination, invites, friends, categories, export.
+4. После этого брать новые product features: recurring receipts, PDF export, multicurrency, push notifications.

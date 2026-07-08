@@ -62,7 +62,7 @@ iOS app использует:
 - Хранить refresh token только в secure storage.
 - На `401` сделать refresh один раз и повторить исходный request.
 - `403` трактовать как authorization/membership failure, а не как повод для сетевого retry.
-- Money values декодировать decimal-safe способом.
+- Money values декодировать как integer kopecks; не выполнять расчеты через floating point.
 - Receipt image upload делать multipart form-data с JPEG.
 - Для чтения изображений чеков использовать presigned URLs от backend.
 - Не доверять local cached membership для authorization; backend остается authoritative.

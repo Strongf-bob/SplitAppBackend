@@ -238,6 +238,13 @@ test("parallel authenticated startup requests share one token refresh", () => {
   assert.match(api, /refreshInFlight = null/);
 });
 
+test("PWA stores bearer credentials in session storage instead of local storage", () => {
+  assert.match(api, /window\.sessionStorage\.getItem\(tokenKey\)/);
+  assert.match(api, /window\.sessionStorage\.setItem\(tokenKey, JSON\.stringify\(tokens\)\)/);
+  assert.match(api, /window\.sessionStorage\.removeItem\(tokenKey\)/);
+  assert.doesNotMatch(api, /window\.localStorage\.(getItem|setItem|removeItem)\(tokenKey/);
+});
+
 test("authenticated startup tolerates malformed page payloads without crashing the route", () => {
   assert.match(page, /Promise\.allSettled\(\[/);
   assert.match(page, /initial_sync_partial/);

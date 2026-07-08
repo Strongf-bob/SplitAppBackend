@@ -78,8 +78,8 @@ cd web
 npm run build
 ```
 
-FastAPI обслуживает `web/out/`, а если сборки еще нет, падает обратно на старый
-статический shell для локальных smoke checks.
+FastAPI обслуживает `web/out/`; перед production или локальной проверкой PWA
+нужно выполнить `npm run build` в `web/`.
 
 ## Запуск на сервере
 

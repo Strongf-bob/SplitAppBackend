@@ -8,9 +8,10 @@
 - [Локальный запуск](Local-Setup) - как поднять backend на машине разработчика.
 - [API](API-Reference) - карта endpoints и ссылка на OpenAPI-контракт.
 - [Доменные сценарии](Domain-Flows) - как связаны события, чеки, балансы и платежи.
+- [Data model](Data-Model) - внутренняя схема MongoDB collections, связей, lifecycle статусов и source-of-truth правил.
 - [Интеграция с iOS](iOS-Frontend-Integration) - контракт backend для frontend-репозитория SplitApp.
 - [Аутентификация и безопасность](Authentication-And-Security) - токены, права доступа, storage и базовые правила безопасности.
-- [Операции и деплой](Operations-And-Deployment) - production runtime, env-переменные, systemd, логи и метрики.
+- [Операции и деплой](Operations-And-Deployment) - production runtime, env-переменные, Docker Compose, логи и метрики.
 - [Тесты и CI](Testing-And-CI) - локальные проверки, GitHub Actions и правила для backend-изменений.
 - [Поддержка Wiki](Wiki-Maintenance) - как Wiki синхронизируется из репозитория.
 - [Сплитик](Splitik-Agent) - контекстный LLM-агент с backend capabilities и подтверждаемыми draft actions.
@@ -41,7 +42,7 @@
 - Контекстный агент Сплитик для объяснения событий, расходов, участников и создания подтверждаемых draft actions.
 - Lightweight rate limiting for sensitive auth/search/invite flows.
 - Явный CORS, структурные request-логи, Prometheus-метрики и optional error reporting.
-- Production-деплой через systemd.
+- Production-деплой через Docker Compose с FastAPI, MongoDB, observability сервисами и optional CI/CD deploy over SSH.
 
 ## Источник правды
 

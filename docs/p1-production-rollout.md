@@ -65,7 +65,7 @@ curl -I https://split-app.ru/
 curl -I https://split-app.ru/app
 curl -I https://split-app.ru/manifest.webmanifest
 curl -I https://split-app.ru/sw.js
-curl -I https://split-app.ru/assets/app.js
+curl -I "https://split-app.ru$(find web/out/_next/static/chunks -name '*.js' | head -n 1 | sed 's#web/out##')"
 ```
 
 Expected result:
