@@ -361,7 +361,7 @@ test("home add action opens a dedicated event creation screen", () => {
 
 test("home screen follows the Figma balance card and activity sheet composition", () => {
   assert.match(page, /data-testid="home-balance-screen"/);
-  assert.match(page, /w-full overflow-hidden/);
+  assert.match(page, /w-full grid-rows-\[auto_1fr\] overflow-hidden/);
   assert.match(page, /fontSize: "var\(--balance-font\)"/);
   assert.match(page, /ArrowUp/);
   assert.match(page, /ArrowDown/);
@@ -370,6 +370,7 @@ test("home screen follows the Figma balance card and activity sheet composition"
   assert.match(page, /Сканировать чек/);
   assert.match(page, /Добавить платеж/);
   assert.match(page, /rounded-t-\[28px\]/);
+  assert.match(page, /min-h-full rounded-t-\[28px\] bg-\[#f5f5f7\]/);
   assert.match(page, /data-testid="home-activity-list"/);
   assert.match(page, /overflow-y-auto/);
   assert.doesNotMatch(page, />Все<\/Badge>/);
