@@ -290,6 +290,22 @@ def test_ci_runs_format_and_security_audit_gates():
     assert "make security-audit" in workflow
 
 
+def test_deploy_syncs_splitik_llm_env_checked_by_smoke_gate():
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+
+    assert "SPLITIK_LLM_BASE_URL_SECRET" in workflow
+    assert "secrets.SPLITIK_LLM_BASE_URL || secrets.OCR_LLM_URL" in workflow
+    assert "SPLITIK_LLM_API_KEY_SECRET" in workflow
+    assert "secrets.SPLITIK_LLM_API_KEY || secrets.OCR_LLM_AUTH_TOKEN" in workflow
+    assert "SPLITIK_PRIMARY_MODEL_SECRET" in workflow
+    assert "secrets.SPLITIK_PRIMARY_MODEL || secrets.OCR_LLM_MODEL" in workflow
+    assert "SPLITIK_FAST_CHAT_MODEL_VALUE" in workflow
+    assert "deepseek-v4-flash" in workflow
+    assert "SPLITIK_INTENT_MODEL_VALUE" in workflow
+    assert ".splitik.env.incoming" in workflow
+    assert "while IFS='=' read -r KEY VALUE" in workflow
+
+
 def test_requirements_are_pinned_for_reproducible_installs():
     requirements = (PROJECT_ROOT / "requirements.txt").read_text().splitlines()
     package_lines = [
