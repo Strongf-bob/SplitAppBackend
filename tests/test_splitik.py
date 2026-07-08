@@ -1536,6 +1536,24 @@ def test_splitik_attachment_upload_works_without_object_storage(db, fake_s3, mon
     assert fake_s3.objects == {}
 
 
+def test_splitik_attachment_rejects_mismatched_image_bytes(db, fake_s3, monkeypatch):
+    monkeypatch.delenv("S3_BUCKET", raising=False)
+
+    with pytest.raises(HTTPException) as exc:
+        splitik_attachments.create_attachment(
+            db,
+            fake_s3,
+            actor_user_id=USER_A,
+            filename="receipt.png",
+            content_type="image/png",
+            content=b"not-a-png",
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "Attachment content does not match image type."
+    assert db.splitik_attachments.count_documents({"owner_user_id": USER_A}) == 0
+
+
 def test_splitik_attachment_upload_daily_limit(db, fake_s3, monkeypatch):
     monkeypatch.setenv("SPLITIK_ATTACHMENT_DAILY_LIMIT", "1")
     monkeypatch.delenv("S3_BUCKET", raising=False)

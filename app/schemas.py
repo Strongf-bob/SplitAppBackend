@@ -111,12 +111,12 @@ class FriendshipPage(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    name: str | None = None
-    email: str | None = None
-    avatar_url: str | None = None
+    name: str | None = Field(default=None, max_length=120)
+    email: str | None = Field(default=None, max_length=254)
+    avatar_url: str | None = Field(default=None, max_length=500)
     public_handle: str | None = None
     discovery_enabled: bool | None = None
-    payment_phone: str | None = None
+    payment_phone: str | None = Field(default=None, max_length=32)
     payment_phone_visibility: PaymentPhoneVisibility | None = None
 
 
@@ -183,7 +183,7 @@ class RefreshResponse(BaseModel):
 
 
 class EventCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=120)
     split_strategy: SplitStrategy = "equal_default"
     receipt_creation_policy: ReceiptCreationPolicy = "participants_can_add"
     receipt_finalization_policy: ReceiptFinalizationPolicy = "payer_finalizes"
@@ -196,7 +196,7 @@ class EventCreate(BaseModel):
 
 
 class EventUpdate(BaseModel):
-    name: str | None = None
+    name: str | None = Field(default=None, max_length=120)
     is_closed: bool | None = None
     split_strategy: SplitStrategy | None = None
     receipt_creation_policy: ReceiptCreationPolicy | None = None
@@ -289,7 +289,7 @@ class ShareItem(BaseModel):
 
 
 class CreateReceiptItemRequest(BaseModel):
-    name: str = ""
+    name: str = Field(default="", max_length=160)
     cost_kopecks: int = Field(gt=0)
     split_mode: str = "custom"
     share_items: list[CreateShareItemRequest] = Field(min_length=1)
@@ -306,7 +306,7 @@ class ReceiptItem(BaseModel):
 
 class CreateReceiptRequest(BaseModel):
     payer_id: UUID
-    title: str = ""
+    title: str = Field(default="", max_length=160)
     category: str | None = None
     total_amount_kopecks: int = Field(gt=0)
     items: list[CreateReceiptItemRequest] = Field(min_length=1)
@@ -350,7 +350,7 @@ class ReceiptAIDraftResponse(BaseModel):
 
 
 class UpdateReceiptRequest(BaseModel):
-    title: str | None = None
+    title: str | None = Field(default=None, max_length=160)
     category: str | None = None
     total_amount_kopecks: int | None = Field(default=None, gt=0)
     items: list[CreateReceiptItemRequest] | None = None
@@ -415,7 +415,7 @@ class ReceiptShareReviewPage(BaseModel):
 
 
 class ReceiptShareReviewDispute(BaseModel):
-    reason: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=1000)
 
 
 class ConfirmationSummary(BaseModel):
@@ -501,7 +501,7 @@ class PaymentRequestCreate(BaseModel):
     debtor_id: UUID
     creditor_id: UUID
     amount_kopecks: int = Field(gt=0)
-    note: str = ""
+    note: str = Field(default="", max_length=500)
     deadline_at: datetime | None = None
 
 
@@ -534,11 +534,11 @@ class PaymentRequestPage(BaseModel):
 class DisputeCreate(BaseModel):
     resource_type: DisputeResourceType
     resource_id: UUID
-    reason: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=1000)
 
 
 class DisputeResolve(BaseModel):
-    resolution_note: str = ""
+    resolution_note: str = Field(default="", max_length=1000)
 
 
 class Dispute(BaseModel):

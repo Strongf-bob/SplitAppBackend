@@ -4914,6 +4914,7 @@
         "properties": {
           "name": {
             "type": "string",
+            "maxLength": 160,
             "title": "Name",
             "default": ""
           },
@@ -4947,6 +4948,7 @@
         "properties": {
           "name": {
             "type": "string",
+            "maxLength": 160,
             "title": "Name",
             "default": ""
           },
@@ -4985,6 +4987,7 @@
           },
           "title": {
             "type": "string",
+            "maxLength": 160,
             "title": "Title",
             "default": ""
           },
@@ -5077,6 +5080,7 @@
           },
           "title": {
             "type": "string",
+            "maxLength": 160,
             "title": "Title",
             "default": ""
           },
@@ -5315,6 +5319,7 @@
           },
           "reason": {
             "type": "string",
+            "maxLength": 1000,
             "minLength": 1,
             "title": "Reason"
           }
@@ -5362,6 +5367,7 @@
         "properties": {
           "resolution_note": {
             "type": "string",
+            "maxLength": 1000,
             "title": "Resolution Note",
             "default": ""
           }
@@ -5569,6 +5575,8 @@
         "properties": {
           "name": {
             "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
             "title": "Name"
           },
           "split_strategy": {
@@ -5882,7 +5890,8 @@
           "name": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 120
               },
               {
                 "type": "null"
@@ -6523,6 +6532,7 @@
           },
           "note": {
             "type": "string",
+            "maxLength": 500,
             "title": "Note",
             "default": ""
           },
@@ -7140,6 +7150,7 @@
         "properties": {
           "reason": {
             "type": "string",
+            "maxLength": 1000,
             "minLength": 1,
             "title": "Reason"
           }
@@ -7771,7 +7782,8 @@
           "title": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 160
               },
               {
                 "type": "null"
@@ -8342,7 +8354,8 @@
           "name": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 120
               },
               {
                 "type": "null"
@@ -8353,7 +8366,8 @@
           "email": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 254
               },
               {
                 "type": "null"
@@ -8364,7 +8378,8 @@
           "avatar_url": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 500
               },
               {
                 "type": "null"
@@ -8397,7 +8412,8 @@
           "payment_phone": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 32
               },
               {
                 "type": "null"

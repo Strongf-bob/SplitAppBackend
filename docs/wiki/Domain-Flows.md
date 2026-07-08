@@ -52,7 +52,7 @@
 
 - `debitor_id` должен деньги.
 - `creditor_id` должен получить деньги.
-- `amount` - decimal money value.
+- `amount_kopecks` - integer amount in kopecks.
 
 ## Payment confirmation flow
 
@@ -73,4 +73,3 @@
 - Любые будущие money-changing operations.
 
 Read endpoints должны продолжать работать для event members.
-

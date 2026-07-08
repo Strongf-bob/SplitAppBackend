@@ -133,11 +133,11 @@ def configure_request_logging(api: FastAPI) -> None:
 
 
 def configure_pwa(api: FastAPI) -> None:
-    if not WEB_ROOT.exists():
+    pwa_root = WEB_ROOT / "out"
+    if not (pwa_root / "index.html").exists():
         return
 
-    pwa_root = WEB_ROOT / "out" if (WEB_ROOT / "out" / "index.html").exists() else WEB_ROOT
-    assets_root = pwa_root / "assets" if (pwa_root / "assets").exists() else WEB_ROOT / "assets"
+    assets_root = pwa_root / "assets"
     if assets_root.exists():
         api.mount("/assets", StaticFiles(directory=assets_root), name="pwa-assets")
 
@@ -162,16 +162,12 @@ def configure_pwa(api: FastAPI) -> None:
     @api.head("/manifest.webmanifest", include_in_schema=False)
     async def pwa_manifest() -> FileResponse:
         manifest_path = pwa_root / "manifest.webmanifest"
-        if not manifest_path.exists():
-            manifest_path = WEB_ROOT / "manifest.webmanifest"
         return FileResponse(manifest_path, media_type="application/manifest+json")
 
     @api.get("/sw.js", include_in_schema=False)
     @api.head("/sw.js", include_in_schema=False)
     async def pwa_service_worker() -> FileResponse:
         service_worker_path = pwa_root / "sw.js"
-        if not service_worker_path.exists():
-            service_worker_path = WEB_ROOT / "sw.js"
         return FileResponse(service_worker_path, media_type="application/javascript")
 
 

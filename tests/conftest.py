@@ -14,7 +14,7 @@ PAYMENT_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
 
 @pytest.fixture(autouse=True)
 def jwt_secret(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    monkeypatch.setenv("JWT_SECRET", "test-secret-with-at-least-32-bytes")
     monkeypatch.delenv("JWT_REFRESH_REUSE_GRACE_SECONDS", raising=False)
 
 
