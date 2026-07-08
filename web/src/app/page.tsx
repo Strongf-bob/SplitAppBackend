@@ -1300,7 +1300,7 @@ function HomeScreen({
     tone: "text-slate-500"
   }));
   return (
-    <div data-testid="home-balance-screen" className="grid min-h-[calc(100dvh-92px)] w-full overflow-hidden content-start bg-[#1f3d8f] text-white">
+    <div data-testid="home-balance-screen" className="grid min-h-[calc(100dvh-92px)] w-full grid-rows-[auto_1fr] overflow-hidden bg-[#1f3d8f] text-white">
       <section className="mx-auto grid w-[var(--content-width)] gap-[var(--home-hero-gap)] pb-[clamp(1.5rem,5dvh,2.25rem)] pt-[max(env(safe-area-inset-top),clamp(1.5rem,5dvh,2.25rem))]">
         <p className="break-words text-center font-black leading-none tracking-normal" style={{ fontSize: "var(--balance-font)" }}>{money(balance)}</p>
         <div className="flex flex-wrap justify-center gap-x-[clamp(1rem,5vw,1.75rem)] gap-y-3 text-[clamp(0.9375rem,4.7vw,1.25rem)] font-black leading-none">
@@ -1338,7 +1338,7 @@ function HomeScreen({
         </div>
       </section>
 
-      <section className="rounded-t-[28px] bg-[#f5f5f7] pb-[var(--bottom-nav-reserve)] pt-[clamp(1.5rem,5vw,2rem)] text-slate-950">
+      <section className="min-h-full rounded-t-[28px] bg-[#f5f5f7] pb-[var(--bottom-nav-reserve)] pt-[clamp(1.5rem,5vw,2rem)] text-slate-950">
         <div className="mx-auto w-[var(--content-width)]">
         <div className="mb-[clamp(1.25rem,5vw,1.75rem)]">
           <h3 className="text-[clamp(1.625rem,7vw,1.875rem)] font-black leading-none">Активность</h3>
