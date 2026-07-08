@@ -32,8 +32,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v25/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v25"/);
+  assert.match(sw, /splitapp-next-pwa-v26/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v26"/);
   assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
@@ -56,7 +56,15 @@ test("PWA uses Montserrat typography from the Figma import", () => {
   assert.match(layout, /import \{ Montserrat \} from "next\/font\/google"/);
   assert.match(layout, /subsets: \["latin", "cyrillic"\]/);
   assert.match(layout, /variable: "--font-montserrat"/);
+  assert.match(layout, /\$\{montserrat\.variable\} \$\{montserrat\.className\}/);
   assert.match(globals, /--font-sans:\s*var\(--font-montserrat\), Montserrat/);
+});
+
+test("PWA displays money as rounded rubles without kopecks", () => {
+  assert.match(api, /const rubles = Math\.round\(kopecks \/ 100\)/);
+  assert.match(api, /maximumFractionDigits: 0/);
+  assert.match(api, /return `\$\{new Intl\.NumberFormat\("ru-RU", \{ maximumFractionDigits: 0 \}\)\.format\(rubles\)\} ₽`/);
+  assert.doesNotMatch(api, /style: "currency", currency: "RUB"/);
 });
 
 test("real mobile app shell does not draw a fake phone around the app", () => {
@@ -370,7 +378,7 @@ test("app surfaces use responsive layout rails instead of raw viewport edges", (
 
   assert.match(page, /mx-auto w-\[var\(--content-width\)\]/);
   assert.match(page, /fixed bottom-\[max\(env\(safe-area-inset-bottom\),2\.25rem\)\] left-1\/2 z-30 w-\[var\(--nav-width\)\] -translate-x-1\/2/);
-  assert.match(page, /data-testid=\{testId\} className="grid min-h-\[calc\(100dvh-92px\)\] bg-\[#1f3d8f\] text-white"/);
+  assert.match(page, /data-testid=\{testId\} className="grid min-h-dvh bg-\[#1f3d8f\] text-white"/);
   assert.doesNotMatch(page, /-mx-3 -mt-3/);
   assert.doesNotMatch(page, /fixed inset-x-3 bottom-0/);
 });
@@ -469,8 +477,18 @@ test("home shell covers the viewport instead of exposing the dark page backgroun
   assert.match(globals, /--background:\s*240 11% 96%/);
   assert.match(page, /<main className="min-h-dvh w-full overflow-x-hidden bg-\[#1f3d8f\]/);
   assert.match(page, /<div className="min-h-dvh w-full overflow-x-hidden bg-\[#1f3d8f\]">/);
-  assert.match(page, /className="min-h-\[calc\(100dvh-74px\)\] w-full overflow-hidden/);
+  assert.match(page, /className="min-h-\[calc\(100dvh-74px\)\] w-full bg-\[#1f3d8f\]"/);
+  assert.doesNotMatch(page, /className="min-h-\[calc\(100dvh-74px\)\] w-full overflow-hidden/);
   assert.doesNotMatch(page, /loggedIn && "pb-\[var\(--bottom-nav-reserve\)\]"/);
+});
+
+test("deep links normalize app path screens into hash navigation", () => {
+  assert.match(page, /function parsePathView\(pathname: string\): View \| null/);
+  assert.match(page, /pathname\.match\(\/\^\\\/app\\\/\(\[\^\/\?#\]\+\)\/\)/);
+  assert.match(page, /function parseRouteView\(pathname: string, hash: string\): View \| null/);
+  assert.match(page, /return parseHashView\(hash\) \?\? parsePathView\(pathname\)/);
+  assert.match(page, /function normalizeAppRoute\(view: View\)/);
+  assert.match(page, /window\.history\.replaceState\(null, "", `\/app#\$\{view\}`\)/);
 });
 
 test("home inbox action badge is conditional on unread incoming items", () => {

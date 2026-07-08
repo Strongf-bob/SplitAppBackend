@@ -98,7 +98,7 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v25";
+const clientShellVersion = "splitapp-next-pwa-v26";
 const initialSyncRetryDelayMs = 900;
 
 const figmaHomeAsset = (name: string) => `/assets/figma-home/${name}`;
@@ -172,7 +172,7 @@ export default function SplitAppPage() {
   const navigate = useCallback((nextView: View) => {
     setView(nextView);
     setActiveView(nextView);
-    window.history.replaceState(null, "", `#${nextView}`);
+    window.history.replaceState(null, "", `/app#${nextView}`);
   }, []);
 
   const clearExpiredSession = useCallback(() => {
@@ -377,12 +377,19 @@ export default function SplitAppPage() {
     setCurrentUser(storedTokens?.user ?? null);
     hydrateFromSnapshot(loadPwaSnapshot(storedTokens?.user?.id));
 
-    const hashView = parseHashView(window.location.hash);
-    if (hashView) setView(hashView);
+    const routeView = parseRouteView(window.location.pathname, window.location.hash);
+    if (routeView) {
+      setView(routeView);
+      setActiveView(routeView);
+      normalizeAppRoute(routeView);
+    }
 
     const onHashChange = () => {
-      const nextView = parseHashView(window.location.hash);
-      if (nextView) setView(nextView);
+      const nextView = parseRouteView(window.location.pathname, window.location.hash);
+      if (!nextView) return;
+      setView(nextView);
+      setActiveView(nextView);
+      normalizeAppRoute(nextView);
     };
 
     window.addEventListener("hashchange", onHashChange);
@@ -1363,7 +1370,7 @@ function WorkspaceScreen({
     <AnimatePresence initial={false}>
       <motion.div
         key={view}
-        className="min-h-[calc(100dvh-74px)] w-full overflow-hidden bg-[#1f3d8f]"
+        className="min-h-[calc(100dvh-74px)] w-full bg-[#1f3d8f]"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -6 }}
@@ -1580,8 +1587,8 @@ function SvgScreenFrame({
   sheetClassName?: string;
 }) {
   return (
-    <div data-testid={testId} className="grid min-h-[calc(100dvh-92px)] bg-[#1f3d8f] text-white">
-      <section className="mx-auto grid w-[var(--content-width)] gap-5 pb-8 pt-6">
+    <div data-testid={testId} className="grid min-h-dvh bg-[#1f3d8f] text-white">
+      <section className="mx-auto grid w-[var(--content-width)] gap-5 pb-[clamp(1.25rem,4dvh,2rem)] pt-[max(env(safe-area-inset-top),clamp(1.5rem,5dvh,2.25rem))]">
         <div className="flex min-h-12 items-center justify-between gap-4">
           <h2 className="text-[32px] font-black leading-none tracking-normal">{title}</h2>
           {action}
@@ -2514,6 +2521,21 @@ function splitikErrorMessage(error: unknown) {
 function parseHashView(hash: string): View | null {
   const value = hash.replace("#", "");
   return validViews.includes(value as View) ? (value as View) : null;
+}
+
+function parsePathView(pathname: string): View | null {
+  const match = pathname.match(/^\/app\/([^/?#]+)/);
+  const value = match?.[1] ?? "";
+  return validViews.includes(value as View) ? (value as View) : null;
+}
+
+function parseRouteView(pathname: string, hash: string): View | null {
+  return parseHashView(hash) ?? parsePathView(pathname);
+}
+
+function normalizeAppRoute(view: View) {
+  if (window.location.pathname === "/app" && window.location.hash === `#${view}`) return;
+  window.history.replaceState(null, "", `/app#${view}`);
 }
 
 function viewToReportScreen(view: View): ClientReportScreen {
