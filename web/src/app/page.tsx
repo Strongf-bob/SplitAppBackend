@@ -3,7 +3,6 @@
 import { CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowLeft,
   ArrowDown,
   ArrowUp,
   Bell,
@@ -14,7 +13,6 @@ import {
   Home,
   Image as ImageIcon,
   Inbox,
-  LogOut,
   MessageSquareWarning,
   Plus,
   ScanLine,
@@ -136,7 +134,6 @@ export default function SplitAppPage() {
   const [tokens, setTokens] = useState<SplitAppTokens | null>(null);
   const [view, setView] = useState<View>("home");
   const [activeView, setActiveView] = useState<View>("home");
-  const [previousView, setPreviousView] = useState<View>("home");
   const [eventTab, setEventTab] = useState<EventTab>("active");
   const [notificationTab, setNotificationTab] = useState<NotificationTab>("incoming");
   const [summary, setSummary] = useState<HomeSummary | null>(null);
@@ -165,10 +162,9 @@ export default function SplitAppPage() {
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   const navigate = useCallback((nextView: View) => {
-    setPreviousView(view);
     setView(nextView);
     window.history.replaceState(null, "", `#${nextView}`);
-  }, [view]);
+  }, []);
 
   const clearExpiredSession = useCallback(() => {
     clearTokens();
@@ -335,21 +331,57 @@ export default function SplitAppPage() {
 
   useEffect(() => {
     if (!tokens) return;
-    Promise.all([
+    Promise.allSettled([
       authedApi<HomeSummary>("/api/home/summary"),
       authedApi<EventPage>("/api/events"),
       authedApi<UserProfile>("/api/users/me"),
       authedApi<FriendshipPage>("/api/friends?status=accepted&limit=50")
     ])
-      .then(([nextSummary, eventPage, user, friendshipPage]) => {
-        setSummary(nextSummary);
-        setCurrentUser(user);
-        const nextEvents = pageItems(eventPage).map(normalizeEvent);
-        setEvents(nextEvents);
-        setFriendships(pageItems(friendshipPage));
-      })
-      .catch(handleInitialDataError);
-  }, [authedApi, handleInitialDataError, tokens]);
+      .then(([summaryResult, eventResult, userResult, friendshipResult]) => {
+        const results = [summaryResult, eventResult, userResult, friendshipResult];
+        const authError = results.find((result) => result.status === "rejected" && isAuthError(result.reason));
+        if (authError?.status === "rejected") {
+          handleInitialDataError(authError.reason);
+          return;
+        }
+
+        if (summaryResult.status === "fulfilled") {
+          setSummary(summaryResult.value);
+        }
+        if (eventResult.status === "fulfilled") {
+          const nextEvents = pageItems(eventResult.value).map(normalizeEvent);
+          setEvents(nextEvents);
+        }
+        if (userResult.status === "fulfilled") {
+          setCurrentUser(userResult.value);
+        }
+        if (friendshipResult.status === "fulfilled") {
+          setFriendships(pageItems(friendshipResult.value));
+        }
+
+        const failed = results.filter((result) => result.status === "rejected");
+        if (!failed.length) return;
+        const failedParts = results
+          .map((result, index) => (result.status === "rejected" ? initialSyncPartLabel(index) : ""))
+          .filter(Boolean);
+
+        void reportProblem({
+          screen: "home",
+          message: "Не удалось синхронизировать часть данных.",
+          mode: "automatic_error",
+          metadata: {
+            action: "initial_sync_partial",
+            failed_count: failed.length,
+            failed_parts: failedParts
+          }
+        });
+
+        const criticalFailed = [summaryResult, eventResult, userResult].every((result) => result.status === "rejected");
+        if (criticalFailed && failed[0]?.status === "rejected") {
+          handleInitialDataError(failed[0].reason);
+        }
+      });
+  }, [authedApi, handleInitialDataError, reportProblem, tokens]);
 
   useEffect(() => {
     if (!message) return;
@@ -360,17 +392,6 @@ export default function SplitAppPage() {
   const owedToMe = summary?.confirmed?.receivable_kopecks ?? 0;
   const iOwe = summary?.confirmed?.owed_kopecks ?? 0;
   const friendOptions = useMemo(() => friendshipsToOptions(friendships), [friendships]);
-
-  const goBack = () => navigate(previousView === view ? "home" : previousView);
-  const goHome = () => navigate("home");
-
-  const logout = () => {
-    clearTokens();
-    setTokens(null);
-    setCurrentUser(null);
-    setSummary(null);
-    setMessage("Вы вышли. Локальная сессия очищена.");
-  };
 
   const submitProblemReport = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
@@ -798,14 +819,7 @@ export default function SplitAppPage() {
       ) : (
         <PhoneShell
           view={activeView}
-          title={viewTitle(view)}
-          onBack={goBack}
-          onHome={goHome}
           onNavigate={navigate}
-          showHeader={false}
-          showBack={view !== "home"}
-          onNotifications={() => navigate("notifications")}
-          onLogout={logout}
           loggedIn={Boolean(tokens)}
         >
           <WorkspaceScreen
@@ -839,6 +853,7 @@ export default function SplitAppPage() {
             onNotificationTab={setNotificationTab}
             owedToMe={owedToMe}
             iOwe={iOwe}
+            activeEventsCount={activeEventsCount(events)}
             currentUser={currentUser}
             permissionState={permissionState}
             onPermission={requestPermission}
@@ -973,84 +988,18 @@ function ProblemReportSheet({
 
 function PhoneShell({
   view,
-  title,
   loggedIn,
-  showHeader,
-  showBack,
   children,
-  onBack,
-  onHome,
-  onNavigate,
-  onNotifications,
-  onLogout
+  onNavigate
 }: {
   view: View;
-  title: string;
   loggedIn: boolean;
-  showHeader: boolean;
-  showBack: boolean;
   children: React.ReactNode;
-  onBack: () => void;
-  onHome: () => void;
   onNavigate: (view: View) => void;
-  onNotifications: () => void;
-  onLogout: () => void;
 }) {
   return (
     <div className="min-h-dvh w-full overflow-x-hidden bg-[#1f3d8f]">
-      {showHeader && loggedIn ? (
-        <header className="sticky top-0 z-30 flex items-end justify-between gap-2 bg-[#1f3d8f] px-4 pb-4 pt-[max(env(safe-area-inset-top),16px)] text-white">
-          <div className="flex min-w-0 items-center gap-2">
-            {showBack ? (
-              <Button
-                type="button"
-                aria-label="Назад"
-                onClick={onBack}
-                variant="ghost"
-                size="sm"
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/14 p-0 text-white hover:bg-white/20 hover:text-white"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            ) : null}
-            <h2 className="truncate text-3xl font-black tracking-normal">{title}</h2>
-          </div>
-          <div className="flex shrink-0 gap-2">
-            <Button
-              type="button"
-              aria-label="На главную"
-              onClick={onHome}
-              variant="ghost"
-              size="sm"
-              className="grid h-10 w-10 place-items-center rounded-full bg-white/14 p-0 text-white hover:bg-white/20 hover:text-white"
-            >
-              <Home className="h-5 w-5" />
-            </Button>
-            <Button
-              type="button"
-              aria-label="Входящие"
-              onClick={onNotifications}
-              variant="ghost"
-              size="sm"
-              className="grid h-10 w-10 place-items-center rounded-full bg-white/14 p-0 text-white hover:bg-white/20 hover:text-white"
-            >
-              <Inbox className="h-5 w-5" />
-            </Button>
-            <Button
-              type="button"
-              aria-label="Выйти"
-              onClick={onLogout}
-              variant="ghost"
-              size="sm"
-              className="grid h-10 w-10 place-items-center rounded-full bg-white/14 p-0 text-white hover:bg-white/20 hover:text-white"
-            >
-              <LogOut className="h-5 w-5" />
-            </Button>
-          </div>
-        </header>
-      ) : null}
-
-      <section className={cn("relative z-10", loggedIn && "pb-[var(--bottom-nav-reserve)]")}>{children}</section>
+      <section className="relative z-10">{children}</section>
 
       {loggedIn ? (
         <nav
@@ -1083,10 +1032,10 @@ function BottomNavButton({
       asChild
       variant="ghost"
       className={cn(
-        "grid min-h-[54px] place-items-center rounded-[18px] px-1 py-1 text-[10px] font-bold text-[#1f3d8f]/62 transition-all duration-200 active:scale-[0.97]",
+        "grid min-h-[54px] place-items-center rounded-[18px] px-1 py-1 text-[10px] font-bold text-slate-950 transition-all duration-200 active:scale-[0.97]",
         active
-          ? "bg-white/72 text-[#1f3d8f] shadow-[0_8px_22px_rgba(31,61,143,0.18)] ring-1 ring-white/90"
-          : "hover:bg-white/30 hover:text-[#1f3d8f]"
+          ? "bg-white/82 text-slate-950 shadow-[0_8px_22px_rgba(31,61,143,0.18)] ring-1 ring-white/90"
+          : "hover:bg-white/30 hover:text-slate-950"
       )}
     >
       <a
@@ -1156,6 +1105,7 @@ function WorkspaceScreen({
   onNotificationTab,
   owedToMe,
   iOwe,
+  activeEventsCount,
   currentUser,
   permissionState,
   onPermission,
@@ -1198,6 +1148,7 @@ function WorkspaceScreen({
   onNotificationTab: (tab: NotificationTab) => void;
   owedToMe: number;
   iOwe: number;
+  activeEventsCount: number;
   currentUser: UserProfile | null;
   permissionState: PermissionState;
   onPermission: (id: PermissionId) => void;
@@ -1233,7 +1184,7 @@ function WorkspaceScreen({
           <PeopleScreen currentUser={currentUser} friendOptions={friendOptions} onShowFriendCode={onShowFriendCode} onAddFriendByCode={onAddFriendByCode} />
         ) : null}
         {view === "profile" ? (
-          <ProfileScreen currentUser={currentUser} owedToMe={owedToMe} iOwe={iOwe} permissionState={permissionState} onPermission={onPermission} onReportProblem={onReportProblem} />
+          <ProfileScreen currentUser={currentUser} owedToMe={owedToMe} iOwe={iOwe} activeEventsCount={activeEventsCount} permissionState={permissionState} onPermission={onPermission} onReportProblem={onReportProblem} />
         ) : null}
         {view === "events" ? (
           <EventsScreen
@@ -1906,6 +1857,7 @@ function ProfileScreen({
   currentUser,
   owedToMe,
   iOwe,
+  activeEventsCount,
   permissionState,
   onPermission,
   onReportProblem
@@ -1913,6 +1865,7 @@ function ProfileScreen({
   currentUser: UserProfile | null;
   owedToMe: number;
   iOwe: number;
+  activeEventsCount: number;
   permissionState: PermissionState;
   onPermission: (id: PermissionId) => void;
   onReportProblem: () => void;
@@ -1953,7 +1906,7 @@ function ProfileScreen({
         <ProfileRow label="Аккаунт" value={profileEmail} tone="text-slate-700" />
         <ProfileRow label="Мне должны" value={money(owedToMe)} tone="text-emerald-600" />
         <ProfileRow label="Я должен" value={money(iOwe)} tone="text-red-600" />
-        <ProfileRow label="Активных событий" value="3" tone="text-[#1f3d8f]" />
+        <ProfileRow label="Активных событий" value={String(activeEventsCount)} tone="text-[#1f3d8f]" />
       </ContentPanel>
       <ContentPanel title="Разрешения">
         {permissions.map((item) => {
@@ -2353,18 +2306,6 @@ function Avatar({ children }: { children: React.ReactNode }) {
   return <span className="grid h-9 w-9 place-items-center rounded-full bg-[#c6cbdc] text-sm font-black text-[#1f3d8f]">{children}</span>;
 }
 
-function viewTitle(view: View) {
-  const titles: Record<View, string> = {
-    home: "Главная",
-    events: "События",
-    people: "Друзья",
-    notifications: "Уведомления",
-    profile: "Профиль",
-    splitik: "Сплитик"
-  };
-  return titles[view];
-}
-
 function splitikErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
     if (error.status === 401) return "Сессия истекла. Войдите через Яндекс еще раз.";
@@ -2384,6 +2325,18 @@ function viewToReportScreen(view: View): ClientReportScreen {
 
 function pageItems<T>(page: { items?: T[] } | null | undefined) {
   return Array.isArray(page?.items) ? page.items : [];
+}
+
+function isAuthError(error: unknown) {
+  return error instanceof ApiError && (error.status === 401 || error.status === 403);
+}
+
+function initialSyncPartLabel(index: number) {
+  return ["summary", "events", "user", "friends"][index] ?? "unknown";
+}
+
+function activeEventsCount(events: EventSummary[]) {
+  return events.filter((event) => !event.is_closed && event.status !== "closed" && event.status !== "invite").length;
 }
 
 function isUuid(value: string | null): value is string {
