@@ -2,27 +2,21 @@
 
 import { CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import Image from "next/image";
 import {
-  ArrowDown,
-  ArrowUp,
   Bell,
   Bot,
   CalendarCheck,
   Camera,
   ChevronDown,
-  Home,
   Image as ImageIcon,
-  Inbox,
   MessageSquareWarning,
-  Plus,
-  ScanLine,
   Search,
   Send,
   Check,
   PencilLine,
   ExternalLink,
   ReceiptText,
-  User,
   Users
 } from "lucide-react";
 
@@ -103,15 +97,17 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v21";
+const clientShellVersion = "splitapp-next-pwa-v24";
 const initialSyncRetryDelayMs = 900;
 
-const navItems: Array<{ id: View; label: string; icon: React.ElementType }> = [
-  { id: "home", label: "Главная", icon: Home },
-  { id: "people", label: "Друзья", icon: Users },
-  { id: "splitik", label: "Сплитик", icon: Bot },
-  { id: "events", label: "События", icon: CalendarCheck },
-  { id: "profile", label: "Профиль", icon: User }
+const figmaHomeAsset = (name: string) => `/assets/figma-home/${name}`;
+
+const navItems: Array<{ id: View; label: string; image: string; width: number; height: number; center?: boolean }> = [
+  { id: "home", label: "Главная", image: figmaHomeAsset("nav-home.png"), width: 35, height: 35 },
+  { id: "people", label: "Друзья", image: figmaHomeAsset("nav-friends.png"), width: 32, height: 28 },
+  { id: "splitik", label: "Добавить", image: figmaHomeAsset("nav-add.png"), width: 58, height: 52, center: true },
+  { id: "events", label: "События", image: figmaHomeAsset("nav-events.png"), width: 27, height: 25 },
+  { id: "profile", label: "Профиль", image: figmaHomeAsset("nav-profile.png"), width: 23, height: 23 }
 ];
 
 const notifications = {
@@ -1080,7 +1076,7 @@ function PhoneShell({
         <nav
           data-platform-nav="ios-tab-bar"
           data-liquid-glass-nav="true"
-          className="fixed bottom-0 left-1/2 z-30 w-[var(--nav-width)] -translate-x-1/2 rounded-[30px] border border-white/35 bg-[#4A5565]/[.83] p-1.5 pb-[max(env(safe-area-inset-bottom),12px)] shadow-[0_18px_60px_rgba(15,23,42,0.22)] backdrop-blur-[34px] backdrop-saturate-[1.85] supports-[backdrop-filter]:bg-[#4A5565]/[.72]"
+          className="fixed bottom-[max(env(safe-area-inset-bottom),2.25rem)] left-1/2 z-30 w-[var(--nav-width)] -translate-x-1/2 rounded-[30px] border border-white/35 bg-[#4A5565]/[.83] px-1.5 py-1.5 shadow-[0_18px_60px_rgba(15,23,42,0.22)] backdrop-blur-[34px] backdrop-saturate-[1.85] supports-[backdrop-filter]:bg-[#4A5565]/[.72]"
         >
           <div className="grid grid-cols-5 gap-1">
             {navItems.map((item) => (
@@ -1098,19 +1094,18 @@ function BottomNavButton({
   active,
   onNavigate
 }: {
-  item: { id: View; label: string; icon: React.ElementType };
+  item: { id: View; label: string; image: string; width: number; height: number; center?: boolean };
   active: boolean;
   onNavigate: (view: View) => void;
 }) {
-  const Icon = item.icon;
   return (
     <Button
       asChild
       variant="ghost"
       className={cn(
-        "grid min-h-[54px] place-items-center rounded-[22px] px-1 py-1 text-[10px] font-bold text-white/[.86] transition-all duration-200 active:scale-[0.97]",
+        "flex h-[58px] w-full min-w-0 justify-self-center flex-col items-center justify-center gap-[2px] rounded-[29px] px-1.5 py-1 text-[10px] font-extrabold leading-[12px] text-white/[.9] transition-all duration-200 active:scale-[0.97]",
         active
-          ? "bg-white/72 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_8px_24px_rgba(15,23,42,0.16)] ring-1 ring-white/80"
+          ? "w-[78px] bg-white/32 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.58),0_8px_24px_rgba(15,23,42,0.1)] ring-1 ring-white/38"
           : "hover:bg-white/20 hover:text-white"
       )}
     >
@@ -1122,8 +1117,15 @@ function BottomNavButton({
           onNavigate(item.id);
         }}
       >
-        <Icon className={cn("h-5 w-5", item.id === "splitik" && "h-8 w-8")} />
-        {item.id !== "splitik" ? <span>{item.label}</span> : null}
+        <Image
+          src={item.image}
+          alt=""
+          aria-hidden="true"
+          width={item.width}
+          height={item.height}
+          className={cn("object-contain", item.center ? "h-[52px] w-[58px]" : "h-7 w-7")}
+        />
+        {!item.center ? <span>{item.label}</span> : <span className="sr-only">{item.label}</span>}
       </a>
     </Button>
   );
@@ -1131,26 +1133,35 @@ function BottomNavButton({
 
 function AuthScreen({ onLogin }: { onLogin: () => void }) {
   return (
-    <section data-testid="svg-auth-screen" className="grid min-h-dvh bg-[#1f3d8f] px-[var(--page-x)] pb-[max(env(safe-area-inset-bottom),32px)] pt-[max(env(safe-area-inset-top),24px)] text-white">
-      <div className="grid content-center gap-4 pb-[clamp(5rem,18dvh,9rem)] pt-[clamp(5rem,20dvh,10rem)]">
-        <div>
-          <h1 className="text-[clamp(4rem,20vw,5.5rem)] font-black leading-none tracking-normal">Split.</h1>
-          <p className="mt-3 text-base font-bold text-[#d2daec]">Делите счета поровну</p>
+    <section
+      data-testid="svg-auth-screen"
+      className="grid min-h-dvh overflow-hidden bg-[#1f387c] px-[var(--auth-gutter)] pb-[max(env(safe-area-inset-bottom),0px)] pt-[max(env(safe-area-inset-top),0px)] text-white"
+      aria-label="Экран входа SplitApp"
+    >
+      <div className="mx-auto flex min-h-dvh w-full max-w-[var(--auth-content-max)] flex-col">
+        <div className="mt-[clamp(14rem,36dvh,22rem)] text-center">
+          <div>
+            <h1 className="font-black leading-[.78] tracking-normal text-[length:var(--auth-logo-font)]">
+              Split.
+            </h1>
+            <p className="mt-[clamp(1rem,3.2dvh,1.5rem)] text-[length:var(--auth-subtitle-font)] font-bold leading-tight text-[#d2daec]">
+              Делите счета поровну
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-auto flex justify-center pb-[calc(max(env(safe-area-inset-bottom),0px)+clamp(3.5rem,8.5dvh,5rem))]">
+          <Button
+            type="button"
+            onClick={onLogin}
+            variant="secondary"
+            size="lg"
+            className="min-h-[var(--auth-button-height)] w-[var(--auth-button-width)] cursor-pointer rounded-[15px] bg-[#f5f5f7] px-5 text-[length:var(--auth-button-font)] font-black text-[#111111] shadow-none transition duration-200 hover:bg-white active:scale-[0.98] focus-visible:ring-4 focus-visible:ring-white/45"
+          >
+            Войти через Яндекс
+          </Button>
         </div>
       </div>
-
-      <div className="self-end">
-        <Button
-          type="button"
-          onClick={onLogin}
-          variant="secondary"
-          size="lg"
-          className="min-h-16 w-full rounded-[26px] bg-white px-4 text-xl font-black text-[#111111] shadow-[0_18px_40px_rgba(0,0,0,0.18)] hover:bg-white/92"
-        >
-          Войти через Яндекс
-        </Button>
-      </div>
-
     </section>
   );
 }
@@ -1320,26 +1331,26 @@ function HomeScreen({
 }) {
   const mainEvent = events[0] ?? null;
   const balance = (owedToMe || 0) - (iOwe || 0);
-  const activityItems = events.map((event) => ({
+  const activityItems = events.slice(0, 4).map((event) => ({
     title: eventTitle(event),
     detail: `${event.participants_count ?? event.participants?.length ?? 0} участника`,
     amount: money(event.total_kopecks ?? 0),
     tone: "text-slate-500"
   }));
   return (
-    <div data-testid="home-balance-screen" className="grid min-h-dvh w-full grid-rows-[auto_1fr] overflow-hidden bg-[#1f3d8f] text-white">
-      <section className="mx-auto grid w-[var(--content-width)] gap-[var(--home-hero-gap)] pb-[clamp(1.5rem,5dvh,2.25rem)] pt-[max(env(safe-area-inset-top),clamp(1.5rem,5dvh,2.25rem))]">
-        <p className="break-words text-center font-black leading-none tracking-normal" style={{ fontSize: "var(--balance-font)" }}>{money(balance)}</p>
-        <div className="flex flex-wrap justify-center gap-x-[clamp(1rem,5vw,1.75rem)] gap-y-3 text-[clamp(0.9375rem,4.7vw,1.25rem)] font-black leading-none">
+    <div data-testid="home-balance-screen" className="relative min-h-dvh w-full overflow-hidden bg-[#1f387c] text-white">
+      <section className="relative z-10 mx-auto min-h-[53dvh] w-[var(--content-width)] pb-[clamp(1.25rem,3.2dvh,1.75rem)] pt-[max(env(safe-area-inset-top),clamp(5.75rem,12.8dvh,7rem))]">
+        <p className="break-words text-center font-black leading-[.82] tracking-normal" style={{ fontSize: "var(--home-balance-font)" }}>{money(balance)}</p>
+        <div className="mt-[clamp(1.25rem,3.4dvh,1.7rem)] flex flex-wrap justify-center gap-x-[clamp(1.8rem,8vw,2.6rem)] gap-y-3 text-[clamp(1.05rem,5vw,1.25rem)] font-black leading-none">
           <span className="inline-flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-md bg-emerald-600 text-emerald-300">
-              <ArrowUp className="h-6 w-6" strokeWidth={3.2} />
+            <span className="grid h-5 w-5 place-items-center rounded-[3px] bg-[#0ab0066e]">
+              <Image src={figmaHomeAsset("up.png")} alt="" aria-hidden="true" width={14} height={17} className="h-[17px] w-3.5 object-contain" />
             </span>
             {money(owedToMe)}
           </span>
           <span className="inline-flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-md bg-red-700 text-red-500">
-              <ArrowDown className="h-6 w-6" strokeWidth={3.2} />
+            <span className="grid h-5 w-5 place-items-center rounded-[3px] bg-[#fb00016e]">
+              <Image src={figmaHomeAsset("down.png")} alt="" aria-hidden="true" width={9} height={13} className="h-[13px] w-[9px] object-contain" />
             </span>
             {money(iOwe)}
           </span>
@@ -1349,36 +1360,37 @@ function HomeScreen({
           type="button"
           size={null}
           onClick={() => (mainEvent ? onNavigate("events") : onCreateEventOpen())}
-          className="grid h-auto w-full min-w-0 max-w-full justify-stretch gap-[clamp(0.875rem,3.6vw,1.25rem)] bg-[#111111] px-[clamp(1.25rem,6vw,2rem)] py-[clamp(1.125rem,5vw,1.5rem)] text-left text-white hover:bg-[#111111]/92"
-          style={{ minHeight: "var(--home-event-min-height)", borderRadius: "var(--home-event-radius)" }}
+          className="mt-[clamp(1.6rem,4dvh,2.1rem)] grid h-auto w-full min-w-0 max-w-full justify-stretch gap-3 rounded-[19px] bg-[#111111] px-[clamp(1.25rem,5.4vw,1.75rem)] py-[clamp(.9rem,3.3dvh,1.25rem)] text-left text-white hover:bg-[#111111]/92"
+          style={{ minHeight: "var(--home-event-card-height)" }}
         >
-          <span className="break-words text-[clamp(1.125rem,5.6vw,1.625rem)] font-black leading-tight">{mainEvent ? eventTitle(mainEvent) : "Создайте первое событие"}</span>
+          <span className="break-words text-[clamp(1.05rem,4.8vw,1.25rem)] font-black leading-tight">{mainEvent ? eventTitle(mainEvent) : "Создайте первое событие"}</span>
           <span className="flex items-end justify-between gap-3">
             {mainEvent ? <AvatarStack count={mainEvent.participants_count ?? mainEvent.participants?.length ?? 0} /> : <span className="text-sm font-bold text-white/50">Пока нет активных расходов</span>}
             <span className="min-w-0 break-words pb-1 text-right font-black text-white/38" style={{ fontSize: "var(--home-total-font)" }}>{money(mainEvent?.total_kopecks ?? 0)}</span>
           </span>
         </Button>
-        <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-[clamp(0.5rem,3vw,1rem)]">
-          <QuickAction icon={ScanLine} label="Сканировать чек" onClick={() => onNavigate("splitik")} />
-          <QuickAction icon={Plus} label="Добавить платеж" onClick={onCreateEventOpen} />
-          <QuickAction icon={Inbox} label="Входящие" onClick={() => onNavigate("notifications")} />
+        <div className="mt-[clamp(1.75rem,4.2dvh,2.35rem)] grid grid-cols-[repeat(3,minmax(0,1fr))] gap-[clamp(0.45rem,2.6vw,.85rem)]">
+          <QuickAction image={figmaHomeAsset("quick-scan.svg")} imageWidth={40} imageHeight={37} label="Сканировать чек" onClick={() => onNavigate("splitik")} />
+          <QuickAction image={figmaHomeAsset("quick-add.png")} imageWidth={31} imageHeight={27} label="Добавить платеж" onClick={onCreateEventOpen} />
+          <QuickAction image={figmaHomeAsset("quick-inbox.png")} imageWidth={40} imageHeight={29} label="Входящие" onClick={() => onNavigate("notifications")} showBadge />
         </div>
       </section>
 
-      <section className="min-h-full rounded-t-[28px] bg-[#f5f5f7] pb-[var(--bottom-nav-reserve)] pt-[clamp(1.5rem,5vw,2rem)] text-slate-950">
+      <section className="relative z-0 min-h-[47dvh] rounded-t-[25px] bg-[#f5f5f7] pb-[var(--bottom-nav-reserve)] pt-[clamp(1rem,3.2dvh,1.4rem)] text-slate-950">
         <div className="mx-auto w-[var(--content-width)]">
-        <div className="mb-[clamp(1.25rem,5vw,1.75rem)]">
-          <h3 className="text-[clamp(1.625rem,7vw,1.875rem)] font-black leading-none">Активность</h3>
+        <div className="mb-[clamp(1.2rem,4vw,1.5rem)] flex items-center justify-between">
+          <h3 className="text-[clamp(1.25rem,5.1vw,1.45rem)] font-black uppercase leading-none tracking-[-0.02em]">Активность</h3>
+          <span className="rounded-[10px] bg-[#1f387c38] px-3 py-0.5 text-[13px] font-black leading-[22px] text-[#1f387c]">Все</span>
         </div>
-        <div data-testid="home-activity-list" className="grid max-h-[min(38dvh,360px)] gap-0 overflow-y-auto overscroll-contain pr-1">
+        <div data-testid="home-activity-list" className="grid max-h-[min(35dvh,330px)] gap-0 overflow-y-auto overscroll-contain pr-1">
         {activityItems.map(({ title, detail, amount, tone }) => (
-          <div key={title} className="grid grid-cols-[var(--activity-avatar-size)_minmax(0,1fr)] items-center gap-3 border-b border-slate-200 py-4 last:border-b-0 sm:grid-cols-[var(--activity-avatar-size)_minmax(0,1fr)_auto]">
+          <div key={title} className="grid grid-cols-[var(--activity-avatar-size)_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-200 py-[clamp(.55rem,1.7dvh,.8rem)] last:border-b-0">
             <ActivityAvatar>{title[0]}</ActivityAvatar>
             <div className="min-w-0">
-              <p className="break-words font-black leading-tight" style={{ fontSize: "var(--activity-title-font)" }}>{title}</p>
+              <p className="break-words font-black leading-tight tracking-[-0.02em]" style={{ fontSize: "var(--activity-title-font)" }}>{title}</p>
               <p className="break-words font-bold leading-tight text-slate-400" style={{ fontSize: "var(--activity-detail-font)" }}>{detail}</p>
             </div>
-            <span className={cn("col-start-2 text-[clamp(1rem,5vw,1.375rem)] font-black sm:col-start-auto", tone)}>{amount}</span>
+            <span className={cn("text-[clamp(.95rem,4.2vw,1.05rem)] font-black", tone)}>{amount}</span>
           </div>
         ))}
         {!activityItems.length ? <p className="py-6 text-center text-base font-bold text-slate-500">Пока нет активности</p> : null}
@@ -1418,21 +1430,25 @@ function AvatarStack({ count }: { count: number }) {
 }
 
 function QuickAction({
-  icon: Icon,
+  image,
+  imageWidth,
+  imageHeight,
   label,
   onClick,
   showBadge = false
 }: {
-  icon: React.ElementType;
+  image: string;
+  imageWidth: number;
+  imageHeight: number;
   label: string;
   onClick: () => void;
   showBadge?: boolean;
 }) {
   return (
-    <Button type="button" onClick={onClick} variant="ghost" className="grid h-auto min-h-[var(--action-min-height)] min-w-0 grid-rows-[var(--action-icon-size)_auto] justify-items-center gap-3 rounded-2xl p-0 text-center text-[clamp(0.75rem,3.9vw,1rem)] font-bold leading-tight text-white hover:bg-white/10 hover:text-white">
+    <Button type="button" onClick={onClick} variant="ghost" className="grid h-auto min-h-[var(--action-min-height)] min-w-0 grid-rows-[var(--action-icon-size)_auto] justify-items-center gap-2 rounded-2xl p-0 text-center text-[clamp(.625rem,2.7vw,.72rem)] font-bold leading-tight tracking-[-0.04em] text-[#f5f5f7] hover:bg-white/10 hover:text-white">
       <span className="relative grid place-items-center self-center rounded-full bg-[#111111]" style={{ width: "var(--action-icon-size)", height: "var(--action-icon-size)" }}>
-        <Icon style={{ width: "var(--action-icon-svg)", height: "var(--action-icon-svg)" }} strokeWidth={2.2} />
-        {showBadge ? <span className="absolute right-5 top-5 h-4 w-4 rounded-full bg-red-500" /> : null}
+        <Image src={image} alt="" aria-hidden="true" width={imageWidth} height={imageHeight} className="object-contain" style={{ width: "var(--action-icon-svg)", height: "auto", maxHeight: "var(--action-icon-svg)" }} />
+        {showBadge ? <span className="absolute right-[18%] top-[22%] h-2.5 w-2.5 rounded-full bg-[#fb0102]" /> : null}
       </span>
       <span className="flex min-h-[2.5em] items-start justify-center">{label}</span>
     </Button>

@@ -1,4 +1,4 @@
-const CACHE_NAME = "splitapp-next-pwa-v21";
+const CACHE_NAME = "splitapp-next-pwa-v24";
 const APP_SHELL = [
   "/",
   "/app",
@@ -7,7 +7,17 @@ const APP_SHELL = [
   "/assets/icon-192.png",
   "/assets/icon-512.png",
   "/assets/apple-touch-icon.png",
-  "/assets/app-preview.svg"
+  "/assets/app-preview.svg",
+  "/assets/figma-home/down.png",
+  "/assets/figma-home/nav-add.png",
+  "/assets/figma-home/nav-events.png",
+  "/assets/figma-home/nav-friends.png",
+  "/assets/figma-home/nav-home.png",
+  "/assets/figma-home/nav-profile.png",
+  "/assets/figma-home/quick-add.png",
+  "/assets/figma-home/quick-inbox.png",
+  "/assets/figma-home/quick-scan.svg",
+  "/assets/figma-home/up.png"
 ];
 
 self.addEventListener("install", (event) => {

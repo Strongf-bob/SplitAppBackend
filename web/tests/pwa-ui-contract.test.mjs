@@ -31,8 +31,9 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v21/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v21"/);
+  assert.match(sw, /splitapp-next-pwa-v24/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v24"/);
+  assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
 });
@@ -44,8 +45,17 @@ test("local preview does not send Yandex OAuth to an unregistered loopback callb
 
 test("auth screen leads with app preview before external OAuth", () => {
   assert.match(page, /Войти через Яндекс/);
+  assert.match(page, /--auth-logo-font/);
+  assert.doesNotMatch(page, /auth-split-mark\.svg/);
   assert.doesNotMatch(page, /Покрутить приложение/);
   assert.doesNotMatch(page, /Яндекс доступен только на зарегистрированном домене/);
+});
+
+test("PWA uses Montserrat typography from the Figma import", () => {
+  assert.match(layout, /import \{ Montserrat \} from "next\/font\/google"/);
+  assert.match(layout, /subsets: \["latin", "cyrillic"\]/);
+  assert.match(layout, /variable: "--font-montserrat"/);
+  assert.match(globals, /--font-sans:\s*var\(--font-montserrat\), Montserrat/);
 });
 
 test("real mobile app shell does not draw a fake phone around the app", () => {
@@ -87,7 +97,7 @@ test("authenticated app uses real backend actions instead of static cards", () =
 test("mobile shell keeps the real app surface full-height and gallery input mounted", () => {
   assert.match(page, /bg-\[#f5f5f7\]/);
   assert.match(page, /pb-\[var\(--bottom-nav-reserve\)\]/);
-  assert.match(globals, /--bottom-nav-reserve:\s*calc\(92px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.match(globals, /--bottom-nav-reserve:\s*calc\(132px \+ env\(safe-area-inset-bottom\)\)/);
   assert.match(page, /galleryInputRef/);
   assert.doesNotMatch(page, /bg-\[#1e1e1e\]/);
 });
@@ -110,8 +120,11 @@ test("bottom navigation active tab stays readable with a liquid glass state", ()
   assert.match(page, /backdrop-blur-\[34px\]/);
   assert.match(page, /backdrop-saturate-\[1\.85\]/);
   assert.match(page, /bg-\[#4A5565\]\/\[\.83\]/);
-  assert.match(page, /bg-white\/72 text-slate-950/);
-  assert.match(page, /text-white\/\[\.86\] transition-all/);
+  assert.match(page, /flex h-\[58px\] w-full min-w-0 justify-self-center flex-col items-center justify-center gap-\[2px\]/);
+  assert.match(page, /w-\[78px\] bg-white\/32 text-white/);
+  assert.match(page, /text-white\/\[\.9\] transition-all/);
+  assert.match(page, /figmaHomeAsset\("nav-home\.png"\)/);
+  assert.match(page, /figmaHomeAsset\("nav-add\.png"\)/);
   assert.doesNotMatch(page, /active && "bg-white\/22 text-white"/);
 });
 
@@ -140,7 +153,7 @@ test("PWA surfaces are built on shadcn primitives instead of one-off controls", 
 test("iOS mobile shell uses a safe-area glass tab bar instead of a generic nav slab", () => {
   assert.match(page, /data-platform-nav="ios-tab-bar"/);
   assert.match(page, /supports-\[backdrop-filter\]:bg-\[#4A5565\]\/\[\.72\]/);
-  assert.match(page, /pb-\[max\(env\(safe-area-inset-bottom\),12px\)\]/);
+  assert.match(page, /bottom-\[max\(env\(safe-area-inset-bottom\),2\.25rem\)\]/);
   assert.match(layout, /statusBarStyle: "black-translucent"/);
   assert.match(globals, /html \{[\s\S]*background:\s*#1f3d8f;/);
   assert.match(globals, /body \{[\s\S]*background:\s*#1f3d8f;/);
@@ -288,7 +301,7 @@ test("mobile layout scales from compact phones with adaptive tokens instead of f
 
   assert.match(globals, /-webkit-text-size-adjust:\s*100%/);
   assert.match(globals, /overflow-x:\s*hidden/);
-  assert.match(page, /style=\{\{ fontSize: "var\(--balance-font\)" \}\}/);
+  assert.match(page, /style=\{\{ fontSize: "var\(--home-balance-font\)" \}\}/);
   assert.match(page, /grid-cols-\[repeat\(3,minmax\(0,1fr\)\)\]/);
   assert.match(page, /style=\{\{ width: "var\(--action-icon-size\)", height: "var\(--action-icon-size\)" \}\}/);
   assert.doesNotMatch(page, /text-\[72px\]/);
@@ -298,10 +311,10 @@ test("mobile layout scales from compact phones with adaptive tokens instead of f
 
 test("home screen uses compact phone tokens instead of oversized Figma frame proportions", () => {
   assert.match(globals, /--home-hero-gap:\s*clamp\(/);
-  assert.match(globals, /--home-event-min-height:\s*clamp\(/);
+  assert.match(globals, /--home-event-card-height:\s*clamp\(/);
   assert.match(globals, /--avatar-stack-size:\s*clamp\(/);
-  assert.match(page, /gap-\[var\(--home-hero-gap\)\]/);
-  assert.match(page, /minHeight: "var\(--home-event-min-height\)"/);
+  assert.match(page, /min-h-\[53dvh\]/);
+  assert.match(page, /minHeight: "var\(--home-event-card-height\)"/);
   assert.match(page, /width: "var\(--avatar-stack-size\)", height: "var\(--avatar-stack-size\)"/);
   assert.doesNotMatch(globals, /--balance-font:\s*clamp\(3rem,\s*16vw,\s*4\.5rem\)/);
   assert.doesNotMatch(globals, /--action-icon-size:\s*clamp\(4rem,\s*22vw,\s*7rem\)/);
@@ -322,7 +335,7 @@ test("app surfaces use responsive layout rails instead of raw viewport edges", (
   }
 
   assert.match(page, /mx-auto w-\[var\(--content-width\)\]/);
-  assert.match(page, /fixed bottom-0 left-1\/2 z-30 w-\[var\(--nav-width\)\] -translate-x-1\/2/);
+  assert.match(page, /fixed bottom-\[max\(env\(safe-area-inset-bottom\),2\.25rem\)\] left-1\/2 z-30 w-\[var\(--nav-width\)\] -translate-x-1\/2/);
   assert.match(page, /data-testid=\{testId\} className="grid min-h-\[calc\(100dvh-92px\)\] bg-\[#1f3d8f\] text-white"/);
   assert.doesNotMatch(page, /-mx-3 -mt-3/);
   assert.doesNotMatch(page, /fixed inset-x-3 bottom-0/);
@@ -398,16 +411,19 @@ test("home add action opens a dedicated event creation screen", () => {
 
 test("home screen follows the Figma balance card and activity sheet composition", () => {
   assert.match(page, /data-testid="home-balance-screen"/);
-  assert.match(page, /min-h-dvh w-full grid-rows-\[auto_1fr\] overflow-hidden/);
-  assert.match(page, /fontSize: "var\(--balance-font\)"/);
-  assert.match(page, /ArrowUp/);
-  assert.match(page, /ArrowDown/);
+  assert.match(page, /relative min-h-dvh w-full overflow-hidden bg-\[#1f387c\]/);
+  assert.match(page, /fontSize: "var\(--home-balance-font\)"/);
+  assert.match(page, /figmaHomeAsset\("up\.png"\)/);
+  assert.match(page, /figmaHomeAsset\("down\.png"\)/);
   assert.match(page, /data-testid="home-event-card"/);
   assert.match(page, /function AvatarStack/);
   assert.match(page, /Сканировать чек/);
   assert.match(page, /Добавить платеж/);
-  assert.match(page, /rounded-t-\[28px\]/);
-  assert.match(page, /min-h-full rounded-t-\[28px\] bg-\[#f5f5f7\]/);
+  assert.match(page, /quick-scan\.svg/);
+  assert.match(page, /quick-inbox\.png/);
+  assert.match(page, /rounded-t-\[25px\]/);
+  assert.match(page, /min-h-\[47dvh\] rounded-t-\[25px\] bg-\[#f5f5f7\]/);
+  assert.match(page, /font-black uppercase leading-none/);
   assert.match(page, /data-testid="home-activity-list"/);
   assert.match(page, /overflow-y-auto/);
   assert.doesNotMatch(page, />Все<\/Badge>/);
@@ -424,8 +440,8 @@ test("home shell covers the viewport instead of exposing the dark page backgroun
 });
 
 test("home inbox action badge is conditional on unread incoming items", () => {
-  assert.match(page, /function QuickAction\(\{\s*icon: Icon,\s*label,\s*onClick,\s*showBadge = false\s*\}/);
-  assert.match(page, /showBadge \? <span className="absolute right-5 top-5 h-4 w-4 rounded-full bg-red-500" \/> : null/);
+  assert.match(page, /function QuickAction\(\{\s*image,\s*imageWidth,\s*imageHeight,\s*label,\s*onClick,\s*showBadge = false\s*\}/);
+  assert.match(page, /showBadge \? <span className="absolute right-\[18%\] top-\[22%\] h-2\.5 w-2\.5 rounded-full bg-\[#fb0102\]" \/> : null/);
   assert.doesNotMatch(page, /label === "Входящие" \?/);
 });
 
@@ -449,10 +465,14 @@ test("friends screen owns its title without duplicating the global app header", 
 
 test("SVG auth screen is a clean first screen before Yandex OAuth", () => {
   assert.match(page, /data-testid="svg-auth-screen"/);
-  assert.match(page, /grid min-h-dvh bg-\[#1f3d8f\]/);
-  assert.match(page, /text-\[clamp\(4rem,20vw,5\.5rem\)\]/);
+  assert.match(page, /grid min-h-dvh overflow-hidden bg-\[#1f387c\]/);
+  assert.match(page, /mt-\[clamp\(14rem,36dvh,22rem\)\]/);
+  assert.match(page, /pb-\[calc\(max\(env\(safe-area-inset-bottom\),0px\)\+clamp\(3\.5rem,8\.5dvh,5rem\)\)\]/);
+  assert.match(page, /--auth-logo-font/);
+  assert.match(page, /--auth-button-width/);
   assert.match(page, /Делите счета поровну/);
   assert.match(page, /Войти через Яндекс/);
+  assert.doesNotMatch(page, /radial-gradient/);
   assert.doesNotMatch(page, /Войдите, чтобы открыть события/);
 });
 
