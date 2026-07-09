@@ -32,8 +32,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v33/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v33"/);
+  assert.match(sw, /splitapp-next-pwa-v34/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v34"/);
   assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
@@ -233,16 +233,22 @@ test("authenticated startup refreshes expired access tokens instead of showing a
 
 test("parallel authenticated startup requests share one token refresh", () => {
   assert.match(api, /let refreshInFlight: Promise<SplitAppTokens> \| null = null/);
-  assert.match(api, /refreshTokensOnce\(tokens\)/);
+  assert.match(api, /refreshTokensOnce\(activeTokens\)/);
   assert.match(api, /refreshInFlight \?\?=/);
   assert.match(api, /refreshInFlight = null/);
 });
 
-test("PWA stores bearer credentials in session storage instead of local storage", () => {
-  assert.match(api, /window\.sessionStorage\.getItem\(tokenKey\)/);
+test("installed PWA persists bearer credentials across WebView restarts", () => {
+  assert.match(api, /window\.localStorage\.getItem\(tokenKey\)/);
+  assert.match(api, /window\.localStorage\.setItem\(tokenKey, JSON\.stringify\(tokens\)\)/);
+  assert.match(api, /window\.localStorage\.removeItem\(tokenKey\)/);
   assert.match(api, /window\.sessionStorage\.setItem\(tokenKey, JSON\.stringify\(tokens\)\)/);
-  assert.match(api, /window\.sessionStorage\.removeItem\(tokenKey\)/);
-  assert.doesNotMatch(api, /window\.localStorage\.(getItem|setItem|removeItem)\(tokenKey/);
+});
+
+test("authenticated API calls prefer the freshest persisted tokens", () => {
+  assert.match(api, /function resolveStoredTokens\(tokens: SplitAppTokens \| null\)/);
+  assert.match(api, /const activeTokens = resolveStoredTokens\(tokens\)/);
+  assert.match(api, /fetchWithAuth\(path, activeTokens, init\)/);
 });
 
 test("authenticated startup tolerates malformed page payloads without crashing the route", () => {
