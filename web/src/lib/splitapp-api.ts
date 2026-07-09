@@ -185,19 +185,21 @@ export class ApiError extends Error {
 
 export function loadTokens(): SplitAppTokens | null {
   if (typeof window === "undefined") return null;
-  try {
-    return JSON.parse(window.sessionStorage.getItem(tokenKey) || "null") as SplitAppTokens | null;
-  } catch {
-    return null;
-  }
+  const sessionTokens = parseStoredTokens(window.sessionStorage.getItem(tokenKey));
+  if (sessionTokens) return sessionTokens;
+  const persistedTokens = parseStoredTokens(window.localStorage.getItem(tokenKey));
+  if (persistedTokens) window.sessionStorage.setItem(tokenKey, JSON.stringify(persistedTokens));
+  return persistedTokens;
 }
 
 export function saveTokens(tokens: SplitAppTokens) {
   window.sessionStorage.setItem(tokenKey, JSON.stringify(tokens));
+  window.localStorage.setItem(tokenKey, JSON.stringify(tokens));
 }
 
 export function clearTokens() {
   window.sessionStorage.removeItem(tokenKey);
+  window.localStorage.removeItem(tokenKey);
 }
 
 export function yandexRedirectUri() {
@@ -245,11 +247,12 @@ export async function api<T>(
   init: RequestInit = {},
   onTokensRefreshed?: (tokens: SplitAppTokens) => void
 ): Promise<T> {
-  const response = await fetchWithAuth(path, tokens, init);
+  const activeTokens = resolveStoredTokens(tokens);
+  const response = await fetchWithAuth(path, activeTokens, init);
   if (response.ok) return (await response.json()) as T;
 
-  if (response.status === 401 && tokens?.refresh_token) {
-    const nextTokens = await refreshTokensOnce(tokens);
+  if (response.status === 401 && activeTokens?.refresh_token) {
+    const nextTokens = await refreshTokensOnce(activeTokens);
     onTokensRefreshed?.(nextTokens);
     const retry = await fetchWithAuth(path, nextTokens, init);
     if (retry.ok) return (await retry.json()) as T;
@@ -257,6 +260,21 @@ export async function api<T>(
   }
 
   throw new ApiError(response.status, await responseErrorMessage(response), response.headers.get("X-Request-ID") ?? undefined);
+}
+
+function resolveStoredTokens(tokens: SplitAppTokens | null) {
+  const storedTokens = loadTokens();
+  return storedTokens ?? tokens;
+}
+
+function parseStoredTokens(raw: string | null): SplitAppTokens | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as SplitAppTokens | null;
+    return parsed?.access_token ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchWithAuth(path: string, tokens: SplitAppTokens | null, init: RequestInit) {
