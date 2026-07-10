@@ -187,6 +187,20 @@ def audit_action_count(db, action: str, resource_id: str) -> int:
     return db.audit_events.count_documents({"action": action, "resource_id": resource_id})
 
 
+def remove_active_member(db, user_id: str) -> None:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    db.event_memberships.update_one(
+        {"event_id": EVENT_ID, "user_id": user_id},
+        {
+            "$set": {
+                "status": "removed",
+                "removed_at": now,
+                "updated_at": now,
+            }
+        },
+    )
+
+
 def test_event_create_and_list_for_actor(db):
     from tests.conftest import seed_users
 
@@ -1272,6 +1286,17 @@ def test_settlement_preview_requires_event_membership(db):
         raise AssertionError("Expected non-member settlement preview to fail")
 
 
+def test_balance_explain_requires_event_membership(db):
+    seed_event(db)
+
+    try:
+        balances.get_event_balance_explanations(db, EVENT_ID, USER_C)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-member balance explain to fail")
+
+
 def test_settlement_preview_allows_closed_event_and_explains_cycle_compression(db):
     seed_event(db)
     now = datetime(2026, 1, 1, tzinfo=UTC)
@@ -1780,6 +1805,49 @@ def test_settlement_plan_approve_post_write_snapshot_change_marks_stale_not_appr
     assert stored.get("active_key") is None
 
 
+def test_settlement_plan_approve_actor_removed_during_post_validation_marks_stale(db, monkeypatch):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    domain_events = []
+    monkeypatch.setattr(
+        service,
+        "record_domain_event",
+        lambda domain, action: domain_events.append((domain, action)),
+    )
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+    service.approve_settlement_plan(db, plan["id"], USER_A)
+    service.approve_settlement_plan(db, plan["id"], USER_B)
+    original_snapshot = service._snapshot_for_current_state
+    calls = 0
+
+    def remove_actor_before_postcheck(db_arg, event_id, actor_user_id):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            remove_active_member(db_arg, USER_C)
+        return original_snapshot(db_arg, event_id, actor_user_id)
+
+    monkeypatch.setattr(service, "_snapshot_for_current_state", remove_actor_before_postcheck)
+
+    try:
+        service.approve_settlement_plan(db, plan["id"], USER_C)
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected actor removal during approval post-check to fail stale")
+
+    stored = db.settlement_plans.find_one({"id": plan["id"]})
+    assert stored["status"] == "stale"
+    assert sorted(approval["user_id"] for approval in stored["approvals"]) == [
+        USER_A,
+        USER_B,
+        USER_C,
+    ]
+    assert stored.get("active_key") is None
+    assert audit_action_count(db, "settlement_plan.stale", plan["id"]) == 1
+    assert domain_events.count(("settlement_plans", "stale")) == 1
+
+
 def test_settlement_plan_reject_post_write_snapshot_change_marks_stale_not_rejected(
     db, monkeypatch
 ):
@@ -1810,6 +1878,44 @@ def test_settlement_plan_reject_post_write_snapshot_change_marks_stale_not_rejec
     assert stored.get("rejected_by") is None
     assert stored.get("rejection_reason") is None
     assert stored.get("active_key") is None
+
+
+def test_settlement_plan_reject_actor_removed_during_post_validation_marks_stale(db, monkeypatch):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    domain_events = []
+    monkeypatch.setattr(
+        service,
+        "record_domain_event",
+        lambda domain, action: domain_events.append((domain, action)),
+    )
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+    original_snapshot = service._snapshot_for_current_state
+    calls = 0
+
+    def remove_actor_before_postcheck(db_arg, event_id, actor_user_id):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            remove_active_member(db_arg, USER_B)
+        return original_snapshot(db_arg, event_id, actor_user_id)
+
+    monkeypatch.setattr(service, "_snapshot_for_current_state", remove_actor_before_postcheck)
+
+    try:
+        service.reject_settlement_plan(db, plan["id"], USER_B, "Race")
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected actor removal during rejection post-check to fail stale")
+
+    stored = db.settlement_plans.find_one({"id": plan["id"]})
+    assert stored["status"] == "stale"
+    assert stored.get("rejected_by") is None
+    assert stored.get("rejection_reason") is None
+    assert stored.get("active_key") is None
+    assert audit_action_count(db, "settlement_plan.stale", plan["id"]) == 1
+    assert domain_events.count(("settlement_plans", "stale")) == 1
 
 
 def test_settlement_plan_expiry_is_server_transitioned_and_releases_active_guard(db):

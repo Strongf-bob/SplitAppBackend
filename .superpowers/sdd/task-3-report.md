@@ -95,3 +95,37 @@
 
 - Commit message: `fix(settlement): harden plan approvals and stale transitions`
 - Final commit SHA is reported in the handoff after commit creation.
+
+## Re-review fix evidence: post-write actor membership removal
+
+### RED
+
+- Added regressions where the acting approver/rejecter is removed from event membership after initial `assert_event_access` but before lifecycle post-write snapshot validation.
+- Added explicit coverage that public settlement preview and balance explain remain membership-protected for non-members.
+- Observed RED:
+  - `.venv/bin/pytest tests/test_services.py -k 'actor_removed_during_post_validation or balance_explain_requires_event_membership or settlement_preview_requires_event_membership' -q`
+  - Result: 2 failed, 2 passed; approval/rejection post-validation raised 403 from the public balance path instead of returning 409 and marking the plan stale.
+
+### GREEN
+
+- Added private `_get_event_balance_explanations_unchecked` in `app/services/balances.py`.
+- Added private `_build_settlement_preview` and `_get_settlement_preview_unchecked` in `app/services/settlements.py`.
+- Changed lifecycle snapshot recomputation to use the private unchecked preview path after the initial access check, while public `get_event_balance_explanations` and `get_settlement_preview` still enforce membership.
+- Actor removal during approve/reject post-validation now produces stale transition, releases `active_key`, records stale audit/domain event once, and returns 409 rather than leaving the plan approved/rejected or returning 403.
+
+### Verification after re-review fix
+
+- `.venv/bin/pytest tests/test_services.py -k 'actor_removed_during_post_validation or balance_explain_requires_event_membership or settlement_preview_requires_event_membership' -q` -> 4 passed.
+- `.venv/bin/pytest tests/test_services.py -k 'settlement_plan or balance_explain_requires_event_membership or settlement_preview_requires_event_membership' -q` -> 20 passed.
+- `.venv/bin/pytest tests/test_app_config.py -k 'settlement_plan' -q` -> 2 passed, 1 existing Starlette deprecation warning.
+- `.venv/bin/pytest tests/test_services.py -q` -> 115 passed.
+- `.venv/bin/pytest tests/test_app_config.py -q` -> 37 passed, 1 existing Starlette deprecation warning.
+- `make lint` -> All checks passed.
+- `make format-check` -> 63 files already formatted.
+- `make test` -> 218 passed, 1 skipped, 1 existing Starlette deprecation warning.
+- Runtime OpenAPI comparison -> `openapi_sync True`, 77 runtime paths, 77 file paths.
+
+### Re-review commit
+
+- Commit message: `fix(settlement): decouple snapshot validation from actor membership`
+- Final commit SHA is reported in the handoff after commit creation.

@@ -13,7 +13,10 @@ from app.services.access import (
     assert_event_access,
     assert_event_open,
 )
-from app.services.balances import get_event_balance_explanations
+from app.services.balances import (
+    _get_event_balance_explanations_unchecked,
+    get_event_balance_explanations,
+)
 from app.services.common import new_uuid, record_audit_event, strip_mongo_id, utc_now
 from app.services.idempotency import run_idempotent_create
 from app.services.settlement_algorithm import build_settlement_edges
@@ -123,7 +126,7 @@ def _canonical_preview(preview: dict) -> dict:
 def _snapshot_for_current_state(
     db: Database, event_id: str, actor_user_id: str
 ) -> tuple[dict, str]:
-    preview = _canonical_preview(get_settlement_preview(db, event_id, actor_user_id))
+    preview = _canonical_preview(_get_settlement_preview_unchecked(db, event_id))
     snapshot = {
         "algorithm_version": ALGORITHM_VERSION,
         "preview": preview,
@@ -134,6 +137,35 @@ def _snapshot_for_current_state(
     }
     body = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
     return snapshot, hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+def _build_settlement_preview(event_id: str, raw_debts: list[dict]) -> dict:
+    recommended_edges = build_settlement_edges(raw_debts)
+
+    return {
+        "event_id": event_id,
+        "raw_debts": raw_debts,
+        "net_positions": _net_positions(raw_debts),
+        "recommended_transfers": [
+            {
+                "debtor_id": row["debitor_id"],
+                "creditor_id": row["creditor_id"],
+                "amount_kopecks": row["amount_kopecks"],
+            }
+            for row in recommended_edges
+        ],
+        "source_participant_ids": _source_participant_ids(raw_debts),
+        "original_transfer_count": len(raw_debts),
+        "recommended_transfer_count": len(recommended_edges),
+        "original_gross_kopecks": sum(row["amount_kopecks"] for row in raw_debts),
+        "recommended_total_kopecks": sum(row["amount_kopecks"] for row in recommended_edges),
+        "transfer_count_reduced": len(recommended_edges) < len(raw_debts),
+    }
+
+
+def _get_settlement_preview_unchecked(db: Database, event_id: str) -> dict:
+    raw_debts = _get_event_balance_explanations_unchecked(db, event_id)
+    return _build_settlement_preview(event_id, raw_debts)
 
 
 def _plan_to_api(plan: dict) -> dict:
@@ -259,27 +291,7 @@ def _ensure_current_snapshot_or_mark_stale(
 @track_service_operation("settlements.preview")
 def get_settlement_preview(db: Database, event_id: str, actor_user_id: str) -> dict:
     raw_debts = get_event_balance_explanations(db, event_id, actor_user_id)
-    recommended_edges = build_settlement_edges(raw_debts)
-
-    return {
-        "event_id": event_id,
-        "raw_debts": raw_debts,
-        "net_positions": _net_positions(raw_debts),
-        "recommended_transfers": [
-            {
-                "debtor_id": row["debitor_id"],
-                "creditor_id": row["creditor_id"],
-                "amount_kopecks": row["amount_kopecks"],
-            }
-            for row in recommended_edges
-        ],
-        "source_participant_ids": _source_participant_ids(raw_debts),
-        "original_transfer_count": len(raw_debts),
-        "recommended_transfer_count": len(recommended_edges),
-        "original_gross_kopecks": sum(row["amount_kopecks"] for row in raw_debts),
-        "recommended_total_kopecks": sum(row["amount_kopecks"] for row in recommended_edges),
-        "transfer_count_reduced": len(recommended_edges) < len(raw_debts),
-    }
+    return _build_settlement_preview(event_id, raw_debts)
 
 
 @track_service_operation("settlement_plans.create")
