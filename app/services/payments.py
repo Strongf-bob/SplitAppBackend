@@ -1,7 +1,9 @@
-from fastapi import HTTPException
-from pymongo.errors import DuplicateKeyError
-from pymongo.database import Database
+import logging
 from datetime import timedelta
+
+from fastapi import HTTPException
+from pymongo.database import Database
+from pymongo.errors import DuplicateKeyError
 
 from app import schemas
 from app.core.monitoring import observe_money_amount, record_domain_event, track_service_operation
@@ -13,6 +15,7 @@ from app.services.idempotency import run_idempotent_create
 
 _MIN_PAYMENT_REQUEST_DEADLINE = timedelta(minutes=30)
 _SETTLEMENT_REQUEST_NOTE = "optimized event settlement payment request"
+logger = logging.getLogger(__name__)
 
 
 def _payment_to_api(payment: dict) -> dict:
@@ -55,6 +58,18 @@ def _refresh_settlement_progress_for_request(
     settlements.refresh_settlement_plan_progress_for_payment_request(
         db, payment_request_id, actor_user_id
     )
+
+
+def _best_effort_refresh_settlement_progress_for_request(
+    db: Database, payment_request_id: str, actor_user_id: str
+) -> None:
+    try:
+        _refresh_settlement_progress_for_request(db, payment_request_id, actor_user_id)
+    except Exception:
+        logger.exception(
+            "Failed to refresh settlement progress for payment request %s",
+            payment_request_id,
+        )
 
 
 @track_service_operation("payments.create")
@@ -186,7 +201,6 @@ def confirm_payment(db: Database, payment_id: str, actor_user_id: str) -> dict:
             {"id": payment["payment_request_id"]},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
-        _refresh_settlement_progress_for_request(db, payment["payment_request_id"], actor_user_id)
     record_domain_event("payments", "confirmed")
     record_audit_event(
         db,
@@ -195,6 +209,10 @@ def confirm_payment(db: Database, payment_id: str, actor_user_id: str) -> dict:
         resource_id=payment_id,
         actor_user_id=actor_user_id,
     )
+    if payment.get("payment_request_id"):
+        _best_effort_refresh_settlement_progress_for_request(
+            db, payment["payment_request_id"], actor_user_id
+        )
     return _payment_to_api(get_payment_or_404(db, payment_id))
 
 
@@ -225,7 +243,6 @@ def reject_payment(db: Database, payment_id: str, actor_user_id: str) -> dict:
             {"id": payment["payment_request_id"]},
             {"$set": {"status": "rejected", "updated_at": now}},
         )
-        _refresh_settlement_progress_for_request(db, payment["payment_request_id"], actor_user_id)
     record_domain_event("payments", "rejected")
     record_audit_event(
         db,
@@ -234,6 +251,10 @@ def reject_payment(db: Database, payment_id: str, actor_user_id: str) -> dict:
         resource_id=payment_id,
         actor_user_id=actor_user_id,
     )
+    if payment.get("payment_request_id"):
+        _best_effort_refresh_settlement_progress_for_request(
+            db, payment["payment_request_id"], actor_user_id
+        )
     return _payment_to_api(get_payment_or_404(db, payment_id))
 
 
@@ -347,31 +368,72 @@ def _create_payment_request(
     return _payment_request_to_api(payment_request)
 
 
-def _validate_settlement_edge(plan: dict, edge: dict) -> dict:
-    if plan.get("status") not in {"approved", "executing", "partially_settled"}:
-        raise HTTPException(status_code=409, detail="Settlement plan is not executable.")
-    edge_id = edge.get("edge_id")
+def _get_settlement_plan_or_404(db: Database, plan_id: str) -> dict:
+    plan = db.settlement_plans.find_one(active_filter({"id": plan_id}))
+    if not plan:
+        raise HTTPException(status_code=404, detail="Settlement plan not found.")
+    return plan
+
+
+def _get_stored_settlement_edge_or_400(plan: dict, edge_id: str) -> dict:
     stored_edge = next(
         (candidate for candidate in plan.get("edges", []) if candidate.get("edge_id") == edge_id),
         None,
     )
     if not stored_edge:
         raise HTTPException(status_code=400, detail="Settlement edge is not part of this plan.")
-    for field in ("debtor_id", "creditor_id", "amount_kopecks"):
-        if stored_edge.get(field) != edge.get(field):
-            raise HTTPException(status_code=400, detail="Settlement edge does not match plan.")
     return stored_edge
+
+
+def _validate_settlement_edge(plan: dict, edge: dict, event: dict) -> dict:
+    if plan.get("status") not in {"approved", "executing", "partially_settled"}:
+        raise HTTPException(status_code=409, detail="Settlement plan is not executable.")
+    debtor_id = edge.get("debtor_id")
+    creditor_id = edge.get("creditor_id")
+    amount_kopecks = int(edge.get("amount_kopecks", 0))
+    if debtor_id == creditor_id:
+        raise HTTPException(status_code=400, detail="Settlement edge parties must differ.")
+    if debtor_id not in event["users"] or creditor_id not in event["users"]:
+        raise HTTPException(
+            status_code=400, detail="Settlement edge parties must belong to event users."
+        )
+    if amount_kopecks <= 0:
+        raise HTTPException(status_code=400, detail="Settlement edge amount must be positive.")
+    return edge
+
+
+def _assert_existing_settlement_request_matches_edge(
+    payment_request: dict, plan: dict, edge: dict
+) -> None:
+    expected = {
+        "event_id": plan["event_id"],
+        "debtor_id": edge["debtor_id"],
+        "creditor_id": edge["creditor_id"],
+        "amount_kopecks": edge["amount_kopecks"],
+        "origin": "settlement_plan",
+        "settlement_plan_id": plan["id"],
+        "settlement_edge_id": edge["edge_id"],
+    }
+    for field, value in expected.items():
+        if payment_request.get(field) != value:
+            raise HTTPException(
+                status_code=409, detail="Existing settlement payment request is inconsistent."
+            )
 
 
 def create_or_get_settlement_payment_request(
     db: Database,
-    plan: dict,
-    edge: dict,
+    *,
+    plan_id: str,
+    edge_id: str,
     actor_user_id: str,
 ) -> dict:
+    plan = _get_settlement_plan_or_404(db, plan_id)
     event = assert_event_access(db, plan["event_id"], actor_user_id)
     assert_event_open(event)
-    stored_edge = _validate_settlement_edge(plan, edge)
+    stored_edge = _validate_settlement_edge(
+        plan, _get_stored_settlement_edge_or_400(plan, edge_id), event
+    )
 
     query = active_filter(
         {
@@ -381,6 +443,7 @@ def create_or_get_settlement_payment_request(
     )
     existing = db.payment_requests.find_one(query)
     if existing:
+        _assert_existing_settlement_request_matches_edge(existing, plan, stored_edge)
         return _payment_request_to_api(existing)
 
     now = utc_now()

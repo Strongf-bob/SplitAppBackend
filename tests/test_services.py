@@ -2095,20 +2095,84 @@ def test_settlement_execute_stales_approved_plan_when_snapshot_changed(db):
     assert db.payment_requests.count_documents({}) == 0
 
 
+def test_settlement_execute_post_transition_snapshot_race_stales_without_requests(db, monkeypatch):
+    service, approved = create_approved_settlement_plan(db)
+    original_snapshot = service._snapshot_for_current_state
+    calls = 0
+
+    def mutate_after_executing_transition(db_arg, event_id, actor_user_id):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            create_settlement_source_change(db_arg, title="Execute race")
+        return original_snapshot(db_arg, event_id, actor_user_id)
+
+    monkeypatch.setattr(service, "_snapshot_for_current_state", mutate_after_executing_transition)
+
+    try:
+        service.execute_settlement_plan(db, approved["id"], USER_A, idempotency_key="execute-race")
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected post-transition stale execution race to fail")
+
+    stored = db.settlement_plans.find_one({"id": approved["id"]})
+    assert calls == 2
+    assert stored["status"] == "stale"
+    assert stored.get("active_key") is None
+    assert stored.get("last_action_id")
+    assert db.payment_requests.count_documents({"origin": "settlement_plan"}) == 0
+    assert audit_action_count(db, "settlement_plan.stale", approved["id"]) == 1
+
+
 def test_settlement_execute_rejects_forged_or_mutated_edge_materialization(db):
     service, approved = create_approved_settlement_plan(db)
     stored = db.settlement_plans.find_one({"id": approved["id"]})
-    forged_edge = dict(stored["edges"][0])
-    forged_edge["amount_kopecks"] += 1
+    edge_id = stored["edges"][0]["edge_id"]
+    db.settlement_plans.update_one(
+        {"id": approved["id"], "edges.edge_id": edge_id},
+        {"$set": {"edges.$.amount_kopecks": 0}},
+    )
 
     try:
-        service._create_or_get_settlement_payment_request(db, stored, forged_edge, USER_A)
+        service._create_or_get_settlement_payment_request(
+            db, plan_id=approved["id"], edge_id=edge_id, actor_user_id=USER_A
+        )
     except Exception as exc:
         assert_status(exc, 400)
     else:
-        raise AssertionError("Expected forged settlement edge materialization to fail")
+        raise AssertionError("Expected altered settlement edge materialization to fail")
 
     assert db.payment_requests.count_documents({}) == 0
+
+
+def test_settlement_payment_helper_reloads_stored_plan_and_rejects_unknown_edge(db):
+    service, approved = create_approved_settlement_plan(db)
+    stored_edge = db.settlement_plans.find_one({"id": approved["id"]})["edges"][0]
+    forged_edge_id = "99999999-9999-9999-9999-999999999999"
+
+    try:
+        service._create_or_get_settlement_payment_request(
+            db, plan_id=approved["id"], edge_id=forged_edge_id, actor_user_id=USER_A
+        )
+    except Exception as exc:
+        assert_status(exc, 400)
+    else:
+        raise AssertionError("Expected forged edge id to fail")
+
+    try:
+        payments.create_or_get_settlement_payment_request(
+            db,
+            plan_id="99999999-9999-9999-9999-999999999998",
+            edge_id=stored_edge["edge_id"],
+            actor_user_id=USER_A,
+        )
+    except Exception as exc:
+        assert_status(exc, 404)
+    else:
+        raise AssertionError("Expected synthetic plan id to fail")
+
+    assert db.payment_requests.count_documents({"origin": "settlement_plan"}) == 0
 
 
 def test_settlement_execute_partial_creation_failure_is_retryable_without_duplicates(
@@ -2118,12 +2182,12 @@ def test_settlement_execute_partial_creation_failure_is_retryable_without_duplic
     original_create = service._create_or_get_settlement_payment_request
     calls = 0
 
-    def fail_second_edge(db_arg, plan_arg, edge_arg, actor_user_id):
+    def fail_second_edge(db_arg, plan_id, edge_id, actor_user_id):
         nonlocal calls
         calls += 1
         if calls == 2:
             raise RuntimeError("simulated payment request failure")
-        return original_create(db_arg, plan_arg, edge_arg, actor_user_id)
+        return original_create(db_arg, plan_id, edge_id, actor_user_id)
 
     monkeypatch.setattr(service, "_create_or_get_settlement_payment_request", fail_second_edge)
     try:
@@ -2165,6 +2229,45 @@ def test_settlement_execute_same_and_different_actor_keys_link_existing_request_
     assert db.payment_requests.count_documents({}) == 1
     assert audit_action_count(db, "settlement_plan.executing", approved["id"]) == 1
     assert audit_action_total(db, "payment_request.created") == 1
+
+
+def test_settlement_execute_replay_requires_current_member_before_idempotency_cache(db):
+    service, approved = create_approved_settlement_plan(db)
+    first = service.execute_settlement_plan(db, approved["id"], USER_A, idempotency_key="execute-a")
+    remove_active_member(db, USER_A)
+
+    try:
+        service.execute_settlement_plan(db, approved["id"], USER_A, idempotency_key="execute-a")
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected removed member execute replay to fail before cache replay")
+
+    assert db.payment_requests.count_documents({"id": first["edges"][0]["payment_request_id"]}) == 1
+
+
+def test_settlement_execute_replay_requires_open_event_even_when_completed(db):
+    service, approved = create_approved_settlement_plan(db)
+    executed = service.execute_settlement_plan(
+        db, approved["id"], USER_A, idempotency_key="execute"
+    )
+    edge = executed["edges"][0]
+    payment = payments.mark_payment_request_paid(
+        db,
+        edge["payment_request_id"],
+        edge["debtor_id"],
+        idempotency_key="mark-paid",
+    )
+    payments.confirm_payment(db, payment["id"], edge["creditor_id"])
+    assert service.get_settlement_plan(db, approved["id"], USER_A)["status"] == "completed"
+    db.events.update_one({"id": EVENT_ID}, {"$set": {"is_closed": True}})
+
+    try:
+        service.execute_settlement_plan(db, approved["id"], USER_A, idempotency_key="execute")
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected closed event execute replay to fail before cache replay")
 
 
 def test_settlement_execute_links_exact_payment_request_provenance_without_payment(db):
@@ -2271,6 +2374,76 @@ def test_settlement_rejected_payment_remains_visible_and_not_completed(db):
     assert refreshed["edges"][0]["status"] == "rejected"
     assert audit_action_count(db, "settlement_plan.partially_settled", approved["id"]) == 0
     assert audit_action_count(db, "settlement_plan.completed", approved["id"]) == 0
+
+
+def test_settlement_confirm_refresh_failure_does_not_rollback_money_audit_or_domain(
+    db, monkeypatch
+):
+    service, approved = create_approved_settlement_plan(db)
+    executed = service.execute_settlement_plan(
+        db, approved["id"], USER_A, idempotency_key="execute"
+    )
+    edge = executed["edges"][0]
+    payment = payments.mark_payment_request_paid(
+        db,
+        edge["payment_request_id"],
+        edge["debtor_id"],
+        idempotency_key="mark-paid",
+    )
+    domain_events = []
+    monkeypatch.setattr(
+        payments,
+        "record_domain_event",
+        lambda domain, action: domain_events.append((domain, action)),
+    )
+    monkeypatch.setattr(
+        payments,
+        "_refresh_settlement_progress_for_request",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("refresh failed")),
+    )
+
+    confirmed = payments.confirm_payment(db, payment["id"], edge["creditor_id"])
+
+    payment_request = db.payment_requests.find_one({"id": edge["payment_request_id"]})
+    assert confirmed["status"] == "confirmed"
+    assert confirmed["confirmed"] is True
+    assert payment_request["status"] == "confirmed"
+    assert audit_action_count(db, "payment.confirmed", payment["id"]) == 1
+    assert domain_events == [("payments", "confirmed")]
+
+
+def test_settlement_reject_refresh_failure_does_not_rollback_money_audit_or_domain(db, monkeypatch):
+    service, approved = create_approved_settlement_plan(db)
+    executed = service.execute_settlement_plan(
+        db, approved["id"], USER_A, idempotency_key="execute"
+    )
+    edge = executed["edges"][0]
+    payment = payments.mark_payment_request_paid(
+        db,
+        edge["payment_request_id"],
+        edge["debtor_id"],
+        idempotency_key="mark-paid",
+    )
+    domain_events = []
+    monkeypatch.setattr(
+        payments,
+        "record_domain_event",
+        lambda domain, action: domain_events.append((domain, action)),
+    )
+    monkeypatch.setattr(
+        payments,
+        "_refresh_settlement_progress_for_request",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("refresh failed")),
+    )
+
+    rejected = payments.reject_payment(db, payment["id"], edge["creditor_id"])
+
+    payment_request = db.payment_requests.find_one({"id": edge["payment_request_id"]})
+    assert rejected["status"] == "rejected"
+    assert rejected["confirmed"] is False
+    assert payment_request["status"] == "rejected"
+    assert audit_action_count(db, "payment.rejected", payment["id"]) == 1
+    assert domain_events == [("payments", "rejected")]
 
 
 def test_settlement_public_payment_request_authorization_rule_is_unchanged(db):

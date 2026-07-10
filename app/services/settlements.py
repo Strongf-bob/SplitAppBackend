@@ -415,15 +415,18 @@ def refresh_settlement_plan_progress_for_payment_request(
 
 
 def _create_or_get_settlement_payment_request(
-    db: Database, plan: dict, edge: dict, actor_user_id: str
+    db: Database, plan_id: str, edge_id: str, actor_user_id: str
 ) -> dict:
-    return payment_services.create_or_get_settlement_payment_request(db, plan, edge, actor_user_id)
+    return payment_services.create_or_get_settlement_payment_request(
+        db, plan_id=plan_id, edge_id=edge_id, actor_user_id=actor_user_id
+    )
 
 
 def _transition_approved_plan_to_executing(db: Database, plan: dict, actor_user_id: str) -> dict:
+    action_id = new_uuid()
     result = db.settlement_plans.update_one(
         {"id": plan["id"], "status": "approved"},
-        {"$set": {"status": "executing", "updated_at": utc_now()}},
+        {"$set": {"status": "executing", "updated_at": utc_now(), "last_action_id": action_id}},
     )
     if result.modified_count:
         _record_plan_mutation(db, plan["id"], actor_user_id, "executing")
@@ -453,8 +456,7 @@ def _link_edge_payment_request(
 def _execute_settlement_plan(db: Database, plan_id: str, actor_user_id: str) -> dict:
     plan = _get_plan_or_404(db, plan_id)
     event = assert_event_access(db, plan["event_id"], actor_user_id)
-    if plan["status"] != "completed":
-        assert_event_open(event)
+    assert_event_open(event)
 
     plan = _refresh_plan_progress(db, plan, actor_user_id)
     if plan["status"] == "approved":
@@ -462,6 +464,13 @@ def _execute_settlement_plan(db: Database, plan_id: str, actor_user_id: str) -> 
             db, plan, actor_user_id, statuses={"approved"}
         )
         plan = _transition_approved_plan_to_executing(db, plan, actor_user_id)
+        plan = _ensure_current_snapshot_or_mark_stale(
+            db,
+            plan,
+            actor_user_id,
+            action_id=plan.get("last_action_id"),
+            statuses={"executing"},
+        )
     elif plan["status"] not in EXECUTION_REFRESH_STATUSES:
         raise HTTPException(status_code=409, detail="Settlement plan is not approved.")
 
@@ -469,7 +478,7 @@ def _execute_settlement_plan(db: Database, plan_id: str, actor_user_id: str) -> 
         payment_request = _find_payment_request_for_edge(db, plan["id"], edge)
         if payment_request is None:
             payment_request = _create_or_get_settlement_payment_request(
-                db, plan, edge, actor_user_id
+                db, plan["id"], edge["edge_id"], actor_user_id
             )
         _link_edge_payment_request(db, plan["id"], edge["edge_id"], payment_request)
         plan = _get_plan_or_404(db, plan["id"])
@@ -582,6 +591,9 @@ def list_settlement_plans(
 def execute_settlement_plan(
     db: Database, plan_id: str, actor_user_id: str, *, idempotency_key: str
 ) -> dict:
+    plan = _get_plan_or_404(db, plan_id)
+    event = assert_event_access(db, plan["event_id"], actor_user_id)
+    assert_event_open(event)
     return run_idempotent_create(
         db,
         actor_user_id=actor_user_id,
