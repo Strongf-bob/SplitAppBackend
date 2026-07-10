@@ -1262,6 +1262,54 @@
         }
       }
     },
+    "/api/events/{id}/settlement-preview": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Get Event Settlement Preview",
+        "operationId": "get_event_settlement_preview_api_events__id__settlement_preview_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementPreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/friends": {
       "post": {
         "tags": [
@@ -7234,6 +7282,137 @@
           "expires_in"
         ],
         "title": "RefreshResponse"
+      },
+      "SettlementNetPosition": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "owes",
+              "receives"
+            ],
+            "title": "Direction"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Kopecks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "direction",
+          "amount_kopecks"
+        ],
+        "title": "SettlementNetPosition"
+      },
+      "SettlementPreview": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Event Id"
+          },
+          "raw_debts": {
+            "items": {
+              "$ref": "#/components/schemas/EventBalanceExplanation"
+            },
+            "type": "array",
+            "title": "Raw Debts"
+          },
+          "net_positions": {
+            "items": {
+              "$ref": "#/components/schemas/SettlementNetPosition"
+            },
+            "type": "array",
+            "title": "Net Positions"
+          },
+          "recommended_transfers": {
+            "items": {
+              "$ref": "#/components/schemas/SettlementTransfer"
+            },
+            "type": "array",
+            "title": "Recommended Transfers"
+          },
+          "source_participant_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Source Participant Ids"
+          },
+          "original_transfer_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Original Transfer Count"
+          },
+          "recommended_transfer_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Recommended Transfer Count"
+          },
+          "original_gross_kopecks": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Original Gross Kopecks"
+          },
+          "recommended_total_kopecks": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Recommended Total Kopecks"
+          },
+          "transfer_count_reduced": {
+            "type": "boolean",
+            "title": "Transfer Count Reduced"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "raw_debts",
+          "net_positions",
+          "recommended_transfers",
+          "source_participant_ids",
+          "original_transfer_count",
+          "recommended_transfer_count",
+          "original_gross_kopecks",
+          "recommended_total_kopecks",
+          "transfer_count_reduced"
+        ],
+        "title": "SettlementPreview"
+      },
+      "SettlementTransfer": {
+        "properties": {
+          "debtor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Debtor Id"
+          },
+          "creditor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creditor Id"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Kopecks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "debtor_id",
+          "creditor_id",
+          "amount_kopecks"
+        ],
+        "title": "SettlementTransfer"
       },
       "SplitikAttachment": {
         "properties": {
