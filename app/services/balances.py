@@ -161,9 +161,13 @@ def get_event_balances(db: Database, event_id: str, actor_user_id: str) -> list[
     return build_settlement_edges(get_event_raw_balances(db, event_id, actor_user_id))
 
 
-@track_service_operation("balances.explain_event")
-def get_event_balance_explanations(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
-    assert_event_access(db, event_id, actor_user_id)
+def _get_event_balance_explanations_unchecked(db: Database, event_id: str) -> list[dict]:
     receipts, confirmed_payments = _balance_source_documents(db, event_id)
     ledger, contributions = _build_ledger(receipts, confirmed_payments)
     return _calculate_balance_rows(event_id, ledger, contributions)
+
+
+@track_service_operation("balances.explain_event")
+def get_event_balance_explanations(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
+    assert_event_access(db, event_id, actor_user_id)
+    return _get_event_balance_explanations_unchecked(db, event_id)
