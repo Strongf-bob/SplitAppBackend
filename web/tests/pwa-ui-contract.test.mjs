@@ -39,8 +39,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v37/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v37"/);
+  assert.match(sw, /splitapp-next-pwa-v38/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v38"/);
   assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
@@ -347,6 +347,12 @@ test("Splitik composer follows the visual viewport instead of a fixed page offse
   assert.match(page, /useVisualViewportHeight\(true\)/);
   assert.doesNotMatch(page, /data-testid="splitik-composer"[\s\S]{0,450}fixed/);
   assert.match(page, /view === "splitik" && "hidden"/);
+});
+
+test("Splitik chat keeps an explicit exit to the events screen while navigation is hidden", () => {
+  assert.match(page, /onExit=\{\(\) => onNavigate\("events"\)\}/);
+  assert.match(splitikChat, /aria-label="Вернуться к событиям"/);
+  assert.match(splitikChat, />К событиям<\/span>/);
 });
 
 test("Splitik chat can attach receipt photos and send their attachment ids", () => {
