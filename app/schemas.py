@@ -34,6 +34,7 @@ DisputeResourceType = Literal["receipt", "payment", "payment_request"]
 SplitikMode = Literal["general", "event", "receipt", "member"]
 ClientReportKind = Literal["automatic_error", "manual_feedback"]
 ClientReportSeverity = Literal["info", "warning", "error", "critical"]
+SettlementPlanStatus = Literal["pending", "approved", "rejected", "stale", "expired"]
 ClientReportScreen = Literal[
     "home",
     "events",
@@ -678,7 +679,7 @@ class SettlementPlanApproval(BaseModel):
 class SettlementPlan(BaseModel):
     id: UUID
     event_id: UUID
-    status: str
+    status: SettlementPlanStatus
     algorithm_version: Literal["greedy-net-v1"]
     preview: SettlementPreview
     required_approver_ids: list[UUID]
