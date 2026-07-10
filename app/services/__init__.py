@@ -74,6 +74,13 @@ from app.services.receipts import (
 )
 from app.services.reports import build_event_csv_export, list_receipt_categories
 from app.services.settlements import get_settlement_preview
+from app.services.settlements import (
+    approve_settlement_plan,
+    create_settlement_plan,
+    get_settlement_plan,
+    list_settlement_plans,
+    reject_settlement_plan,
+)
 from app.services import splitik_attachments
 from app.services.users import (
     get_current_user,
@@ -87,6 +94,7 @@ __all__ = [
     "accept_event_invite",
     "accept_friend_request",
     "acknowledge_payment_request",
+    "approve_settlement_plan",
     "block_friendship",
     "build_event_csv_export",
     "cancel_payment_request",
@@ -99,6 +107,7 @@ __all__ = [
     "create_event_invite",
     "create_client_report",
     "create_friend_request",
+    "create_settlement_plan",
     "delete_event",
     "decline_event_invite",
     "dispute_receipt_share_review",
@@ -124,6 +133,7 @@ __all__ = [
     "get_payment_reject_confirmation_summary",
     "get_receipt_confirm_confirmation_summary",
     "get_receipt_void_confirmation_summary",
+    "get_settlement_plan",
     "get_settlement_preview",
     "import_user_contacts",
     "list_events",
@@ -136,6 +146,7 @@ __all__ = [
     "list_receipt_share_reviews",
     "list_receipts_by_event",
     "list_receipt_categories",
+    "list_settlement_plans",
     "list_users",
     "login_with_yandex_oauth",
     "mark_payment_request_paid",
@@ -143,6 +154,7 @@ __all__ = [
     "mark_allocation_session_ready",
     "preview_event_invite",
     "reject_payment",
+    "reject_settlement_plan",
     "reject_friend_request",
     "remove_participant",
     "remove_friendship",

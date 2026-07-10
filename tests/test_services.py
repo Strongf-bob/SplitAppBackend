@@ -49,6 +49,117 @@ def get_settlement_preview(db, event_id: str, actor_user_id: str) -> dict:
     return module.get_settlement_preview(db, event_id, actor_user_id)
 
 
+def settlement_service():
+    try:
+        return importlib.import_module("app.services.settlements")
+    except ModuleNotFoundError:
+        pytest.fail("app.services.settlements module is missing")
+
+
+def add_active_member(db, user_id: str) -> None:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    db.event_memberships.insert_one(
+        {
+            "id": f"aaaaaaaa-0000-0000-0000-{user_id[:12]}",
+            "event_id": EVENT_ID,
+            "user_id": user_id,
+            "role": "member",
+            "status": "active",
+            "joined_at": now,
+            "removed_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+
+
+def create_cycle_settlement_source(db, *, extra_same_edge: bool = False) -> list[dict]:
+    seed_event(db)
+    add_active_member(db, USER_C)
+    first = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_A,
+            title="A paid for B",
+            total_amount_kopecks=500,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="AB",
+                    cost_kopecks=500,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_B, share_value="1")],
+                )
+            ],
+        ),
+        USER_A,
+    )
+    created = [first]
+    if extra_same_edge:
+        created.append(
+            receipts.create_receipt(
+                db,
+                EVENT_ID,
+                schemas.CreateReceiptRequest(
+                    payer_id=USER_A,
+                    title="A paid again for B",
+                    total_amount_kopecks=200,
+                    items=[
+                        schemas.CreateReceiptItemRequest(
+                            name="AB again",
+                            cost_kopecks=200,
+                            share_items=[
+                                schemas.CreateShareItemRequest(user_id=USER_B, share_value="1")
+                            ],
+                        )
+                    ],
+                ),
+                USER_A,
+            )
+        )
+        created.append(
+            receipts.create_receipt(
+                db,
+                EVENT_ID,
+                schemas.CreateReceiptRequest(
+                    payer_id=USER_C,
+                    title="C paid for A",
+                    total_amount_kopecks=400,
+                    items=[
+                        schemas.CreateReceiptItemRequest(
+                            name="CA",
+                            cost_kopecks=400,
+                            share_items=[
+                                schemas.CreateShareItemRequest(user_id=USER_A, share_value="1")
+                            ],
+                        )
+                    ],
+                ),
+                USER_C,
+            )
+        )
+    second = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_B,
+            title="B paid for C",
+            total_amount_kopecks=500,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="BC",
+                    cost_kopecks=500,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_C, share_value="1")],
+                )
+            ],
+        ),
+        USER_B,
+    )
+    created.append(second)
+    for receipt in created:
+        confirm_receipt_for_all(db, receipt["id"], receipt["payer_id"])
+    return created
+
+
 def test_event_create_and_list_for_actor(db):
     from tests.conftest import seed_users
 
@@ -1303,6 +1414,208 @@ def test_settlement_preview_handles_empty_and_already_simple_events(db):
     assert simple_preview["original_gross_kopecks"] == 5000
     assert simple_preview["recommended_total_kopecks"] == 5000
     assert simple_preview["transfer_count_reduced"] is False
+
+
+def test_settlement_plan_create_persists_canonical_snapshot_and_hides_internal_hash(db):
+    create_cycle_settlement_source(db, extra_same_edge=True)
+    service = settlement_service()
+
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_C, idempotency_key="settlement-plan-1")
+    replay = service.create_settlement_plan(
+        db, EVENT_ID, USER_C, idempotency_key="settlement-plan-1"
+    )
+
+    assert replay == plan
+    assert plan["event_id"] == EVENT_ID
+    assert plan["status"] == "pending"
+    assert plan["algorithm_version"] == "greedy-net-v1"
+    assert plan["created_by"] == USER_C
+    assert plan["required_approver_ids"] == [USER_A, USER_B, USER_C]
+    assert plan["approvals"] == []
+    assert plan["preview"]["transfer_count_reduced"] is True
+    assert plan["preview"]["original_transfer_count"] == 3
+    assert plan["preview"]["recommended_transfer_count"] == 2
+    assert "snapshot_hash" not in plan
+    assert "canonical_snapshot" not in plan
+
+    ttl = plan["expires_at"] - plan["created_at"]
+    assert ttl == timedelta(hours=24)
+
+    stored = db.settlement_plans.find_one({"id": plan["id"]})
+    assert stored["snapshot_hash"]
+    assert stored["active_key"] == f"{EVENT_ID}:{stored['snapshot_hash']}"
+    canonical = stored["canonical_snapshot"]
+    assert canonical["algorithm_version"] == "greedy-net-v1"
+    assert canonical["active_membership_user_ids"] == [USER_A, USER_B, USER_C]
+    raw_edge_with_two_sources = next(
+        row for row in canonical["raw_debts"] if row["debitor_id"] == USER_B
+    )
+    source_ids = [item["source_id"] for item in raw_edge_with_two_sources["contributions"]]
+    assert source_ids == sorted(source_ids)
+
+
+def test_settlement_plan_create_rejects_closed_or_unreduced_preview(db):
+    service = settlement_service()
+    seed_event(db)
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
+
+    try:
+        service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="simple")
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected unreduced settlement preview to block plan creation")
+
+    db.receipts.delete_many({})
+    db.receipt_items.delete_many({})
+    db.receipt_share_items.delete_many({})
+    db.receipt_share_reviews.delete_many({})
+    create_cycle_settlement_source(db)
+    db.events.update_one({"id": EVENT_ID}, {"$set": {"is_closed": True}})
+
+    try:
+        service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="closed")
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected closed event to block plan creation")
+
+
+def test_settlement_plan_duplicate_active_guard_releases_after_rejection(db):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+
+    first = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan-a")
+    try:
+        service.create_settlement_plan(db, EVENT_ID, USER_B, idempotency_key="plan-b")
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected duplicate active settlement plan to fail")
+
+    rejected = service.reject_settlement_plan(db, first["id"], USER_B, "Need to fix receipt")
+    assert rejected["status"] == "rejected"
+    assert rejected["rejected_by"] == USER_B
+    assert rejected["rejection_reason"] == "Need to fix receipt"
+    assert db.settlement_plans.find_one({"id": first["id"]}).get("active_key") is None
+
+    recreated = service.create_settlement_plan(db, EVENT_ID, USER_B, idempotency_key="plan-c")
+    assert recreated["id"] != first["id"]
+    assert recreated["status"] == "pending"
+
+
+def test_settlement_plan_approval_requires_source_participant_and_is_idempotent_until_all_approve(
+    db,
+):
+    create_cycle_settlement_source(db)
+    user_d = "44444444-4444-4444-4444-444444444444"
+    db.users.insert_one(
+        {
+            "id": user_d,
+            "name": "Dana",
+            "phone_number": "+10000000004",
+            "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "updated_at": datetime(2026, 1, 1, tzinfo=UTC),
+        }
+    )
+    add_active_member(db, user_d)
+    service = settlement_service()
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+
+    try:
+        service.approve_settlement_plan(db, plan["id"], user_d)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-source event member approval to fail")
+
+    first = service.approve_settlement_plan(db, plan["id"], USER_A)
+    repeated = service.approve_settlement_plan(db, plan["id"], USER_A)
+    second = service.approve_settlement_plan(db, plan["id"], USER_B)
+    final = service.approve_settlement_plan(db, plan["id"], USER_C)
+
+    assert first["status"] == "pending"
+    assert repeated == first
+    assert second["status"] == "pending"
+    assert final["status"] == "approved"
+    assert [approval["user_id"] for approval in final["approvals"]] == [USER_A, USER_B, USER_C]
+    assert db.settlement_plans.find_one({"id": plan["id"]})["active_key"]
+
+
+def test_settlement_plan_source_mismatch_marks_stale_and_blocks_approval(db):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+
+    new_receipt = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_A,
+            title="Changed source",
+            total_amount_kopecks=100,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="Changed",
+                    cost_kopecks=100,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_C, share_value="1")],
+                )
+            ],
+        ),
+        USER_A,
+    )
+    confirm_receipt_for_all(db, new_receipt["id"], USER_A)
+
+    try:
+        service.approve_settlement_plan(db, plan["id"], USER_A)
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected stale settlement plan approval to fail")
+
+    stored = db.settlement_plans.find_one({"id": plan["id"]})
+    assert stored["status"] == "stale"
+    assert stored.get("active_key") is None
+
+
+def test_settlement_plan_expiry_is_server_transitioned_and_releases_active_guard(db):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+    db.settlement_plans.update_one(
+        {"id": plan["id"]},
+        {"$set": {"expires_at": datetime(2025, 1, 1, tzinfo=UTC)}},
+    )
+
+    expired = service.get_settlement_plan(db, plan["id"], USER_A)
+    assert expired["status"] == "expired"
+    assert db.settlement_plans.find_one({"id": plan["id"]}).get("active_key") is None
+
+    try:
+        service.approve_settlement_plan(db, plan["id"], USER_A)
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected expired settlement plan approval to fail")
+
+    recreated = service.create_settlement_plan(db, EVENT_ID, USER_B, idempotency_key="new-plan")
+    assert recreated["id"] != plan["id"]
+
+
+def test_list_settlement_plans_returns_paginated_event_member_page(db):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    first = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan-a")
+    service.reject_settlement_plan(db, first["id"], USER_A, "Superseded")
+    second = service.create_settlement_plan(db, EVENT_ID, USER_B, idempotency_key="plan-b")
+
+    page = service.list_settlement_plans(db, EVENT_ID, USER_C, limit=1, offset=0)
+
+    assert page["limit"] == 1
+    assert page["offset"] == 0
+    assert page["total"] == 2
+    assert [item["id"] for item in page["items"]] == [second["id"]]
 
 
 def test_confirmed_receipt_financial_fields_cannot_be_changed(db):

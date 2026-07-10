@@ -24,6 +24,64 @@ from tests.conftest import EVENT_ID, USER_A, USER_B, USER_C, confirm_receipt_for
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
+def add_cycle_member(db) -> None:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    db.event_memberships.insert_one(
+        {
+            "id": "aaaaaaaa-0000-0000-0000-000000000003",
+            "event_id": EVENT_ID,
+            "user_id": USER_C,
+            "role": "member",
+            "status": "active",
+            "joined_at": now,
+            "removed_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+
+
+def create_cycle_source(db) -> None:
+    seed_event(db)
+    add_cycle_member(db)
+    first = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_A,
+            title="A paid for B",
+            total_amount_kopecks=500,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="AB",
+                    cost_kopecks=500,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_B, share_value="1")],
+                )
+            ],
+        ),
+        USER_A,
+    )
+    second = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_B,
+            title="B paid for C",
+            total_amount_kopecks=500,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="BC",
+                    cost_kopecks=500,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_C, share_value="1")],
+                )
+            ],
+        ),
+        USER_B,
+    )
+    confirm_receipt_for_all(db, first["id"], USER_A)
+    confirm_receipt_for_all(db, second["id"], USER_B)
+
+
 def test_cors_allowed_origins_parse_env(monkeypatch):
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "https://a.example, https://b.example,,")
 
@@ -571,6 +629,77 @@ def test_settlement_preview_endpoint_is_read_only_for_closed_event(db):
     assert set(body["recommended_transfers"][0]) == {"debtor_id", "creditor_id", "amount_kopecks"}
 
 
+def test_settlement_plan_endpoints_create_list_get_approve_and_reject(db):
+    access_token, _ = tokens.create_access_token(USER_A)
+    create_cycle_source(db)
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+    api.dependency_overrides[get_db] = lambda: db
+    api.include_router(events_router)
+    client = TestClient(api)
+
+    missing_key = client.post(
+        f"/api/events/{EVENT_ID}/settlement-plans",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert missing_key.status_code == 422
+
+    created_response = client.post(
+        f"/api/events/{EVENT_ID}/settlement-plans",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Idempotency-Key": "settlement-plan-api-1",
+        },
+    )
+    assert created_response.status_code == 201
+    created = created_response.json()
+    assert created["status"] == "pending"
+    assert created["algorithm_version"] == "greedy-net-v1"
+    assert created["required_approver_ids"] == [USER_A, USER_B, USER_C]
+    assert created["approvals"] == []
+    assert "snapshot_hash" not in created
+    assert "canonical_snapshot" not in created
+
+    list_response = client.get(
+        f"/api/events/{EVENT_ID}/settlement-plans?limit=1&offset=0",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert list_response.status_code == 200
+    assert list_response.json()["items"][0]["id"] == created["id"]
+
+    get_response = client.get(
+        f"/api/settlement-plans/{created['id']}",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert get_response.status_code == 200
+    assert get_response.json()["id"] == created["id"]
+
+    approved_response = client.post(
+        f"/api/settlement-plans/{created['id']}/approve",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert approved_response.status_code == 200
+    assert approved_response.json()["approvals"] == [
+        {"user_id": USER_A, "approved_at": approved_response.json()["approvals"][0]["approved_at"]}
+    ]
+
+    rejected_response = client.post(
+        f"/api/settlement-plans/{created['id']}/reject",
+        headers={"Authorization": f"Bearer {access_token}"},
+        json={"reason": "Changed my mind"},
+    )
+    assert rejected_response.status_code == 200
+    assert rejected_response.json()["status"] == "rejected"
+    assert rejected_response.json()["rejected_by"] == USER_A
+    assert rejected_response.json()["rejection_reason"] == "Changed my mind"
+
+    too_long_reason = client.post(
+        f"/api/settlement-plans/{created['id']}/reject",
+        headers={"Authorization": f"Bearer {access_token}"},
+        json={"reason": "x" * 501},
+    )
+    assert too_long_reason.status_code == 422
+
+
 def test_openapi_exposes_settlement_preview_contract():
     schema = app_main.app.openapi()
     preview = schema["components"]["schemas"]["SettlementPreview"]
@@ -592,6 +721,37 @@ def test_openapi_exposes_settlement_preview_contract():
     ]
     assert set(net_position["properties"]["direction"]["enum"]) == {"owes", "receives"}
     assert transfer["required"] == ["debtor_id", "creditor_id", "amount_kopecks"]
+
+
+def test_openapi_exposes_settlement_plan_contract():
+    schema = app_main.app.openapi()
+    paths = schema["paths"]
+    plan = schema["components"]["schemas"]["SettlementPlan"]
+    page = schema["components"]["schemas"]["SettlementPlanPage"]
+    reject = schema["components"]["schemas"]["SettlementPlanReject"]
+
+    assert "/api/events/{id}/settlement-plans" in paths
+    assert "/api/settlement-plans/{id}" in paths
+    assert "/api/settlement-plans/{id}/approve" in paths
+    assert "/api/settlement-plans/{id}/reject" in paths
+    assert paths["/api/events/{id}/settlement-plans"]["post"]["parameters"][1]["name"] == (
+        "Idempotency-Key"
+    )
+    assert plan["required"] == [
+        "id",
+        "event_id",
+        "status",
+        "algorithm_version",
+        "preview",
+        "required_approver_ids",
+        "approvals",
+        "created_by",
+        "expires_at",
+        "created_at",
+        "updated_at",
+    ]
+    assert page["required"] == ["items", "limit", "offset", "total"]
+    assert reject["properties"]["reason"]["maxLength"] == 500
 
 
 def test_operations_scrape_allows_private_and_loopback_clients():

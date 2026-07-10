@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Response, status
 from pymongo.database import Database
 
 from app import schemas, services
@@ -176,3 +176,58 @@ def get_event_settlement_preview(
     current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
     return services.get_settlement_preview(db, str(id), current_user_id)
+
+
+@router.post(
+    "/api/events/{id}/settlement-plans",
+    response_model=schemas.SettlementPlan,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_settlement_plan(
+    id: UUID,
+    idempotency_key: str = Header(min_length=1, alias="Idempotency-Key"),
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.create_settlement_plan(
+        db, str(id), current_user_id, idempotency_key=idempotency_key
+    )
+
+
+@router.get("/api/events/{id}/settlement-plans", response_model=schemas.SettlementPlanPage)
+def list_settlement_plans(
+    id: UUID,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.list_settlement_plans(db, str(id), current_user_id, limit=limit, offset=offset)
+
+
+@router.get("/api/settlement-plans/{id}", response_model=schemas.SettlementPlan)
+def get_settlement_plan(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.get_settlement_plan(db, str(id), current_user_id)
+
+
+@router.post("/api/settlement-plans/{id}/approve", response_model=schemas.SettlementPlan)
+def approve_settlement_plan(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.approve_settlement_plan(db, str(id), current_user_id)
+
+
+@router.post("/api/settlement-plans/{id}/reject", response_model=schemas.SettlementPlan)
+def reject_settlement_plan(
+    id: UUID,
+    payload: schemas.SettlementPlanReject,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.reject_settlement_plan(db, str(id), current_user_id, payload.reason)
