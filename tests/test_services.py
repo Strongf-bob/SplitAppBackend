@@ -848,6 +848,88 @@ def test_balances_use_kopeck_money_math(db):
     ]
 
 
+def test_event_raw_balances_preserve_pairwise_edges_while_event_balances_are_globally_simplified(
+    db,
+):
+    seed_event(db)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    db.event_memberships.insert_one(
+        {
+            "id": "aaaaaaaa-0000-0000-0000-000000000003",
+            "event_id": EVENT_ID,
+            "user_id": USER_C,
+            "role": "member",
+            "status": "active",
+            "joined_at": now,
+            "removed_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+    first = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_A,
+            title="A paid for B",
+            total_amount_kopecks=500,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="AB",
+                    cost_kopecks=500,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_B, share_value="1")],
+                )
+            ],
+        ),
+        USER_A,
+    )
+    second = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_B,
+            title="B paid for C",
+            total_amount_kopecks=500,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="BC",
+                    cost_kopecks=500,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_C, share_value="1")],
+                )
+            ],
+        ),
+        USER_B,
+    )
+    confirm_receipt_for_all(db, first["id"], USER_A)
+    confirm_receipt_for_all(db, second["id"], USER_B)
+
+    raw_rows = balances.get_event_raw_balances(db, EVENT_ID, USER_A)
+    simplified_rows = balances.get_event_balances(db, EVENT_ID, USER_A)
+
+    assert raw_rows == [
+        {
+            "event_id": EVENT_ID,
+            "debitor_id": USER_B,
+            "creditor_id": USER_A,
+            "amount_kopecks": 500,
+        },
+        {
+            "event_id": EVENT_ID,
+            "debitor_id": USER_C,
+            "creditor_id": USER_B,
+            "amount_kopecks": 500,
+        },
+    ]
+    assert simplified_rows == [
+        {
+            "event_id": EVENT_ID,
+            "debitor_id": USER_C,
+            "creditor_id": USER_A,
+            "amount_kopecks": 500,
+        }
+    ]
+
+
 def test_receipt_validation_creates_reviews_and_blocks_silent_confirmation(db):
     seed_event(db)
     receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
@@ -948,6 +1030,87 @@ def test_balance_explanations_include_receipts_and_confirmed_payments(db):
     assert [(item["source_type"], item["amount_kopecks"]) for item in rows[0]["contributions"]] == [
         ("receipt", 5000),
         ("payment", 2000),
+    ]
+
+
+def test_confirmed_payment_on_simplified_edge_reduces_global_net_positions(db):
+    seed_event(db)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    db.event_memberships.insert_one(
+        {
+            "id": "aaaaaaaa-0000-0000-0000-000000000003",
+            "event_id": EVENT_ID,
+            "user_id": USER_C,
+            "role": "member",
+            "status": "active",
+            "joined_at": now,
+            "removed_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+    first = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_A,
+            title="A paid for B",
+            total_amount_kopecks=500,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="AB",
+                    cost_kopecks=500,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_B, share_value="1")],
+                )
+            ],
+        ),
+        USER_A,
+    )
+    second = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_B,
+            title="B paid for C",
+            total_amount_kopecks=500,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="BC",
+                    cost_kopecks=500,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_C, share_value="1")],
+                )
+            ],
+        ),
+        USER_B,
+    )
+    confirm_receipt_for_all(db, first["id"], USER_A)
+    confirm_receipt_for_all(db, second["id"], USER_B)
+
+    before_payment = balances.get_event_balances(db, EVENT_ID, USER_A)
+    payment = payments.create_payment(
+        db,
+        EVENT_ID,
+        schemas.PaymentCreate(sender_id=USER_C, receiver_id=USER_A, amount_kopecks=200),
+        USER_C,
+    )
+    payments.confirm_payment(db, payment["id"], USER_A)
+    after_payment = balances.get_event_balances(db, EVENT_ID, USER_A)
+
+    assert before_payment == [
+        {
+            "event_id": EVENT_ID,
+            "debitor_id": USER_C,
+            "creditor_id": USER_A,
+            "amount_kopecks": 500,
+        }
+    ]
+    assert after_payment == [
+        {
+            "event_id": EVENT_ID,
+            "debitor_id": USER_C,
+            "creditor_id": USER_A,
+            "amount_kopecks": 300,
+        }
     ]
 
 

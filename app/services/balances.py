@@ -10,6 +10,7 @@ from app.services.common import (
     stored_money_to_kopecks,
     strip_mongo_id,
 )
+from app.services.settlement_algorithm import build_settlement_edges
 
 
 def _apply_transfer(
@@ -148,11 +149,16 @@ def _build_ledger(
 
 
 @track_service_operation("balances.get_event")
-def get_event_balances(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
+def get_event_raw_balances(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
     assert_event_access(db, event_id, actor_user_id)
     receipts, confirmed_payments = _balance_source_documents(db, event_id)
     ledger, _ = _build_ledger(receipts, confirmed_payments)
     return _calculate_balance_rows(event_id, ledger)
+
+
+@track_service_operation("balances.get_event")
+def get_event_balances(db: Database, event_id: str, actor_user_id: str) -> list[dict]:
+    return build_settlement_edges(get_event_raw_balances(db, event_id, actor_user_id))
 
 
 @track_service_operation("balances.explain_event")
