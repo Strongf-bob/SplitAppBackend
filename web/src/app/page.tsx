@@ -109,18 +109,22 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v35";
+const clientShellVersion = "splitapp-next-pwa-v36";
 const initialSyncRetryDelayMs = 900;
 const splitikMessageTimeoutMs = 15000;
 
 const figmaHomeAsset = (name: string) => `/assets/figma-home/${name}`;
 
-const navItems: Array<{ id: View; label: string; image: string; width: number; height: number; center?: boolean }> = [
-  { id: "home", label: "Главная", image: figmaHomeAsset("nav-home.png"), width: 35, height: 35 },
-  { id: "people", label: "Друзья", image: figmaHomeAsset("nav-friends.png"), width: 32, height: 28 },
+type BottomNavItem =
+  | { id: Exclude<View, "splitik">; label: string; emoji: string }
+  | { id: "splitik"; label: string; image: string; width: number; height: number; center: true };
+
+const navItems: BottomNavItem[] = [
+  { id: "home", label: "Главная", emoji: "🏠" },
+  { id: "people", label: "Друзья", emoji: "👥" },
   { id: "splitik", label: "Добавить", image: figmaHomeAsset("nav-add.png"), width: 58, height: 52, center: true },
-  { id: "events", label: "События", image: figmaHomeAsset("nav-events.png"), width: 27, height: 25 },
-  { id: "profile", label: "Профиль", image: figmaHomeAsset("nav-profile.png"), width: 23, height: 23 }
+  { id: "events", label: "События", emoji: "🗓️" },
+  { id: "profile", label: "Профиль", emoji: "👤" }
 ];
 
 const notifications = {
@@ -1325,12 +1329,10 @@ function PhoneShell({
 
       {loggedIn ? (
         <nav
-          data-platform-nav="ios-tab-bar"
-          data-liquid-glass-nav="true"
-          className="liquid-tabbar fixed bottom-[max(env(safe-area-inset-bottom),2.25rem)] left-1/2 z-30 w-[var(--nav-width)] -translate-x-1/2 rounded-[30px] px-1.5 py-1.5"
+          data-platform-nav="transparent-tab-bar"
+          className="transparent-tabbar fixed bottom-[max(env(safe-area-inset-bottom),2.25rem)] left-1/2 z-30 w-[var(--nav-width)] -translate-x-1/2 rounded-[30px] px-1.5 py-1.5"
         >
-          <span className="liquid-tabbar__shine" aria-hidden="true" />
-          <div className="liquid-tabbar__items grid grid-cols-5 gap-1">
+          <div className="transparent-tabbar__items grid grid-cols-5 gap-1">
             {navItems.map((item) => (
               <BottomNavButton key={item.id} item={item} active={view === item.id} onNavigate={onNavigate} />
             ))}
@@ -1346,7 +1348,7 @@ function BottomNavButton({
   active,
   onNavigate
 }: {
-  item: { id: View; label: string; image: string; width: number; height: number; center?: boolean };
+  item: BottomNavItem;
   active: boolean;
   onNavigate: (view: View) => void;
 }) {
@@ -1355,10 +1357,10 @@ function BottomNavButton({
       asChild
       variant="ghost"
       className={cn(
-        "liquid-tabbar__item flex h-[58px] w-full min-w-0 justify-self-center flex-col items-center justify-center gap-[2px] rounded-[29px] px-1.5 py-1 text-[10px] font-extrabold leading-[12px] text-white/[.9] transition-all duration-200 active:scale-[0.97]",
+        "transparent-tabbar__item flex h-[58px] w-full min-w-0 justify-self-center flex-col items-center justify-center gap-[2px] rounded-[22px] px-1.5 py-1 text-[10px] font-extrabold leading-[12px] text-white/[.9] transition-all duration-200 active:scale-[0.97]",
         active
-          ? "liquid-tabbar__item--active w-[78px] text-white"
-          : "hover:bg-white/[.14] hover:text-white"
+          ? "transparent-tabbar__item--active w-[78px] text-white"
+          : "hover:text-white"
       )}
     >
       <a
@@ -1369,15 +1371,19 @@ function BottomNavButton({
           onNavigate(item.id);
         }}
       >
-        <Image
-          src={item.image}
-          alt=""
-          aria-hidden="true"
-          width={item.width}
-          height={item.height}
-          className={cn("object-contain", item.center ? "h-[52px] w-[58px]" : "h-7 w-7")}
-        />
-        {!item.center ? <span>{item.label}</span> : <span className="sr-only">{item.label}</span>}
+        {"emoji" in item ? (
+          <span className="emoji-tabbar__symbol" aria-hidden="true">{item.emoji}</span>
+        ) : (
+          <Image
+            src={item.image}
+            alt=""
+            aria-hidden="true"
+            width={item.width}
+            height={item.height}
+            className="h-[52px] w-[58px] object-contain"
+          />
+        )}
+        {"emoji" in item ? <span>{item.label}</span> : <span className="sr-only">{item.label}</span>}
       </a>
     </Button>
   );

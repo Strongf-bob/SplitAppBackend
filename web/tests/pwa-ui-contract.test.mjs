@@ -32,8 +32,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v35/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v35"/);
+  assert.match(sw, /splitapp-next-pwa-v36/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v36"/);
   assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
@@ -124,19 +124,17 @@ test("profile screen shows the authenticated Yandex user instead of a hardcoded 
   assert.doesNotMatch(page, />A<\/div>/);
 });
 
-test("bottom navigation active tab stays readable with a liquid glass state", () => {
-  assert.match(page, /data-liquid-glass-nav="true"/);
-  assert.match(page, /className="liquid-tabbar fixed bottom-\[max\(env\(safe-area-inset-bottom\),2\.25rem\)\]/);
-  assert.match(globals, /\.liquid-tabbar \{/);
-  assert.match(globals, /-webkit-backdrop-filter: blur\(30px\) saturate\(1\.9\) brightness\(1\.08\)/);
-  assert.match(globals, /backdrop-filter: blur\(30px\) saturate\(1\.9\) brightness\(1\.08\)/);
-  assert.match(globals, /\.liquid-tabbar__item--active::before/);
-  assert.match(page, /flex h-\[58px\] w-full min-w-0 justify-self-center flex-col items-center justify-center gap-\[2px\]/);
-  assert.match(page, /liquid-tabbar__item--active w-\[78px\] text-white/);
-  assert.match(page, /text-white\/\[\.9\] transition-all/);
-  assert.match(page, /figmaHomeAsset\("nav-home\.png"\)/);
+test("bottom navigation uses a lightweight transparent rail with system emoji", () => {
+  assert.match(page, /data-platform-nav="transparent-tab-bar"/);
+  assert.match(globals, /\.transparent-tabbar \{/);
+  assert.match(globals, /backdrop-filter: blur\(16px\)/);
+  assert.doesNotMatch(globals, /mix-blend-mode: screen/);
+  assert.doesNotMatch(globals, /\.transparent-tabbar::after/);
+  assert.match(page, /emoji: "🏠"/);
+  assert.match(page, /emoji: "👥"/);
+  assert.match(page, /emoji: "🗓️"/);
+  assert.match(page, /emoji: "👤"/);
   assert.match(page, /figmaHomeAsset\("nav-add\.png"\)/);
-  assert.doesNotMatch(page, /active && "bg-white\/22 text-white"/);
 });
 
 test("bottom navigation selection follows the requested screen immediately", () => {
@@ -205,10 +203,10 @@ test("PWA surfaces are built on shadcn primitives instead of one-off controls", 
   assert.match(page, /<Input[^>]+data-testid="friend-code-input"/);
 });
 
-test("iOS mobile shell uses a safe-area glass tab bar instead of a generic nav slab", () => {
-  assert.match(page, /data-platform-nav="ios-tab-bar"/);
-  assert.match(page, /liquid-tabbar__shine/);
+test("iOS mobile shell uses a safe-area transparent tab bar", () => {
+  assert.match(page, /data-platform-nav="transparent-tab-bar"/);
   assert.match(globals, /@supports not \(\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)\)/);
+  assert.match(globals, /@supports not \(\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)\) \{[\s\S]*\.transparent-tabbar \{[\s\S]*background:/);
   assert.match(page, /bottom-\[max\(env\(safe-area-inset-bottom\),2\.25rem\)\]/);
   assert.match(layout, /statusBarStyle: "black-translucent"/);
   assert.match(globals, /html \{[\s\S]*background:\s*#1f3d8f;/);
