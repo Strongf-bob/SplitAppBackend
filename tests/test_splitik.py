@@ -117,6 +117,28 @@ def test_explicit_event_command_creates_draft_without_llm(db, monkeypatch):
     assert response["drafts"][0]["payload"]["name"] == "Такси до дома"
 
 
+def test_planner_context_uses_already_loaded_session_messages(db, monkeypatch):
+    session = {
+        "id": "session-1",
+        "messages": [{"id": str(index), "user_message": f"message {index}"} for index in range(8)],
+    }
+
+    def fail_storage_read(**_kwargs):
+        pytest.fail("planner context must use the session already loaded by the request")
+
+    monkeypatch.setattr(splitik_tools, "read_recent_session_messages", fail_storage_read)
+
+    context = splitik._planner_context(
+        db,
+        payload=schemas.SplitikMessageRequest(message="Создай событие"),
+        actor_user_id=USER_A,
+        session_id=session["id"],
+        session=session,
+    )
+
+    assert context["recent_messages"] == session["messages"][-6:]
+
+
 def test_splitik_router_replays_a_retried_message_without_duplicate_draft(db, monkeypatch):
     seed_users(db)
     api = FastAPI()

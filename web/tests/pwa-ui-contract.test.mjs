@@ -3,11 +3,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const page = readFileSync(new URL("../src/app/page.tsx", import.meta.url), "utf8");
+const splitikChat = readFileSync(new URL("../src/components/splitik-chat.tsx", import.meta.url), "utf8");
 const api = readFileSync(new URL("../src/lib/splitapp-api.ts", import.meta.url), "utf8");
 const sw = readFileSync(new URL("../public/sw.js", import.meta.url), "utf8");
 const globals = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../src/app/layout.tsx", import.meta.url), "utf8");
 const pwaCache = readFileSync(new URL("../src/lib/pwa-cache.ts", import.meta.url), "utf8");
+
+test("PWA keeps Splitik chat in a dedicated component boundary", () => {
+  assert.match(page, /import \{ SplitikScreen, type ChatMessage \} from "@\/components\/splitik-chat"/);
+  assert.match(splitikChat, /export function SplitikScreen/);
+  assert.doesNotMatch(page, /function SplitikScreen/);
+});
 
 test("PWA implements the SVG screen set as navigable app views", () => {
   for (const view of ["home", "events", "people", "profile", "notifications", "splitik"]) {
@@ -357,18 +364,18 @@ test("Splitik chat can attach receipt photos and send their attachment ids", () 
 test("Splitik renders interactive draft cards returned by the backend", () => {
   assert.match(api, /export type SplitikDraft/);
   assert.match(api, /drafts\?: SplitikDraft\[\]/);
-  assert.match(page, /type ChatMessage = \{[\s\S]*drafts\?: SplitikDraft\[\]/);
+  assert.match(splitikChat, /export type ChatMessage = \{[\s\S]*drafts\?: SplitikDraft\[\]/);
   assert.match(page, /drafts: response\.drafts \?\? \[\]/);
-  assert.match(page, /function SplitikDraftCard/);
-  assert.match(page, /data-testid="splitik-draft-card"/);
-  assert.match(page, /data-testid="splitik-draft-open"/);
-  assert.match(page, />\s*Открыть черновик\s*</);
-  assert.match(page, /function SplitikDraftSheet/);
-  assert.match(page, /data-testid="splitik-draft-sheet"/);
-  assert.match(page, /const \[activeDraft, setActiveDraft\] = useState<SplitikDraft \| null>\(null\)/);
-  assert.match(page, /onOpen=\{setActiveDraft\}/);
-  assert.match(page, /data-testid="splitik-draft-confirm"/);
-  assert.match(page, /data-testid="splitik-draft-sheet-confirm"/);
+  assert.match(splitikChat, /function SplitikDraftCard/);
+  assert.match(splitikChat, /data-testid="splitik-draft-card"/);
+  assert.match(splitikChat, /data-testid="splitik-draft-open"/);
+  assert.match(splitikChat, />Открыть черновик</);
+  assert.match(splitikChat, /function SplitikDraftSheet/);
+  assert.match(splitikChat, /data-testid="splitik-draft-sheet"/);
+  assert.match(splitikChat, /const \[activeDraft, setActiveDraft\] = useState<SplitikDraft \| null>\(null\)/);
+  assert.match(splitikChat, /onOpen=\{setActiveDraft\}/);
+  assert.match(splitikChat, /data-testid="splitik-draft-confirm"/);
+  assert.match(splitikChat, /data-testid="splitik-draft-sheet-confirm"/);
   assert.match(page, /\/api\/splitik\/drafts\/\$\{draftId\}\/commit/);
   assert.doesNotMatch(page, /onClick=\{\(\) => onEdit\(`Покажи подробнее черновик \$\{draft\.id\}`\)\}/);
   assert.doesNotMatch(page, /JSON\.stringify\(draft\.payload, null, 2\)/);
