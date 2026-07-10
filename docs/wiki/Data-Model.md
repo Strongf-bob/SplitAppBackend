@@ -110,7 +110,9 @@ erDiagram
 - `idempotency_keys(actor_user_id, scope, key)` уникален: один результат на
   idempotent financial request.
 - `payment_requests(settlement_plan_id, settlement_edge_id)` unique sparse:
-  один active payment request на один edge settlement plan.
+  не больше одного `payment_request` документа на каждую пару
+  `(settlement_plan_id, settlement_edge_id)` независимо от статуса; повторные execute/retry
+  должны переиспользовать уже существующий документ.
 - `settlement_plans.active_key` unique sparse: один active plan на конкретный
   snapshot одного event.
 - TTL есть у `refresh_tokens.expires_at` и `idempotency_keys.created_at`.

@@ -70,8 +70,10 @@
 2. Backend read-only пересчитывает preview из raw debt graph:
    - `raw_debts` для audit;
    - `net_positions` для итоговых owes/receives;
-   - `recommended_transfers` из server-side algorithm `greedy-net-v1`.
+   - `recommended_transfers` как deterministic recommendation из server-side algorithm `greedy-net-v1`.
 3. Preview доступен и для closed event, потому что сам по себе ничего не записывает.
+   Этот recommendation deterministic для одного и того же snapshot state, но не заявляется
+   как доказанный глобальный минимум по числу переводов.
 4. `POST /api/events/{id}/settlement-plans` разрешен только для open event и только если
    preview реально уменьшает число переводов (`recommended_transfer_count < original_transfer_count`).
 5. При создании plan backend сохраняет canonical snapshot текущих raw debts, net positions,
