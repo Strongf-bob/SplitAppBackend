@@ -133,8 +133,8 @@ Event settings include settlement policies: `split_strategy`, `receipt_creation_
 
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
-| `GET` | `/api/events/{id}/balances` | Рассчитать долги внутри события. | Возвращает debtor-creditor edges. |
-| `GET` | `/api/events/{id}/balances/explain` | Объяснить рассчитанные долги. | Возвращает те же simplified debts и receipt/payment contributions. |
+| `GET` | `/api/events/{id}/balances` | Рассчитать долги внутри события. | Возвращает globally simplified debtor-creditor edges. |
+| `GET` | `/api/events/{id}/balances/explain` | Объяснить рассчитанные долги. | Возвращает raw pairwise obligations с receipt/payment contributions для audit/explanation. |
 
 ## Payments
 
