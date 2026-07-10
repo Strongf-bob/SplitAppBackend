@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bot, CalendarCheck, Check, ExternalLink, Image as ImageIcon, PencilLine, ReceiptText, Send } from "lucide-react";
+import { ArrowLeft, Bot, CalendarCheck, Check, ExternalLink, Image as ImageIcon, PencilLine, ReceiptText, Send } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,11 +35,11 @@ function useVisualViewportHeight(enabled: boolean) {
   return height;
 }
 
-export function SplitikScreen({ messages, draft, onDraft, onSend, isSending, attachments, isAttachmentUploading, onAttachReceipt, onConfirmDraft, onCreateEventManually }: {
+export function SplitikScreen({ messages, draft, onDraft, onSend, isSending, attachments, isAttachmentUploading, onAttachReceipt, onConfirmDraft, onCreateEventManually, onExit }: {
   messages: ChatMessage[]; draft: string; onDraft: (value: string) => void;
   onSend: (retryMessage?: string, retryUserMessageId?: string, retryIdempotencyKey?: string) => void;
   isSending: boolean; attachments: SplitikAttachment[]; isAttachmentUploading: boolean;
-  onAttachReceipt: (file: File) => void; onConfirmDraft: (draftId: string) => void; onCreateEventManually: (message: string) => void;
+  onAttachReceipt: (file: File) => void; onConfirmDraft: (draftId: string) => void; onCreateEventManually: (message: string) => void; onExit: () => void;
 }) {
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
@@ -51,7 +51,7 @@ export function SplitikScreen({ messages, draft, onDraft, onSend, isSending, att
   const updateDraft = (value: string) => { onDraft(value); window.requestAnimationFrame(() => { const input = messageInputRef.current; if (!input) return; input.style.height = "auto"; input.style.height = `${Math.min(input.scrollHeight, 132)}px`; }); };
   const applyDraftPrompt = (value: string) => { updateDraft(value); window.requestAnimationFrame(() => { messageInputRef.current?.focus(); scrollToLatestMessage(true); }); };
   return <div data-testid="splitik-chat-screen" style={visualViewportHeight ? { height: `${visualViewportHeight}px` } : undefined} className="flex min-h-0 bg-[#1f3d8f] text-white"><section className="mx-auto flex min-h-0 w-[var(--content-width)] flex-1 flex-col pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-[max(env(safe-area-inset-top),1.5rem)]">
-    <div className="mb-4 flex min-h-12 items-center justify-between gap-4"><h2 className="text-[32px] font-black leading-none tracking-normal">Сплитик</h2><span className="grid h-14 w-14 place-items-center rounded-[18px] border-2 border-white/86 bg-white/8 text-white"><Bot className="h-7 w-7" strokeWidth={2.5} /></span></div>
+    <div className="mb-4 flex min-h-12 items-center justify-between gap-3"><Button type="button" variant="ghost" aria-label="Вернуться к событиям" onClick={onExit} className="min-h-11 shrink-0 rounded-xl px-2 text-sm font-black text-white hover:bg-white/10"><ArrowLeft className="mr-1 h-5 w-5" /><span>К событиям</span></Button><h2 className="min-w-0 flex-1 text-right text-[32px] font-black leading-none tracking-normal">Сплитик</h2><span className="grid h-12 w-12 shrink-0 place-items-center rounded-[16px] border-2 border-white/86 bg-white/8 text-white"><Bot className="h-6 w-6" strokeWidth={2.5} /></span></div>
     <div data-testid="splitik-chat-shell" className="flex min-h-0 flex-1 flex-col"><div data-testid="splitik-message-list" className="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto px-1 pb-3 pt-2" onScroll={(event) => { const element = event.currentTarget; setIsNearLatestMessage(element.scrollHeight - element.scrollTop - element.clientHeight < 96); }}>
       {messages.map((item) => <div key={item.id} className={cn("grid gap-2", item.from === "user" ? "justify-items-end" : "justify-items-start")}><div className={cn("max-w-[86%] rounded-2xl px-3 py-2 text-[15px] leading-6", item.from === "user" ? "ml-auto bg-white font-bold text-[#1f3d8f]" : "mr-auto bg-[#eef1f7] font-medium text-slate-900", item.delivery === "failed" && "border border-amber-300")}>{item.from === "splitik" ? <MarkdownMessage text={item.text} /> : item.text}</div>
         {item.from === "splitik" && item.drafts?.length ? <div className="grid w-full max-w-[92%] gap-2">{item.drafts.map((draftItem) => <SplitikDraftCard key={draftItem.id} draft={draftItem} onOpen={setActiveDraft} onConfirm={onConfirmDraft} onEdit={applyDraftPrompt} />)}</div> : null}

@@ -94,7 +94,7 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v37";
+const clientShellVersion = "splitapp-next-pwa-v38";
 const initialSyncRetryDelayMs = 900;
 const splitikMessageTimeoutMs = 15000;
 
@@ -1613,6 +1613,7 @@ function WorkspaceScreen({
             onAttachReceipt={onAttachReceipt}
             onConfirmDraft={onConfirmDraft}
             onCreateEventManually={onCreateEventManually}
+            onExit={() => onNavigate("events")}
           />
         ) : null}
       </motion.div>
