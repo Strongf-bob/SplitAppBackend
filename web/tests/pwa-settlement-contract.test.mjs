@@ -137,6 +137,6 @@ test("settlement errors and controls are accessible, touch-safe and on-brand", (
 });
 
 test("settlement shell cache version is bumped after UI change", () => {
-  assert.match(sw, /splitapp-next-pwa-v35/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v35"/);
+  assert.match(sw, /splitapp-next-pwa-v36/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v36"/);
 });
