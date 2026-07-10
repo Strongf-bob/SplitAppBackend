@@ -848,7 +848,7 @@ export default function SplitAppPage() {
 
   const openEvent = async (event: EventSummary) => {
     setSelectedEventId(event.id);
-    if (!tokens || event.status === "invite" || eventSettlements[event.id]) return;
+    if (!tokens || event.status === "invite" || (eventSettlements[event.id] && eventReceipts[event.id])) return;
     setEventReceipts((current) => ({ ...current, [event.id]: { loading: true, items: [] } }));
     setEventSettlements((current) => ({
       ...current,
@@ -2160,6 +2160,7 @@ function EventDetailScreen({
         ))}
       </ContentPanel>
       <SettlementPanel
+        key={event.id}
         event={event}
         currentUserId={currentUserId}
         people={settlementPeople}

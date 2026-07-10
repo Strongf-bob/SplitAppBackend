@@ -61,11 +61,11 @@ test("opening a real event loads receipts and settlement data in one parallel ca
   assert.match(page, /type EventSettlementCache = Record<string, SettlementEventState>/);
   assert.match(page, /const \[eventSettlements, setEventSettlements\] = useState<EventSettlementCache>\(\{\}\)/);
   assert.match(page, /Promise\.allSettled\(\[\s*authedApi<ReceiptPage>\(`\/api\/events\/\$\{event\.id\}\/receipts`\),\s*authedApi<SettlementPreview>\(`\/api\/events\/\$\{event\.id\}\/settlement-preview`\),\s*authedApi<SettlementPlanPage>\(`\/api\/events\/\$\{event\.id\}\/settlement-plans\?limit=50`\),\s*authedApi<PaymentRequestPage>\(`\/api\/events\/\$\{event\.id\}\/payment-requests\?limit=100`\)\s*\]\)/);
-  assert.match(page, /if \(!tokens \|\| event\.status === "invite" \|\| eventSettlements\[event\.id\]\) return/);
+  assert.match(page, /eventSettlements\[event\.id\] && eventReceipts\[event\.id\]/);
   assert.doesNotMatch(page, /const page = await authedApi<ReceiptPage>\(`\/api\/events\/\$\{event\.id\}\/receipts`\)/);
 });
 
-test("settlement panel copy separates approval from payment and covers preview lifecycle states", () => {
+test("settlement panel copy separates approval from payment without exposing implementation details", () => {
   for (const copy of [
     "Упростить расчёты",
     "Все рассчитались",
@@ -88,20 +88,40 @@ test("settlement panel copy separates approval from payment and covers preview l
     assert.match(settlementPanel, new RegExp(copy), `missing settlement copy: ${copy}`);
   }
   assert.match(settlementPanel, /\{approvedCount\} из \{requiredCount\} согласились/);
-  assert.match(settlementPanel, /Покажем, кто кому переводит, без обещания абсолютного минимума/);
+  assert.match(settlementPanel, /Покажем понятный план: кто, кому и сколько переводит/);
+  for (const internalCopy of [
+    "без обещания абсолютного минимума",
+    "Backend подтвердил",
+    "старый snapshot",
+    "TTL плана",
+    "Обновите preview",
+    "Связанный запрос:",
+    "статус: {request.status}"
+  ]) {
+    assert.doesNotMatch(settlementPanel, new RegExp(internalCopy), `technical copy leaked into the UI: ${internalCopy}`);
+  }
 });
 
-test("settlement edge actions respect roles, request statuses and payment linkage", () => {
+test("settlement edge actions respect roles, event closure, request statuses and payment linkage", () => {
   assert.match(settlementPanel, /payment_request_id/);
   assert.match(settlementPanel, /settlement_edge_id/);
   assert.match(settlementPanel, /request\.status === "requested"/);
   assert.match(settlementPanel, /request\.status === "paid" && paymentId/);
   assert.match(settlementPanel, /currentUserId === edge\.debtor_id/);
   assert.match(settlementPanel, /currentUserId === edge\.creditor_id/);
+  assert.match(settlementPanel, /<PlanEdges[\s\S]{0,350}isClosed=\{isClosed\}/);
+  assert.match(settlementPanel, /!isClosed && request && currentUserId === edge\.debtor_id/);
+  assert.match(settlementPanel, /!isClosed && request && currentUserId === edge\.creditor_id/);
   assert.match(settlementPanel, /onMarkPaid\(request\)/);
   assert.match(settlementPanel, /onConfirmReceived\(paymentId\)/);
   assert.match(settlementPanel, /requestStatusText/);
-  assert.match(settlementPanel, /Связанный запрос/);
+});
+
+test("an active plan replaces the duplicate recommendation list and action errors stay generic", () => {
+  assert.match(settlementPanel, /preview && !selectedPlan/);
+  assert.match(settlementPanel, /actionInFlight\.current/);
+  assert.doesNotMatch(settlementPanel, /Не удалось выполнить действие: \$\{error\.message\}/);
+  assert.match(page, /<SettlementPanel[\s\S]{0,100}key=\{event\.id\}/);
 });
 
 test("settlement errors and controls are accessible, touch-safe and on-brand", () => {
