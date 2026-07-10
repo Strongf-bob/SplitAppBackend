@@ -25,6 +25,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
+  SettlementPanel,
+  settlementLoadErrorMessage,
+  settlementStateFromData,
+  type SettlementEventState,
+  type SettlementPerson
+} from "@/components/settlement-panel";
+import {
   api,
   clearTokens,
   EventInvite,
@@ -37,11 +44,14 @@ import {
   HomeSummary,
   loadTokens,
   money,
+  PaymentRequestPage,
   ReceiptPage,
   ReceiptSummary,
   ApiError,
   ClientReportScreen,
   reportClientIssue,
+  SettlementPlanPage,
+  SettlementPreview,
   SplitikAttachment,
   SplitikDraft,
   SplitikMessageResponse,
@@ -68,6 +78,7 @@ type ChatMessage = {
   questions?: Array<{ id: string; text: string }>;
 };
 type EventReceipts = Record<string, { loading: boolean; items: ReceiptSummary[] }>;
+type EventSettlementCache = Record<string, SettlementEventState>;
 type MarkdownBlock = { type: "paragraph"; text: string } | { type: "list"; items: string[] };
 type FriendOption = { id: string; initials: string; name: string; subtitle: string; amount: number; tone: string };
 type ProblemReportState = {
@@ -98,7 +109,7 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v34";
+const clientShellVersion = "splitapp-next-pwa-v35";
 const initialSyncRetryDelayMs = 900;
 const splitikMessageTimeoutMs = 15000;
 
@@ -142,6 +153,7 @@ export default function SplitAppPage() {
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [eventReceipts, setEventReceipts] = useState<EventReceipts>({});
+  const [eventSettlements, setEventSettlements] = useState<EventSettlementCache>({});
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [newEventName, setNewEventName] = useState("");
   const [friendships, setFriendships] = useState<Friendship[]>([]);
@@ -782,17 +794,108 @@ export default function SplitAppPage() {
     }
   };
 
+  const refreshSettlementForEvent = async (event: EventSummary) => {
+    if (!tokens || event.status === "invite") return;
+    setEventSettlements((current) => ({
+      ...current,
+      [event.id]: {
+        loading: true,
+        preview: current[event.id]?.preview,
+        plans: current[event.id]?.plans ?? [],
+        paymentRequests: current[event.id]?.paymentRequests ?? []
+      }
+    }));
+
+    const [previewResult, plansResult, paymentRequestsResult] = await Promise.allSettled([
+      authedApi<SettlementPreview>(`/api/events/${event.id}/settlement-preview`),
+      authedApi<SettlementPlanPage>(`/api/events/${event.id}/settlement-plans?limit=50`),
+      authedApi<PaymentRequestPage>(`/api/events/${event.id}/payment-requests?limit=100`)
+    ]);
+
+    if (previewResult.status === "fulfilled" && plansResult.status === "fulfilled" && paymentRequestsResult.status === "fulfilled") {
+      setEventSettlements((current) => ({
+        ...current,
+        [event.id]: settlementStateFromData({
+          preview: previewResult.value,
+          plans: plansResult.value.items,
+          paymentRequests: paymentRequestsResult.value.items
+        })
+      }));
+      return;
+    }
+
+    const error =
+      previewResult.status === "rejected" ? previewResult.reason :
+      plansResult.status === "rejected" ? plansResult.reason :
+      paymentRequestsResult.status === "rejected" ? paymentRequestsResult.reason :
+      undefined;
+    setEventSettlements((current) => ({
+      ...current,
+      [event.id]: {
+        loading: false,
+        preview: current[event.id]?.preview,
+        plans: current[event.id]?.plans ?? [],
+        paymentRequests: current[event.id]?.paymentRequests ?? [],
+        error: settlementLoadErrorMessage(error)
+      }
+    }));
+    notifyProblem(error, "events", "Не удалось загрузить расчёты события.", { action: "load_event_settlement", component: "EventDetailScreen" });
+  };
+
+  const notifySettlementProblem = useCallback((error: unknown, message: string, action: string) => {
+    notifyProblem(error, "events", message, { action, component: "SettlementPanel" });
+  }, [notifyProblem]);
+
   const openEvent = async (event: EventSummary) => {
     setSelectedEventId(event.id);
-    if (!tokens || event.status === "invite" || eventReceipts[event.id]) return;
+    if (!tokens || event.status === "invite" || eventSettlements[event.id]) return;
     setEventReceipts((current) => ({ ...current, [event.id]: { loading: true, items: [] } }));
-    try {
-      const page = await authedApi<ReceiptPage>(`/api/events/${event.id}/receipts`);
-      setEventReceipts((current) => ({ ...current, [event.id]: { loading: false, items: page.items } }));
-    } catch {
+    setEventSettlements((current) => ({
+      ...current,
+      [event.id]: { loading: true, plans: [], paymentRequests: [] }
+    }));
+
+    const [receiptsResult, previewResult, plansResult, paymentRequestsResult] = await Promise.allSettled([
+      authedApi<ReceiptPage>(`/api/events/${event.id}/receipts`),
+      authedApi<SettlementPreview>(`/api/events/${event.id}/settlement-preview`),
+      authedApi<SettlementPlanPage>(`/api/events/${event.id}/settlement-plans?limit=50`),
+      authedApi<PaymentRequestPage>(`/api/events/${event.id}/payment-requests?limit=100`)
+    ]);
+
+    if (receiptsResult.status === "fulfilled") {
+      setEventReceipts((current) => ({ ...current, [event.id]: { loading: false, items: receiptsResult.value.items } }));
+    } else {
       setEventReceipts((current) => ({ ...current, [event.id]: { loading: false, items: [] } }));
-      notifyProblem(undefined, "receipts", "Не удалось загрузить чеки события.", { action: "load_receipts", component: "EventsScreen" });
+      notifyProblem(receiptsResult.reason, "receipts", "Не удалось загрузить чеки события.", { action: "load_receipts", component: "EventsScreen" });
     }
+
+    if (previewResult.status === "fulfilled" && plansResult.status === "fulfilled" && paymentRequestsResult.status === "fulfilled") {
+      setEventSettlements((current) => ({
+        ...current,
+        [event.id]: settlementStateFromData({
+          preview: previewResult.value,
+          plans: plansResult.value.items,
+          paymentRequests: paymentRequestsResult.value.items
+        })
+      }));
+      return;
+    }
+
+    const error =
+      previewResult.status === "rejected" ? previewResult.reason :
+      plansResult.status === "rejected" ? plansResult.reason :
+      paymentRequestsResult.status === "rejected" ? paymentRequestsResult.reason :
+      undefined;
+    setEventSettlements((current) => ({
+      ...current,
+      [event.id]: {
+        loading: false,
+        plans: [],
+        paymentRequests: [],
+        error: settlementLoadErrorMessage(error)
+      }
+    }));
+    notifyProblem(error, "events", "Не удалось загрузить расчёты события.", { action: "load_event_settlement", component: "EventsScreen" });
   };
 
   const closeEvent = () => {
@@ -1043,6 +1146,11 @@ export default function SplitAppPage() {
             onEventTab={setEventTab}
             selectedEventId={selectedEventId}
             eventReceipts={eventReceipts}
+            eventSettlements={eventSettlements}
+            currentUserId={currentUser?.id ?? tokens?.user?.id}
+            apiRequest={authedApi}
+            onRefreshSettlement={refreshSettlementForEvent}
+            onSettlementProblem={notifySettlementProblem}
             onOpenEvent={openEvent}
             onCloseEvent={closeEvent}
             onInviteDecision={decideInvite}
@@ -1318,6 +1426,11 @@ function WorkspaceScreen({
   onEventTab,
   selectedEventId,
   eventReceipts,
+  eventSettlements,
+  currentUserId,
+  apiRequest,
+  onRefreshSettlement,
+  onSettlementProblem,
   onOpenEvent,
   onCloseEvent,
   onInviteDecision,
@@ -1360,6 +1473,11 @@ function WorkspaceScreen({
   onEventTab: (tab: EventTab) => void;
   selectedEventId: string | null;
   eventReceipts: EventReceipts;
+  eventSettlements: EventSettlementCache;
+  currentUserId?: string | null;
+  apiRequest: <T>(path: string, init?: RequestInit) => Promise<T>;
+  onRefreshSettlement: (event: EventSummary) => Promise<void>;
+  onSettlementProblem: (error: unknown, message: string, action: string) => void;
   onOpenEvent: (event: EventSummary) => void;
   onCloseEvent: () => void;
   onInviteDecision: (event: EventSummary, decision: "accept" | "decline") => void;
@@ -1422,6 +1540,11 @@ function WorkspaceScreen({
             onTab={onEventTab}
             selectedEventId={selectedEventId}
             eventReceipts={eventReceipts}
+            eventSettlements={eventSettlements}
+            currentUserId={currentUserId}
+            apiRequest={apiRequest}
+            onRefreshSettlement={onRefreshSettlement}
+            onSettlementProblem={onSettlementProblem}
             onOpenEvent={onOpenEvent}
             onCloseEvent={onCloseEvent}
             onInviteDecision={onInviteDecision}
@@ -1752,6 +1875,11 @@ function EventsScreen({
   onTab,
   selectedEventId,
   eventReceipts,
+  eventSettlements,
+  currentUserId,
+  apiRequest,
+  onRefreshSettlement,
+  onSettlementProblem,
   onOpenEvent,
   onCloseEvent,
   onInviteDecision,
@@ -1771,6 +1899,11 @@ function EventsScreen({
   onTab: (tab: EventTab) => void;
   selectedEventId: string | null;
   eventReceipts: EventReceipts;
+  eventSettlements: EventSettlementCache;
+  currentUserId?: string | null;
+  apiRequest: <T>(path: string, init?: RequestInit) => Promise<T>;
+  onRefreshSettlement: (event: EventSummary) => Promise<void>;
+  onSettlementProblem: (error: unknown, message: string, action: string) => void;
   onOpenEvent: (event: EventSummary) => void;
   onCloseEvent: () => void;
   onInviteDecision: (event: EventSummary, decision: "accept" | "decline") => void;
@@ -1811,6 +1944,11 @@ function EventsScreen({
       event={selectedEvent}
       friendOptions={friendOptions}
       receipts={eventReceipts[selectedEvent.id]}
+      settlementState={eventSettlements[selectedEvent.id]}
+      currentUserId={currentUserId}
+      apiRequest={apiRequest}
+      onRefreshSettlement={onRefreshSettlement}
+      onSettlementProblem={onSettlementProblem}
       onBack={onCloseEvent}
       onInviteDecision={onInviteDecision}
       onCreateEventInvite={onCreateEventInvite}
@@ -1945,6 +2083,11 @@ function EventDetailScreen({
   event,
   friendOptions,
   receipts,
+  settlementState,
+  currentUserId,
+  apiRequest,
+  onRefreshSettlement,
+  onSettlementProblem,
   onBack,
   onInviteDecision,
   onCreateEventInvite,
@@ -1953,12 +2096,23 @@ function EventDetailScreen({
   event: EventSummary;
   friendOptions: FriendOption[];
   receipts?: { loading: boolean; items: ReceiptSummary[] };
+  settlementState?: SettlementEventState;
+  currentUserId?: string | null;
+  apiRequest: <T>(path: string, init?: RequestInit) => Promise<T>;
+  onRefreshSettlement: (event: EventSummary) => Promise<void>;
+  onSettlementProblem: (error: unknown, message: string, action: string) => void;
   onBack: () => void;
   onInviteDecision: (event: EventSummary, decision: "accept" | "decline") => void;
   onCreateEventInvite: (event: EventSummary) => void;
   onAddReceipt: (event: EventSummary) => void;
 }) {
   const participantItems = eventParticipants(event, friendOptions);
+  const settlementPeople: SettlementPerson[] = participantItems.map((participant) => ({
+    id: participant.id,
+    initials: participant.initials,
+    name: participant.name,
+    subtitle: participant.subtitle
+  }));
   const participantCount = event.participants_count ?? event.participants?.length ?? participantItems.length;
   const inviteCode = eventInviteDisplayCode(event.id);
 
@@ -2005,6 +2159,15 @@ function EventDetailScreen({
           </div>
         ))}
       </ContentPanel>
+      <SettlementPanel
+        event={event}
+        currentUserId={currentUserId}
+        people={settlementPeople}
+        state={settlementState}
+        apiRequest={apiRequest}
+        onRefresh={onRefreshSettlement}
+        onProblem={onSettlementProblem}
+      />
       <ContentPanel title="Чеки">
         <EventReceiptList receipts={receipts} />
       </ContentPanel>
