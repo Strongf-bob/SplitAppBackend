@@ -34,7 +34,7 @@
   - Result: 192 passed, 1 skipped
 
 ## Commit hash
-- `b291de569c7c1fc2baf2265538b98c9dd1b1e624`
+- `dfac43fcaf378f0ae88544259379dadb879629e6`
 
 ## Self-review
 - Preserved existing pairwise receipt/payment ledger math as `get_event_raw_balances`.
@@ -45,3 +45,14 @@
 
 ## Concerns
 - None.
+
+## Follow-up fix after review
+- Important review finding fixed: `docs/wiki/API-Reference.md` no longer claims `/api/events/{id}/balances/explain` returns the same simplified debts as `/balances`.
+- Updated wording:
+  - `/api/events/{id}/balances` documents globally simplified debtor-creditor edges.
+  - `/api/events/{id}/balances/explain` documents raw pairwise obligations with receipt/payment contributions for audit/explanation.
+- Focused verification for this fix:
+  - `rg -n "same simplified|simplified debts|raw pairwise obligations|globally simplified debtor-creditor edges|audit/explanation" docs/wiki/API-Reference.md docs/wiki openapi.yaml app/routers/events.py`
+    - Result: only `docs/wiki/API-Reference.md:136-137` matched the new corrected wording; no same exact stale claim remained nearby in the searched docs/router scope.
+  - `./.venv/bin/python -m pytest -q tests/test_app_config.py`
+    - Result: 33 passed
