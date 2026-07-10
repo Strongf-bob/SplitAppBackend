@@ -58,7 +58,30 @@ Payment request и payment confirmation разделены:
 - только confirmed payments влияют на balances;
 - confirmed payments нельзя delete, reject или перевести обратно в pending.
 
+## Settlement Plan Safety
+
+Settlement optimization тоже работает как explicit-review flow:
+
+- `GET /api/events/{id}/settlement-preview` только читает state и доступен даже для
+  closed event;
+- клиент не присылает свой финансовый граф: backend сам строит preview из
+  confirmed receipts/payments и source graph из `GET /api/events/{id}/balances/explain`;
+- `POST /api/events/{id}/settlement-plans` разрешен только для open event и только
+  если optimization реально уменьшает число переводов;
+- при создании plan backend сохраняет canonical snapshot состояния, ставит TTL 24 часа
+  (`expires_at`) и вычисляет required approvers из всех source participants, включая
+  промежуточных участников с нулевой итоговой net position;
+- plan lifecycle использует точные статусы `pending`, `approved`, `rejected`,
+  `stale`, `expired`, `executing`, `partially_settled`, `completed`;
+- `stale` защищает от гонок: если balances/memberships успели измениться между preview,
+  approve и execute, backend помечает старый snapshot как неактуальный;
+- `POST /api/settlement-plans/{id}/execute` не создает confirmed payment и не меняет
+  balances сам по себе: он только materialize'ит уникальные `payment_requests` с
+  provenance-полями `origin=settlement_plan`, `settlement_plan_id`, `settlement_edge_id`;
+- дальше безопасность оплаты остается прежней: debtor делает `mark-paid`, receiver делает
+  `confirm`, и только confirmed payments влияют на balances и progress settlement plan.
+
 ## Audit Trail
 
 Security-sensitive actions пишут audit/domain events: receipts, payments,
-payment requests, profile updates, deletes и confirmation state changes.
+payment requests, settlement plans, profile updates, deletes и confirmation state changes.

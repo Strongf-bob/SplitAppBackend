@@ -19,6 +19,8 @@ erDiagram
     receipt_allocation_sessions ||--o{ receipt_item_claims : collects
     events ||--o{ payments : records
     events ||--o{ payment_requests : requests
+    events ||--o{ settlement_plans : snapshots
+    settlement_plans ||--o{ payment_requests : materializes
     payment_requests ||--o| payments : creates
     events ||--o{ disputes : groups
     users ||--o{ friends : requester
@@ -56,7 +58,8 @@ erDiagram
 | `receipt_item_claims` | Claims пользователей на позиции во время allocation session. | `session_id -> receipt_allocation_sessions.id`, `user_id -> users.id`. |
 | `receipt_ai_drafts` | AI draft чека из текста с результатами primary/verification/escalation моделей. | `event_id -> events.id`, `owner_user_id -> users.id`. |
 | `payments` | Заявление или подтвержденный платеж между участниками события. | `event_id -> events.id`, `sender_id/receiver_id -> users.id`. |
-| `payment_requests` | Просьба оплатить долг, deadline и dispute/cancel/paid lifecycle. | `event_id -> events.id`, `debtor_id/creditor_id -> users.id`. |
+| `payment_requests` | Просьба оплатить долг, deadline и dispute/cancel/paid lifecycle. | `event_id -> events.id`, `debtor_id/creditor_id -> users.id`, optional settlement provenance через `origin`, `settlement_plan_id`, `settlement_edge_id`. |
+| `settlement_plans` | Snapshot-backed план оптимизированных переводов внутри одного event. | `event_id -> events.id`, `created_by -> users.id`, `required_approver_ids` ссылаются на участников source graph. |
 | `disputes` | Спор по receipt/payment/payment_request внутри события. | `event_id -> events.id`, `resource_id` указывает на спорный ресурс. |
 | `audit_events` | Backend audit feed для важных действий. | `actor_user_id -> users.id`, resource fields describe target. |
 | `idempotency_keys` | Защита financial create endpoints от повторной отправки. | `actor_user_id + scope + key` уникальны. |
@@ -71,6 +74,7 @@ erDiagram
 | --- | --- | --- |
 | Доступ к событию | Active `event_memberships` | Client-supplied `user_id`, legacy participant arrays, friends list. |
 | Балансы | Runtime calculation from confirmed receipts and confirmed payments | Stored API response, client-side calculation, draft receipt. |
+| Settlement optimization | Server-built snapshot из `raw_debts`, `net_positions`, `recommended_transfers` и active memberships | Client-submitted graph, guesses about direct receipt ownership, cross-event edge payload. |
 | Деньги | Integer kopecks in API and MongoDB for new records | Float, double, decimal-string in new write contracts. |
 | Receipt items/shares | Embedded `items` and `share_items` inside `receipts` | Legacy standalone `receipt_items` / `share_items` lookups. |
 | Receipt image access | Private object storage plus presigned URL endpoint | Permanent public object URL. |
@@ -88,6 +92,7 @@ erDiagram
 | Allocation session | `collecting`, `ready`, `finalized` | Меняет shares только через controlled finalize flow. |
 | Payment | `pending`, `confirmed`, `rejected` | Только confirmed payment уменьшает balances. |
 | Payment request | `requested`, `paid`, `confirmed`, `rejected`, `cancelled`, `disputed` | `mark-paid` создает pending payment, confirmation делает его финансовым фактом. |
+| Settlement plan | `pending`, `approved`, `rejected`, `stale`, `expired`, `executing`, `partially_settled`, `completed` | Create/execute только для open event; `required_approver_ids` покрывает весь source graph, включая net-zero intermediaries; `completed` достигается только через confirmed linked payments. |
 | Dispute | `open`, `resolved` | Resolution не должна обходить authorization по event. |
 | Splitik draft | `pending`, `committed`, cancelled/deleted terminal states | Pending draft можно редактировать; committed draft повторно не применяется. |
 
@@ -104,7 +109,14 @@ erDiagram
   на нормализованный телефон владельца.
 - `idempotency_keys(actor_user_id, scope, key)` уникален: один результат на
   idempotent financial request.
+- `payment_requests(settlement_plan_id, settlement_edge_id)` unique sparse:
+  один active payment request на один edge settlement plan.
+- `settlement_plans.active_key` unique sparse: один active plan на конкретный
+  snapshot одного event.
 - TTL есть у `refresh_tokens.expires_at` и `idempotency_keys.created_at`.
+
+Pending settlement plan дополнительно живет 24 часа по полю `expires_at`; backend
+переводит его в `expired` при чтении или mutation action, если TTL истек.
 
 ## Где смотреть детали
 
