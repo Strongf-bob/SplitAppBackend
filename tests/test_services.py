@@ -1,4 +1,5 @@
 import importlib
+import threading
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -158,6 +159,32 @@ def create_cycle_settlement_source(db, *, extra_same_edge: bool = False) -> list
     for receipt in created:
         confirm_receipt_for_all(db, receipt["id"], receipt["payer_id"])
     return created
+
+
+def create_settlement_source_change(db, *, title: str = "Changed source") -> dict:
+    receipt = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_A,
+            title=title,
+            total_amount_kopecks=100,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name=title,
+                    cost_kopecks=100,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_C, share_value="1")],
+                )
+            ],
+        ),
+        USER_A,
+    )
+    confirm_receipt_for_all(db, receipt["id"], USER_A)
+    return receipt
+
+
+def audit_action_count(db, action: str, resource_id: str) -> int:
+    return db.audit_events.count_documents({"action": action, "resource_id": resource_id})
 
 
 def test_event_create_and_list_for_actor(db):
@@ -1505,6 +1532,24 @@ def test_settlement_plan_duplicate_active_guard_releases_after_rejection(db):
     assert recreated["status"] == "pending"
 
 
+def test_settlement_plan_create_records_audit_and_domain_once(db, monkeypatch):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    domain_events = []
+    monkeypatch.setattr(
+        service,
+        "record_domain_event",
+        lambda domain, action: domain_events.append((domain, action)),
+    )
+
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+    replay = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+
+    assert replay == plan
+    assert audit_action_count(db, "settlement_plan.created", plan["id"]) == 1
+    assert domain_events == [("settlement_plans", "created")]
+
+
 def test_settlement_plan_approval_requires_source_participant_and_is_idempotent_until_all_approve(
     db,
 ):
@@ -1543,6 +1588,75 @@ def test_settlement_plan_approval_requires_source_participant_and_is_idempotent_
     assert db.settlement_plans.find_one({"id": plan["id"]})["active_key"]
 
 
+def test_settlement_plan_interleaved_distinct_approvals_are_not_lost(db, monkeypatch):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+    original_get_plan = service._get_plan_or_404
+    barrier = threading.Barrier(2)
+    lock = threading.Lock()
+    blocked_reads = 0
+
+    def interleaved_get_plan(db_arg, plan_id):
+        nonlocal blocked_reads
+        loaded = original_get_plan(db_arg, plan_id)
+        with lock:
+            should_block = loaded["id"] == plan["id"] and loaded["status"] == "pending"
+            should_block = should_block and blocked_reads < 2
+            if should_block:
+                blocked_reads += 1
+        if should_block:
+            barrier.wait(timeout=5)
+        return loaded
+
+    monkeypatch.setattr(service, "_get_plan_or_404", interleaved_get_plan)
+    errors = []
+
+    def approve(user_id: str) -> None:
+        try:
+            service.approve_settlement_plan(db, plan["id"], user_id)
+        except Exception as exc:  # pragma: no cover - surfaced by assertion below
+            errors.append(exc)
+
+    first = threading.Thread(target=approve, args=(USER_A,), name="approve-a")
+    second = threading.Thread(target=approve, args=(USER_B,), name="approve-b")
+    first.start()
+    second.start()
+    first.join(timeout=5)
+    second.join(timeout=5)
+
+    assert errors == []
+    stored = db.settlement_plans.find_one({"id": plan["id"]})
+    assert sorted(approval["user_id"] for approval in stored["approvals"]) == [USER_A, USER_B]
+
+    final = service.approve_settlement_plan(db, plan["id"], USER_C)
+    assert final["status"] == "approved"
+    assert [approval["user_id"] for approval in final["approvals"]] == [USER_A, USER_B, USER_C]
+
+
+def test_settlement_plan_approvals_record_audit_and_domain_once_per_new_mutation(db, monkeypatch):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    domain_events = []
+    monkeypatch.setattr(
+        service,
+        "record_domain_event",
+        lambda domain, action: domain_events.append((domain, action)),
+    )
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+
+    service.approve_settlement_plan(db, plan["id"], USER_A)
+    service.approve_settlement_plan(db, plan["id"], USER_A)
+    service.approve_settlement_plan(db, plan["id"], USER_B)
+    approved = service.approve_settlement_plan(db, plan["id"], USER_C)
+
+    assert approved["status"] == "approved"
+    assert audit_action_count(db, "settlement_plan.approval_created", plan["id"]) == 3
+    assert audit_action_count(db, "settlement_plan.approved", plan["id"]) == 1
+    assert domain_events.count(("settlement_plans", "approval_created")) == 3
+    assert domain_events.count(("settlement_plans", "approved")) == 1
+
+
 def test_settlement_plan_source_mismatch_marks_stale_and_blocks_approval(db):
     create_cycle_settlement_source(db)
     service = settlement_service()
@@ -1579,6 +1693,125 @@ def test_settlement_plan_source_mismatch_marks_stale_and_blocks_approval(db):
     assert stored.get("active_key") is None
 
 
+def test_settlement_plan_stale_transition_records_audit_and_domain_once(db, monkeypatch):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    domain_events = []
+    monkeypatch.setattr(
+        service,
+        "record_domain_event",
+        lambda domain, action: domain_events.append((domain, action)),
+    )
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+    create_settlement_source_change(db)
+
+    for _ in range(2):
+        try:
+            service.approve_settlement_plan(db, plan["id"], USER_A)
+        except Exception as exc:
+            assert_status(exc, 409)
+        else:
+            raise AssertionError("Expected stale settlement plan approval to fail")
+
+    assert audit_action_count(db, "settlement_plan.stale", plan["id"]) == 1
+    assert domain_events.count(("settlement_plans", "stale")) == 1
+
+
+def test_settlement_plan_stale_detection_runs_before_old_approver_check(db):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+    user_d = "44444444-4444-4444-4444-444444444444"
+    db.users.insert_one(
+        {
+            "id": user_d,
+            "name": "Dana",
+            "phone_number": "+10000000004",
+            "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "updated_at": datetime(2026, 1, 1, tzinfo=UTC),
+        }
+    )
+    add_active_member(db, user_d)
+
+    try:
+        service.approve_settlement_plan(db, plan["id"], user_d)
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected membership mismatch to stale before approver check")
+
+    assert db.settlement_plans.find_one({"id": plan["id"]})["status"] == "stale"
+
+
+def test_settlement_plan_approve_post_write_snapshot_change_marks_stale_not_approved(
+    db, monkeypatch
+):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+    service.approve_settlement_plan(db, plan["id"], USER_A)
+    service.approve_settlement_plan(db, plan["id"], USER_B)
+    original_snapshot = service._snapshot_for_current_state
+    calls = 0
+
+    def mutate_before_postcheck(db_arg, event_id, actor_user_id):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            create_settlement_source_change(db_arg, title="Approve race")
+        return original_snapshot(db_arg, event_id, actor_user_id)
+
+    monkeypatch.setattr(service, "_snapshot_for_current_state", mutate_before_postcheck)
+
+    try:
+        service.approve_settlement_plan(db, plan["id"], USER_C)
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected post-write stale approval to fail")
+
+    stored = db.settlement_plans.find_one({"id": plan["id"]})
+    assert stored["status"] == "stale"
+    assert sorted(approval["user_id"] for approval in stored["approvals"]) == [
+        USER_A,
+        USER_B,
+        USER_C,
+    ]
+    assert stored.get("active_key") is None
+
+
+def test_settlement_plan_reject_post_write_snapshot_change_marks_stale_not_rejected(
+    db, monkeypatch
+):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+    original_snapshot = service._snapshot_for_current_state
+    calls = 0
+
+    def mutate_before_postcheck(db_arg, event_id, actor_user_id):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            create_settlement_source_change(db_arg, title="Reject race")
+        return original_snapshot(db_arg, event_id, actor_user_id)
+
+    monkeypatch.setattr(service, "_snapshot_for_current_state", mutate_before_postcheck)
+
+    try:
+        service.reject_settlement_plan(db, plan["id"], USER_B, "Race")
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected post-write stale rejection to fail")
+
+    stored = db.settlement_plans.find_one({"id": plan["id"]})
+    assert stored["status"] == "stale"
+    assert stored.get("rejected_by") is None
+    assert stored.get("rejection_reason") is None
+    assert stored.get("active_key") is None
+
+
 def test_settlement_plan_expiry_is_server_transitioned_and_releases_active_guard(db):
     create_cycle_settlement_source(db)
     service = settlement_service()
@@ -1601,6 +1834,46 @@ def test_settlement_plan_expiry_is_server_transitioned_and_releases_active_guard
 
     recreated = service.create_settlement_plan(db, EVENT_ID, USER_B, idempotency_key="new-plan")
     assert recreated["id"] != plan["id"]
+
+
+def test_settlement_plan_expiry_records_audit_and_domain_once(db, monkeypatch):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    domain_events = []
+    monkeypatch.setattr(
+        service,
+        "record_domain_event",
+        lambda domain, action: domain_events.append((domain, action)),
+    )
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+    db.settlement_plans.update_one(
+        {"id": plan["id"]},
+        {"$set": {"expires_at": datetime(2025, 1, 1, tzinfo=UTC)}},
+    )
+
+    service.get_settlement_plan(db, plan["id"], USER_A)
+    service.get_settlement_plan(db, plan["id"], USER_A)
+
+    assert audit_action_count(db, "settlement_plan.expired", plan["id"]) == 1
+    assert domain_events.count(("settlement_plans", "expired")) == 1
+
+
+def test_settlement_plan_rejection_records_audit_and_domain_once(db, monkeypatch):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    domain_events = []
+    monkeypatch.setattr(
+        service,
+        "record_domain_event",
+        lambda domain, action: domain_events.append((domain, action)),
+    )
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+
+    rejected = service.reject_settlement_plan(db, plan["id"], USER_B, "Need to fix receipt")
+
+    assert rejected["status"] == "rejected"
+    assert audit_action_count(db, "settlement_plan.rejected", plan["id"]) == 1
+    assert domain_events.count(("settlement_plans", "rejected")) == 1
 
 
 def test_list_settlement_plans_returns_paginated_event_member_page(db):

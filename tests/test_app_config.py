@@ -750,6 +750,13 @@ def test_openapi_exposes_settlement_plan_contract():
         "created_at",
         "updated_at",
     ]
+    assert set(plan["properties"]["status"]["enum"]) == {
+        "pending",
+        "approved",
+        "rejected",
+        "stale",
+        "expired",
+    }
     assert page["required"] == ["items", "limit", "offset", "total"]
     assert reject["properties"]["reason"]["maxLength"] == 500
 

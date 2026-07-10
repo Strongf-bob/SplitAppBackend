@@ -58,3 +58,40 @@
 - Internal `canonical_snapshot`, `snapshot_hash`, and `active_key` are stored for server validation and hidden from API responses.
 - Required approvers are the preview source participant IDs, so source graph intermediaries with net-zero positions still have to approve.
 - `approved` plans intentionally keep `active_key`; only stale/rejected/expired terminal states release it, matching the Task 3 guard requirement.
+
+## Review fix evidence: CHANGES_REQUIRED follow-up
+
+### RED
+
+- Added regressions for lost interleaved approvals, audit/domain event recording, stale-before-old-approver ordering, approve/reject post-write snapshot TOCTOU, expiry/rejection/stale exact-once events, and OpenAPI status enum.
+- Observed RED:
+  - `.venv/bin/pytest tests/test_services.py -k 'settlement_plan' -q`
+  - Result: 10 failed, 6 passed; failures covered missing `record_domain_event`, lost interleaved approval, stale check returning 403 before stale transition, approve/reject TOCTOU not marking stale, and exact-once event gaps.
+- Observed OpenAPI RED:
+  - `.venv/bin/pytest tests/test_app_config.py -k 'settlement_plan_contract' -q`
+  - Result: 1 failed; `SettlementPlan.status` had no enum in OpenAPI.
+
+### GREEN
+
+- Replaced whole-array approval writes with guarded atomic `$push` using `status=pending` and `approvals.user_id != actor`, with idempotent reread handling for repeated approvals.
+- Added pre-check and immediate post-write canonical snapshot validation for approve/reject with `last_action_id` markers; TOCTOU mutations transition the just-mutated plan to `stale`, release `active_key`, and return 409.
+- Moved expiry and stale detection before required-approver checks after current event access.
+- Added audit/domain events for create, each new approval, approved, rejected, stale, and expired; idempotent replay/repeated approval do not duplicate records.
+- Changed `SettlementPlan.status` to a literal enum and regenerated `openapi.yaml`.
+- Kept execute/payment requests and PWA out of scope.
+
+### Verification after review fixes
+
+- `.venv/bin/pytest tests/test_services.py -k 'settlement_plan' -q` -> 16 passed.
+- `.venv/bin/pytest tests/test_app_config.py -k 'settlement_plan' -q` -> 2 passed, 1 existing Starlette deprecation warning.
+- `.venv/bin/pytest tests/test_services.py -q` -> 112 passed.
+- `.venv/bin/pytest tests/test_app_config.py -q` -> 37 passed, 1 existing Starlette deprecation warning.
+- `make lint` -> All checks passed.
+- `make format-check` -> 63 files already formatted.
+- `make test` -> 215 passed, 1 skipped, 1 existing Starlette deprecation warning.
+- Runtime OpenAPI comparison -> `openapi_sync True`, 77 runtime paths, 77 file paths.
+
+### Follow-up commit
+
+- Commit message: `fix(settlement): harden plan approvals and stale transitions`
+- Final commit SHA is reported in the handoff after commit creation.

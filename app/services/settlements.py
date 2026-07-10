@@ -7,14 +7,14 @@ from fastapi import HTTPException
 from pymongo.errors import DuplicateKeyError
 from pymongo.database import Database
 
-from app.core.monitoring import track_service_operation
+from app.core.monitoring import record_domain_event, track_service_operation
 from app.services.access import (
     active_event_user_ids,
     assert_event_access,
     assert_event_open,
 )
 from app.services.balances import get_event_balance_explanations
-from app.services.common import new_uuid, strip_mongo_id, utc_now
+from app.services.common import new_uuid, record_audit_event, strip_mongo_id, utc_now
 from app.services.idempotency import run_idempotent_create
 from app.services.settlement_algorithm import build_settlement_edges
 
@@ -172,38 +172,88 @@ def _get_plan_or_404(db: Database, plan_id: str) -> dict:
     return plan
 
 
-def _transition_expired_if_needed(db: Database, plan: dict) -> dict:
+def _record_plan_mutation(db: Database, plan_id: str, actor_user_id: str, action: str) -> None:
+    record_domain_event("settlement_plans", action)
+    record_audit_event(
+        db,
+        action=f"settlement_plan.{action}",
+        resource_type="settlement_plan",
+        resource_id=plan_id,
+        actor_user_id=actor_user_id,
+    )
+
+
+def _transition_expired_if_needed(db: Database, plan: dict, actor_user_id: str) -> dict:
     if plan["status"] != "pending":
         return plan
     expires_at = _as_utc(plan["expires_at"])
     if expires_at > utc_now():
         return plan
     now = utc_now()
-    db.settlement_plans.update_one(
+    result = db.settlement_plans.update_one(
         {"id": plan["id"], "status": "pending"},
         {
             "$set": {"status": "expired", "updated_at": now},
             "$unset": {"active_key": ""},
         },
     )
+    if result.modified_count:
+        _record_plan_mutation(db, plan["id"], actor_user_id, "expired")
     return _get_plan_or_404(db, plan["id"])
 
 
-def _mark_stale_if_snapshot_changed(db: Database, plan: dict, actor_user_id: str) -> dict:
-    if plan["status"] != "pending":
+def _transition_stale(
+    db: Database,
+    *,
+    plan_id: str,
+    actor_user_id: str,
+    action_id: str | None = None,
+    statuses: set[str] | None = None,
+) -> dict:
+    query: dict = {"id": plan_id}
+    if statuses is not None:
+        query["status"] = {"$in": sorted(statuses)}
+    if action_id is not None:
+        query["last_action_id"] = action_id
+    now = utc_now()
+    result = db.settlement_plans.update_one(
+        query,
+        {
+            "$set": {"status": "stale", "updated_at": now},
+            "$unset": {
+                "active_key": "",
+                "rejected_by": "",
+                "rejection_reason": "",
+                "rejected_at": "",
+            },
+        },
+    )
+    if result.modified_count:
+        _record_plan_mutation(db, plan_id, actor_user_id, "stale")
+    return _get_plan_or_404(db, plan_id)
+
+
+def _ensure_current_snapshot_or_mark_stale(
+    db: Database,
+    plan: dict,
+    actor_user_id: str,
+    *,
+    action_id: str | None = None,
+    statuses: set[str] | None = None,
+) -> dict:
+    if statuses is None and plan["status"] != "pending":
         return plan
     _, current_hash = _snapshot_for_current_state(db, plan["event_id"], actor_user_id)
     if current_hash == plan["snapshot_hash"]:
         return plan
-    now = utc_now()
-    db.settlement_plans.update_one(
-        {"id": plan["id"], "status": "pending"},
-        {
-            "$set": {"status": "stale", "updated_at": now},
-            "$unset": {"active_key": ""},
-        },
+    _transition_stale(
+        db,
+        plan_id=plan["id"],
+        actor_user_id=actor_user_id,
+        action_id=action_id,
+        statuses=statuses or {"pending"},
     )
-    return _get_plan_or_404(db, plan["id"])
+    raise HTTPException(status_code=409, detail="Settlement plan snapshot is stale.")
 
 
 @track_service_operation("settlements.preview")
@@ -291,6 +341,7 @@ def _create_settlement_plan(db: Database, event_id: str, actor_user_id: str) -> 
             status_code=409,
             detail="Active settlement plan already exists for this event snapshot.",
         ) from None
+    _record_plan_mutation(db, plan["id"], actor_user_id, "created")
     return _plan_to_api(plan)
 
 
@@ -298,7 +349,7 @@ def _create_settlement_plan(db: Database, event_id: str, actor_user_id: str) -> 
 def get_settlement_plan(db: Database, plan_id: str, actor_user_id: str) -> dict:
     plan = _get_plan_or_404(db, plan_id)
     assert_event_access(db, plan["event_id"], actor_user_id)
-    plan = _transition_expired_if_needed(db, plan)
+    plan = _transition_expired_if_needed(db, plan, actor_user_id)
     return _plan_to_api(plan)
 
 
@@ -309,8 +360,15 @@ def list_settlement_plans(
     assert_event_access(db, event_id, actor_user_id)
     query = {"event_id": event_id, "deleted_at": {"$exists": False}}
     total = db.settlement_plans.count_documents(query)
-    cursor = db.settlement_plans.find(query).sort("created_at", -1).skip(offset).limit(limit)
-    items = [_plan_to_api(_transition_expired_if_needed(db, plan)) for plan in cursor]
+    cursor = (
+        db.settlement_plans.find(query)
+        .sort([("created_at", -1), ("_id", -1)])
+        .skip(offset)
+        .limit(limit)
+    )
+    items = [
+        _plan_to_api(_transition_expired_if_needed(db, plan, actor_user_id)) for plan in cursor
+    ]
     return {"items": items, "limit": limit, "offset": offset, "total": total}
 
 
@@ -331,46 +389,74 @@ def _ensure_pending_for_action(plan: dict) -> None:
 def approve_settlement_plan(db: Database, plan_id: str, actor_user_id: str) -> dict:
     plan = _get_plan_or_404(db, plan_id)
     assert_event_access(db, plan["event_id"], actor_user_id)
-    _ensure_required_approver(plan, actor_user_id)
-    plan = _transition_expired_if_needed(db, plan)
+    plan = _transition_expired_if_needed(db, plan, actor_user_id)
     if plan["status"] == "approved" and any(
         approval["user_id"] == actor_user_id for approval in plan.get("approvals", [])
     ):
         return _plan_to_api(plan)
     _ensure_pending_for_action(plan)
-    plan = _mark_stale_if_snapshot_changed(db, plan, actor_user_id)
-    _ensure_pending_for_action(plan)
+    plan = _ensure_current_snapshot_or_mark_stale(db, plan, actor_user_id)
+    _ensure_required_approver(plan, actor_user_id)
 
     if any(approval["user_id"] == actor_user_id for approval in plan.get("approvals", [])):
         return _plan_to_api(plan)
 
     now = utc_now()
-    approvals = list(plan.get("approvals", [])) + [{"user_id": actor_user_id, "approved_at": now}]
-    approved_user_ids = {approval["user_id"] for approval in approvals}
-    required_user_ids = set(plan["required_approver_ids"])
-    status = "approved" if required_user_ids.issubset(approved_user_ids) else "pending"
-    db.settlement_plans.update_one(
-        {"id": plan_id, "status": "pending"},
-        {"$set": {"approvals": approvals, "status": status, "updated_at": now}},
+    action_id = new_uuid()
+    result = db.settlement_plans.update_one(
+        {"id": plan_id, "status": "pending", "approvals.user_id": {"$ne": actor_user_id}},
+        {
+            "$push": {"approvals": {"user_id": actor_user_id, "approved_at": now}},
+            "$set": {"updated_at": now, "last_action_id": action_id},
+        },
     )
-    return _plan_to_api(_get_plan_or_404(db, plan_id))
+    if result.matched_count == 0:
+        current = _get_plan_or_404(db, plan_id)
+        if any(approval["user_id"] == actor_user_id for approval in current.get("approvals", [])):
+            return _plan_to_api(current)
+        _ensure_pending_for_action(current)
+        raise HTTPException(status_code=409, detail="Settlement approval could not be saved.")
+
+    current = _get_plan_or_404(db, plan_id)
+    approved_user_ids = {approval["user_id"] for approval in current.get("approvals", [])}
+    required_user_ids = set(current["required_approver_ids"])
+    promoted = False
+    if required_user_ids.issubset(approved_user_ids):
+        promoted_result = db.settlement_plans.update_one(
+            {"id": plan_id, "status": "pending", "last_action_id": action_id},
+            {"$set": {"status": "approved", "updated_at": utc_now(), "last_action_id": action_id}},
+        )
+        promoted = promoted_result.modified_count > 0
+        current = _get_plan_or_404(db, plan_id)
+
+    current = _ensure_current_snapshot_or_mark_stale(
+        db,
+        current,
+        actor_user_id,
+        action_id=action_id,
+        statuses={"pending", "approved"},
+    )
+    _record_plan_mutation(db, plan_id, actor_user_id, "approval_created")
+    if promoted:
+        _record_plan_mutation(db, plan_id, actor_user_id, "approved")
+    return _plan_to_api(current)
 
 
 @track_service_operation("settlement_plans.reject")
 def reject_settlement_plan(db: Database, plan_id: str, actor_user_id: str, reason: str) -> dict:
     plan = _get_plan_or_404(db, plan_id)
     assert_event_access(db, plan["event_id"], actor_user_id)
+    plan = _transition_expired_if_needed(db, plan, actor_user_id)
+    _ensure_pending_for_action(plan)
+    plan = _ensure_current_snapshot_or_mark_stale(db, plan, actor_user_id)
     _ensure_required_approver(plan, actor_user_id)
-    plan = _transition_expired_if_needed(db, plan)
-    _ensure_pending_for_action(plan)
-    plan = _mark_stale_if_snapshot_changed(db, plan, actor_user_id)
-    _ensure_pending_for_action(plan)
 
     cleaned_reason = reason.strip()
     if not cleaned_reason or len(cleaned_reason) > 500:
         raise HTTPException(status_code=422, detail="Rejection reason must be 1-500 characters.")
     now = utc_now()
-    db.settlement_plans.update_one(
+    action_id = new_uuid()
+    result = db.settlement_plans.update_one(
         {"id": plan_id, "status": "pending"},
         {
             "$set": {
@@ -379,8 +465,22 @@ def reject_settlement_plan(db: Database, plan_id: str, actor_user_id: str, reaso
                 "rejection_reason": cleaned_reason,
                 "rejected_at": now,
                 "updated_at": now,
+                "last_action_id": action_id,
             },
             "$unset": {"active_key": ""},
         },
     )
-    return _plan_to_api(_get_plan_or_404(db, plan_id))
+    if result.matched_count == 0:
+        current = _get_plan_or_404(db, plan_id)
+        _ensure_pending_for_action(current)
+        raise HTTPException(status_code=409, detail="Settlement rejection could not be saved.")
+
+    current = _ensure_current_snapshot_or_mark_stale(
+        db,
+        _get_plan_or_404(db, plan_id),
+        actor_user_id,
+        action_id=action_id,
+        statuses={"rejected"},
+    )
+    _record_plan_mutation(db, plan_id, actor_user_id, "rejected")
+    return _plan_to_api(current)

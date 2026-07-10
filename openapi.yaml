@@ -7607,6 +7607,13 @@
           },
           "status": {
             "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "stale",
+              "expired"
+            ],
             "title": "Status"
           },
           "algorithm_version": {
