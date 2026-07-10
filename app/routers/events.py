@@ -167,3 +167,12 @@ def get_event_balance_explanations(
     current_user_id: str = Depends(get_actor_user_id),
 ) -> list[dict]:
     return services.get_event_balance_explanations(db, str(id), current_user_id)
+
+
+@router.get("/api/events/{id}/settlement-preview", response_model=schemas.SettlementPreview)
+def get_event_settlement_preview(
+    id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.get_settlement_preview(db, str(id), current_user_id)

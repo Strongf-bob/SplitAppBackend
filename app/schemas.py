@@ -645,6 +645,31 @@ class EventBalanceExplanation(EventBalance):
     contributions: list[BalanceContribution]
 
 
+class SettlementNetPosition(BaseModel):
+    user_id: UUID
+    direction: Literal["owes", "receives"]
+    amount_kopecks: int = Field(gt=0)
+
+
+class SettlementTransfer(BaseModel):
+    debtor_id: UUID
+    creditor_id: UUID
+    amount_kopecks: int = Field(gt=0)
+
+
+class SettlementPreview(BaseModel):
+    event_id: UUID
+    raw_debts: list[EventBalanceExplanation]
+    net_positions: list[SettlementNetPosition]
+    recommended_transfers: list[SettlementTransfer]
+    source_participant_ids: list[UUID]
+    original_transfer_count: int = Field(ge=0)
+    recommended_transfer_count: int = Field(ge=0)
+    original_gross_kopecks: int = Field(ge=0)
+    recommended_total_kopecks: int = Field(ge=0)
+    transfer_count_reduced: bool
+
+
 class SplitikEntryPoint(BaseModel):
     type: SplitikMode = "general"
     event_id: UUID | None = None

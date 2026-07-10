@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 import json
 import logging
 from pathlib import Path
@@ -6,7 +7,7 @@ import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from app import main as app_main
+from app import main as app_main, schemas
 from app.core import tokens
 from app.core.monitoring import metrics_response, monitor_db_operation, monitor_service_operation
 from app.core.monitoring import record_domain_event, refresh_database_metrics
@@ -14,8 +15,10 @@ from app.dependencies import _is_internal_client, get_db, require_auth_token
 from app.main import configure_cors, configure_public_docs, configure_pwa, cors_allowed_origins
 from app.main import configure_exception_handlers, configure_request_logging
 from app.routers.client_reports import router as client_reports_router
+from app.routers.events import router as events_router
 from app.routers.health import router as health_router
-from tests.conftest import USER_A
+from app.services import receipts
+from tests.conftest import EVENT_ID, USER_A, USER_B, USER_C, confirm_receipt_for_all, seed_event
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -488,6 +491,107 @@ def test_client_report_endpoint_links_authenticated_actor(db):
     stored = db.client_feedback_reports.find_one({"id": response.json()["id"]})
     assert stored["actor_user_id"] == USER_A
     assert stored["request_id"] == "req-456"
+
+
+def test_settlement_preview_endpoint_is_read_only_for_closed_event(db):
+    access_token, _ = tokens.create_access_token(USER_A)
+    seed_event(db)
+    db.event_memberships.insert_one(
+        {
+            "id": "aaaaaaaa-0000-0000-0000-000000000003",
+            "event_id": EVENT_ID,
+            "user_id": USER_C,
+            "role": "member",
+            "status": "active",
+            "joined_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "removed_at": None,
+            "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "updated_at": datetime(2026, 1, 1, tzinfo=UTC),
+        }
+    )
+    first = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_A,
+            title="A paid for B",
+            total_amount_kopecks=500,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="AB",
+                    cost_kopecks=500,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_B, share_value="1")],
+                )
+            ],
+        ),
+        USER_A,
+    )
+    second = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_B,
+            title="B paid for C",
+            total_amount_kopecks=500,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="BC",
+                    cost_kopecks=500,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_C, share_value="1")],
+                )
+            ],
+        ),
+        USER_B,
+    )
+    confirm_receipt_for_all(db, first["id"], USER_A)
+    confirm_receipt_for_all(db, second["id"], USER_B)
+    db.events.update_one({"id": EVENT_ID}, {"$set": {"is_closed": True}})
+
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+    api.dependency_overrides[get_db] = lambda: db
+    api.include_router(events_router)
+    client = TestClient(api)
+
+    response = client.get(
+        f"/api/events/{EVENT_ID}/settlement-preview",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["event_id"] == EVENT_ID
+    assert body["source_participant_ids"] == [USER_A, USER_B, USER_C]
+    assert body["net_positions"] == [
+        {"user_id": USER_C, "direction": "owes", "amount_kopecks": 500},
+        {"user_id": USER_A, "direction": "receives", "amount_kopecks": 500},
+    ]
+    assert body["recommended_transfers"] == [
+        {"debtor_id": USER_C, "creditor_id": USER_A, "amount_kopecks": 500}
+    ]
+    assert set(body["recommended_transfers"][0]) == {"debtor_id", "creditor_id", "amount_kopecks"}
+
+
+def test_openapi_exposes_settlement_preview_contract():
+    schema = app_main.app.openapi()
+    preview = schema["components"]["schemas"]["SettlementPreview"]
+    net_position = schema["components"]["schemas"]["SettlementNetPosition"]
+    transfer = schema["components"]["schemas"]["SettlementTransfer"]
+
+    assert "/api/events/{id}/settlement-preview" in schema["paths"]
+    assert preview["required"] == [
+        "event_id",
+        "raw_debts",
+        "net_positions",
+        "recommended_transfers",
+        "source_participant_ids",
+        "original_transfer_count",
+        "recommended_transfer_count",
+        "original_gross_kopecks",
+        "recommended_total_kopecks",
+        "transfer_count_reduced",
+    ]
+    assert set(net_position["properties"]["direction"]["enum"]) == {"owes", "receives"}
+    assert transfer["required"] == ["debtor_id", "creditor_id", "amount_kopecks"]
 
 
 def test_operations_scrape_allows_private_and_loopback_clients():

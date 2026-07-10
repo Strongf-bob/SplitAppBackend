@@ -1,3 +1,4 @@
+import importlib
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -38,6 +39,14 @@ from tests.conftest import (
 
 def assert_status(exc: Exception, status_code: int) -> None:
     assert getattr(exc, "status_code", None) == status_code
+
+
+def get_settlement_preview(db, event_id: str, actor_user_id: str) -> dict:
+    try:
+        module = importlib.import_module("app.services.settlements")
+    except ModuleNotFoundError:
+        pytest.fail("app.services.settlements module is missing")
+    return module.get_settlement_preview(db, event_id, actor_user_id)
 
 
 def test_event_create_and_list_for_actor(db):
@@ -1112,6 +1121,188 @@ def test_confirmed_payment_on_simplified_edge_reduces_global_net_positions(db):
             "amount_kopecks": 300,
         }
     ]
+
+
+def test_settlement_preview_requires_event_membership(db):
+    seed_event(db)
+
+    try:
+        get_settlement_preview(db, EVENT_ID, USER_C)
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-member settlement preview to fail")
+
+
+def test_settlement_preview_allows_closed_event_and_explains_cycle_compression(db):
+    seed_event(db)
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    db.event_memberships.insert_one(
+        {
+            "id": "aaaaaaaa-0000-0000-0000-000000000003",
+            "event_id": EVENT_ID,
+            "user_id": USER_C,
+            "role": "member",
+            "status": "active",
+            "joined_at": now,
+            "removed_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+
+    first = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_A,
+            title="A paid for B",
+            total_amount_kopecks=500,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="AB",
+                    cost_kopecks=500,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_B, share_value="1")],
+                )
+            ],
+        ),
+        USER_A,
+    )
+    second = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_B,
+            title="B paid for C",
+            total_amount_kopecks=500,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="BC",
+                    cost_kopecks=500,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_C, share_value="1")],
+                )
+            ],
+        ),
+        USER_B,
+    )
+    ignored_receipt = receipts.create_receipt(
+        db,
+        EVENT_ID,
+        schemas.CreateReceiptRequest(
+            payer_id=USER_A,
+            title="Pending",
+            total_amount_kopecks=700,
+            items=[
+                schemas.CreateReceiptItemRequest(
+                    name="Ignored",
+                    cost_kopecks=700,
+                    share_items=[schemas.CreateShareItemRequest(user_id=USER_C, share_value="1")],
+                )
+            ],
+        ),
+        USER_A,
+    )
+    ignored_payment = payments.create_payment(
+        db,
+        EVENT_ID,
+        schemas.PaymentCreate(sender_id=USER_C, receiver_id=USER_A, amount_kopecks=150),
+        USER_C,
+    )
+    confirm_receipt_for_all(db, first["id"], USER_A)
+    confirm_receipt_for_all(db, second["id"], USER_B)
+    db.events.update_one({"id": EVENT_ID}, {"$set": {"is_closed": True}})
+
+    preview = get_settlement_preview(db, EVENT_ID, USER_A)
+
+    assert preview["event_id"] == EVENT_ID
+    assert preview["source_participant_ids"] == [USER_A, USER_B, USER_C]
+    assert preview["original_transfer_count"] == 2
+    assert preview["recommended_transfer_count"] == 1
+    assert preview["original_gross_kopecks"] == 1000
+    assert preview["recommended_total_kopecks"] == 500
+    assert preview["transfer_count_reduced"] is True
+    assert preview["net_positions"] == [
+        {"user_id": USER_C, "direction": "owes", "amount_kopecks": 500},
+        {"user_id": USER_A, "direction": "receives", "amount_kopecks": 500},
+    ]
+    assert [
+        (row["debitor_id"], row["creditor_id"], row["amount_kopecks"])
+        for row in preview["raw_debts"]
+    ] == [
+        (USER_B, USER_A, 500),
+        (USER_C, USER_B, 500),
+    ]
+    assert preview["raw_debts"][0]["contributions"] == [
+        {
+            "source_type": "receipt",
+            "source_id": first["id"],
+            "debitor_id": USER_B,
+            "creditor_id": USER_A,
+            "amount_kopecks": 500,
+            "description": "AB",
+        }
+    ]
+    assert preview["recommended_transfers"] == [
+        {"debtor_id": USER_C, "creditor_id": USER_A, "amount_kopecks": 500}
+    ]
+    assert db.receipts.find_one({"id": ignored_receipt["id"]})["status"] == "draft"
+    assert db.payments.find_one({"id": ignored_payment["id"]}).get("confirmed") is False
+
+
+def test_settlement_preview_handles_empty_and_already_simple_events(db):
+    seed_event(db)
+
+    empty_preview = get_settlement_preview(db, EVENT_ID, USER_A)
+
+    assert empty_preview == {
+        "event_id": EVENT_ID,
+        "raw_debts": [],
+        "net_positions": [],
+        "recommended_transfers": [],
+        "source_participant_ids": [],
+        "original_transfer_count": 0,
+        "recommended_transfer_count": 0,
+        "original_gross_kopecks": 0,
+        "recommended_total_kopecks": 0,
+        "transfer_count_reduced": False,
+    }
+
+    receipt = receipts.create_receipt(db, EVENT_ID, receipt_payload(), USER_A)
+    confirm_receipt_for_all(db, receipt["id"])
+
+    simple_preview = get_settlement_preview(db, EVENT_ID, USER_A)
+
+    assert simple_preview["raw_debts"] == [
+        {
+            "event_id": EVENT_ID,
+            "debitor_id": USER_B,
+            "creditor_id": USER_A,
+            "amount_kopecks": 5000,
+            "contributions": [
+                {
+                    "source_type": "receipt",
+                    "source_id": receipt["id"],
+                    "debitor_id": USER_B,
+                    "creditor_id": USER_A,
+                    "amount_kopecks": 5000,
+                    "description": "Meal",
+                }
+            ],
+        }
+    ]
+    assert simple_preview["net_positions"] == [
+        {"user_id": USER_B, "direction": "owes", "amount_kopecks": 5000},
+        {"user_id": USER_A, "direction": "receives", "amount_kopecks": 5000},
+    ]
+    assert simple_preview["recommended_transfers"] == [
+        {"debtor_id": USER_B, "creditor_id": USER_A, "amount_kopecks": 5000}
+    ]
+    assert simple_preview["source_participant_ids"] == [USER_A, USER_B]
+    assert simple_preview["original_transfer_count"] == 1
+    assert simple_preview["recommended_transfer_count"] == 1
+    assert simple_preview["original_gross_kopecks"] == 5000
+    assert simple_preview["recommended_total_kopecks"] == 5000
+    assert simple_preview["transfer_count_reduced"] is False
 
 
 def test_confirmed_receipt_financial_fields_cannot_be_changed(db):

@@ -73,6 +73,7 @@ from app.services.receipts import (
     void_receipt,
 )
 from app.services.reports import build_event_csv_export, list_receipt_categories
+from app.services.settlements import get_settlement_preview
 from app.services import splitik_attachments
 from app.services.users import (
     get_current_user,
@@ -123,6 +124,7 @@ __all__ = [
     "get_payment_reject_confirmation_summary",
     "get_receipt_confirm_confirmation_summary",
     "get_receipt_void_confirmation_summary",
+    "get_settlement_preview",
     "import_user_contacts",
     "list_events",
     "list_event_disputes",
