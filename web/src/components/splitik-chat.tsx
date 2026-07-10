@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Bot, CalendarCheck, Check, ExternalLink, Image as ImageIcon, PencilLine, ReceiptText, Send } from "lucide-react";
 
@@ -22,8 +22,10 @@ export type ChatMessage = {
 };
 
 function useVisualViewportHeight(enabled: boolean) {
-  const [height, setHeight] = useState<number | null>(null);
-  useEffect(() => {
+  const [height, setHeight] = useState<number | null>(() =>
+    typeof window === "undefined" ? null : Math.round(window.visualViewport?.height ?? window.innerHeight)
+  );
+  useLayoutEffect(() => {
     if (!enabled || !window.visualViewport) return;
     const viewport = window.visualViewport;
     const updateHeight = () => setHeight(Math.round(viewport.height));

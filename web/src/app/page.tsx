@@ -94,7 +94,7 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v38";
+const clientShellVersion = "splitapp-next-pwa-v39";
 const initialSyncRetryDelayMs = 900;
 const splitikMessageTimeoutMs = 15000;
 
@@ -1556,7 +1556,7 @@ function WorkspaceScreen({
     <AnimatePresence initial={false} mode="popLayout">
       <motion.div
         key={view}
-        className="min-h-[calc(100dvh-74px)] w-full bg-[#1f3d8f]"
+        className={cn("w-full bg-[#1f3d8f]", view === "splitik" ? "min-h-0" : "min-h-[calc(100dvh-74px)]")}
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -6 }}

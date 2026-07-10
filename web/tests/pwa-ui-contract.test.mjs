@@ -39,8 +39,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v38/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v38"/);
+  assert.match(sw, /splitapp-next-pwa-v39/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v39"/);
   assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
@@ -355,6 +355,12 @@ test("Splitik chat keeps an explicit exit to the events screen while navigation 
   assert.match(splitikChat, />К событиям<\/span>/);
 });
 
+test("Splitik updates its visible chat height before paint when the keyboard opens", () => {
+  assert.match(splitikChat, /useLayoutEffect/);
+  assert.match(splitikChat, /const \[height, setHeight\] = useState<number \| null>\(\(\) =>/);
+  assert.match(page, /view === "splitik" \? "min-h-0" : "min-h-\[calc\(100dvh-74px\)\]"/);
+});
+
 test("Splitik chat can attach receipt photos and send their attachment ids", () => {
   assert.match(api, /export type SplitikAttachment/);
   assert.match(api, /init\.body instanceof FormData/);
@@ -541,7 +547,7 @@ test("home shell covers the viewport instead of exposing the dark page backgroun
   assert.match(globals, /--background:\s*240 11% 96%/);
   assert.match(page, /<main className="min-h-dvh w-full overflow-x-hidden bg-\[#1f3d8f\]/);
   assert.match(page, /<div ref=\{scrollRootRef\} data-testid="app-scroll-root" className="min-h-dvh w-full overflow-x-hidden bg-\[#1f3d8f\]">/);
-  assert.match(page, /className="min-h-\[calc\(100dvh-74px\)\] w-full bg-\[#1f3d8f\]"/);
+  assert.match(page, /className=\{cn\("w-full bg-\[#1f3d8f\]", view === "splitik" \? "min-h-0" : "min-h-\[calc\(100dvh-74px\)\]"\)\}/);
   assert.doesNotMatch(page, /className="min-h-\[calc\(100dvh-74px\)\] w-full overflow-hidden/);
   assert.doesNotMatch(page, /loggedIn && "pb-\[var\(--bottom-nav-reserve\)\]"/);
 });
