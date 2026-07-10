@@ -133,8 +133,34 @@ Event settings include settlement policies: `split_strategy`, `receipt_creation_
 
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
-| `GET` | `/api/events/{id}/balances` | Рассчитать долги внутри события. | Возвращает globally simplified debtor-creditor edges. |
-| `GET` | `/api/events/{id}/balances/explain` | Объяснить рассчитанные долги. | Возвращает raw pairwise obligations с receipt/payment contributions для audit/explanation. |
+| `GET` | `/api/events/{id}/balances` | Рассчитать долги внутри события. | Возвращает globally simplified debtor-creditor edges: backend схлопывает raw graph до минимально достаточных переводов между итоговыми должниками и получателями. |
+| `GET` | `/api/events/{id}/balances/explain` | Объяснить рассчитанные долги. | Возвращает raw pairwise obligations с `contributions` от confirmed receipts и confirmed payments для audit/explanation; это исходный граф, а не упрощенный settlement result. |
+
+Упрощение в `GET /api/events/{id}/balances` строится из net positions и source graph из
+`GET /api/events/{id}/balances/explain`. Оно может соединять участников, между которыми не
+было прямого receipt/payment edge, поэтому клиент не должен трактовать simplified edge как
+«владение чеком» или как фиктивную историю прямых переводов.
+
+## Settlement optimization
+
+| Method | Path | Назначение | Notes |
+| --- | --- | --- | --- |
+| `GET` | `/api/events/{id}/settlement-preview` | Посмотреть read-only preview оптимизации переводов. | Доступен member'у и для open, и для closed event; ничего не записывает; возвращает `raw_debts`, `net_positions`, `recommended_transfers` и счетчики сокращения переводов. |
+| `POST` | `/api/events/{id}/settlement-plans` | Создать settlement plan по текущему preview. | Только open event; нужен `Idempotency-Key`; backend разрешает создание только когда `transfer_count_reduced=true`, сохраняет canonical snapshot и ставит TTL 24 часа через `expires_at`. |
+| `GET` | `/api/events/{id}/settlement-plans` | Список settlement plans события. | Требуется membership; возвращает текущий lifecycle (`pending`, `approved`, `rejected`, `stale`, `expired`, `executing`, `partially_settled`, `completed`). |
+| `GET` | `/api/settlement-plans/{id}` | Получить один settlement plan. | Требуется доступ к тому же event; response включает preview, approvals и edge progress. |
+| `POST` | `/api/settlement-plans/{id}/approve` | Подтвердить plan snapshot. | Разрешено только user из `required_approver_ids`; status становится `approved` только когда одобрили все required approvers. |
+| `POST` | `/api/settlement-plans/{id}/reject` | Отклонить pending plan с причиной. | Разрешено только required approver; причина обязательна и хранится в ответе. |
+| `POST` | `/api/settlement-plans/{id}/execute` | Материализовать plan в payment requests. | Только open event; нужен `Idempotency-Key`; endpoint создает только уникальные `payment_requests` на edge'ы и не подтверждает платежи автоматически. |
+
+`required_approver_ids` совпадает с `source_participant_ids` из preview: это все участники
+исходного raw debt graph, включая промежуточных участников, у которых итоговая net position
+может быть нулевой, но чьи связи исчезают из optimized plan.
+
+Settlement plan edge содержит server-generated `edge_id` и может позже получить
+`payment_request_id` и `status`. Клиент не отправляет backend свой финансовый граф и не
+может создать cross-event settlement edge: все edge'ы сервер строит сам из текущего состояния
+события и проверяет по `event_id`, `settlement_plan_id` и `settlement_edge_id`.
 
 ## Payments
 
@@ -153,10 +179,14 @@ Event settings include settlement policies: `split_strategy`, `receipt_creation_
 | `GET` | `/api/payments/{id}/confirm/confirmation-summary` | Получить summary перед confirmation. | Для explicit confirmation UI. |
 | `POST` | `/api/payments/{id}/reject` | Receiver отклоняет оплату. | Rejected payments не влияют на balances. |
 | `GET` | `/api/payments/{id}/reject/confirmation-summary` | Получить summary перед reject. | Для explicit confirmation UI. |
-| `PATCH` | `/api/payments/{id}` | Подтвердить или обновить payment state. | Confirmation restricted to receiver. |
+| `PATCH` | `/api/payments/{id}` | Receiver-only update confirmation flag. | Исторически совместимый endpoint; confirmed payment нельзя откатить обратно в pending. |
 | `DELETE` | `/api/payments/{id}` | Удалить unconfirmed payment. | Для cleanup ошибочных declarations. |
 
 Payment requests may include `deadline_at`; backend rejects deadlines less than 30 minutes out.
+
+Settlement execution не создает payment confirmations: после `POST /api/settlement-plans/{id}/execute`
+каждый должник отдельно проходит `POST /api/payment-requests/{id}/mark-paid`, а получатель отдельно
+подтверждает через `POST /api/payments/{id}/confirm`. Только confirmed payments меняют balances.
 
 ## Reports
 
@@ -229,7 +259,9 @@ Financial create endpoints require `Idempotency-Key`:
 - `POST /api/events/{id}/receipts`;
 - `POST /api/events/{id}/payments`;
 - `POST /api/events/{id}/payment-requests`;
-- `POST /api/payment-requests/{id}/mark-paid`.
+- `POST /api/payment-requests/{id}/mark-paid`;
+- `POST /api/events/{id}/settlement-plans`;
+- `POST /api/settlement-plans/{id}/execute`.
 
 Повтор того же actor + endpoint scope + key + payload возвращает сохраненный response. Повтор того же key с другим payload возвращает `409`.
 
