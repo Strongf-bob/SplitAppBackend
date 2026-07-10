@@ -97,6 +97,45 @@ def _mock_intent_candidate(monkeypatch, *, intent: str, confidence: float = 0.9)
     return calls
 
 
+def test_explicit_event_command_creates_draft_without_llm(db, monkeypatch):
+    seed_users(db)
+
+    def fail_llm(**_kwargs):
+        pytest.fail("explicit event creation must not wait for an LLM")
+
+    monkeypatch.setattr(splitik_llm, "generate_splitik_intent_candidate", fail_llm)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(message="Создай событие Такси до дома"),
+        USER_A,
+    )
+
+    assert response["intent"] == "draft"
+    assert len(response["drafts"]) == 1
+    assert response["drafts"][0]["type"] == "create_event"
+    assert response["drafts"][0]["payload"]["name"] == "Такси до дома"
+
+
+def test_splitik_router_replays_a_retried_message_without_duplicate_draft(db, monkeypatch):
+    seed_users(db)
+    api = FastAPI()
+    api.dependency_overrides[get_db] = lambda: db
+    api.dependency_overrides[get_actor_user_id] = lambda: USER_A
+    api.include_router(splitik_router.router)
+    client = TestClient(api)
+
+    headers = {"Idempotency-Key": "splitik-retry-1"}
+    payload = {"mode": "general", "message": "Создай событие Такси до дома"}
+    first = client.post("/api/splitik/messages", headers=headers, json=payload)
+    second = client.post("/api/splitik/messages", headers=headers, json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["message_id"] == first.json()["message_id"]
+    assert db.splitik_drafts.count_documents({}) == 1
+
+
 class _FakeResponse:
     def __init__(self, status_code=200, body=None):
         self.status_code = status_code

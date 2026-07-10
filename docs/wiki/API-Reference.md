@@ -69,7 +69,7 @@ Payment phone visibility is conservative: `nobody`, `event_members`, or `friends
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
 | `POST` | `/api/splitik/attachments` | Загрузить image attachment для Splitik message. | Multipart `file`; storage остается private, response содержит только sanitized metadata. |
-| `POST` | `/api/splitik/messages` | Отправить сообщение контекстному агенту Сплитику. | Backend validates context, guardrails, capabilities, draft operations, and calls configured LLM provider. |
+| `POST` | `/api/splitik/messages` | Отправить сообщение контекстному агенту Сплитику. | Backend validates context, guardrails, capabilities, draft operations, and calls configured LLM provider. Повтор той же отправки передаётся с `Idempotency-Key` и не создаёт второй draft. |
 | `GET` | `/api/splitik/sessions/{id}` | Получить историю своей Splitik-сессии. | Только owner сессии. |
 | `GET` | `/api/splitik/drafts/{id}` | Получить свой Splitik draft. | Только owner draft. |
 | `PATCH` | `/api/splitik/drafts/{id}` | Обновить pending Splitik draft. | Только owner; confirmed money state не меняется. |
