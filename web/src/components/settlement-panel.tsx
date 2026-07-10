@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,7 +15,6 @@ import {
   SettlementPlanStatus,
   SettlementPreview
 } from "@/lib/splitapp-api";
-import { cn } from "@/lib/utils";
 
 export type SettlementPerson = {
   id: string;
@@ -71,6 +70,7 @@ export function SettlementPanel({
   const [actionError, setActionError] = useState("");
   const [isRejectOpen, setIsRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const actionInFlight = useRef(false);
   const preview = state?.preview;
   const plans = useMemo(() => state?.plans ?? [], [state?.plans]);
   const paymentRequests = state?.paymentRequests ?? [];
@@ -83,6 +83,8 @@ export function SettlementPanel({
     (!selectedPlan || terminalPlanStatuses.has(selectedPlan.status) || completedPlanStatuses.has(selectedPlan.status));
 
   const runAction = async (nextActionKey: Exclude<ActionKey, null>, action: () => Promise<void>) => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
     setActionError("");
     setActionKey(nextActionKey);
     try {
@@ -93,6 +95,7 @@ export function SettlementPanel({
       setActionError(message);
       onProblem?.(error, message, nextActionKey.split(":")[0]);
     } finally {
+      actionInFlight.current = false;
       setActionKey(null);
     }
   };
@@ -151,7 +154,7 @@ export function SettlementPanel({
           <p className="text-xs font-black uppercase tracking-[0.12em] text-[#1f3d8f]">Упростить расчёты</p>
           <h3 className="mt-1 text-xl font-black leading-tight text-slate-950">План переводов внутри события</h3>
           <p className="mt-1 text-sm font-semibold leading-5 text-slate-500">
-            Покажем, кто кому переводит, без обещания абсолютного минимума.
+            Покажем понятный план: кто, кому и сколько переводит.
           </p>
         </div>
         {isClosed ? (
@@ -181,13 +184,14 @@ export function SettlementPanel({
         </div>
       ) : null}
 
-      {preview ? (
+      {preview && !selectedPlan ? (
         <PreviewBlock
           preview={preview}
           isClosed={isClosed}
           peopleById={peopleById}
           canProposePlan={canProposePlan}
           isCreating={actionKey === "create"}
+          isBusy={Boolean(actionKey)}
           onCreate={createSettlementPlan}
         />
       ) : null}
@@ -247,6 +251,7 @@ function PreviewBlock({
   peopleById,
   canProposePlan,
   isCreating,
+  isBusy,
   onCreate
 }: {
   preview: SettlementPreview;
@@ -254,6 +259,7 @@ function PreviewBlock({
   peopleById: Map<string, SettlementPerson>;
   canProposePlan: boolean;
   isCreating: boolean;
+  isBusy: boolean;
   onCreate: () => void;
 }) {
   const summaryText = previewSummaryText(preview);
@@ -303,7 +309,7 @@ function PreviewBlock({
           <Button
             type="button"
             onClick={onCreate}
-            disabled={isCreating}
+            disabled={isBusy}
             className="min-h-12 rounded-2xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90 focus-visible:ring-[#1f3d8f] disabled:bg-slate-300"
           >
             {isCreating ? "Создаём план..." : "Предложить план"}
@@ -383,7 +389,7 @@ function PlanBlock({
                 <Button
                   type="button"
                   onClick={() => onApprove(plan)}
-                  disabled={actionKey === "approve"}
+                  disabled={Boolean(actionKey)}
                   className="min-h-12 rounded-2xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90 focus-visible:ring-[#1f3d8f] disabled:bg-slate-300"
                 >
                   {actionKey === "approve" ? "Сохраняем..." : "Согласиться с планом"}
@@ -392,6 +398,7 @@ function PlanBlock({
                   type="button"
                   variant="secondary"
                   onClick={onRejectOpen}
+                  disabled={Boolean(actionKey)}
                   className="min-h-12 rounded-2xl bg-white text-sm font-black text-slate-700 hover:bg-white/90 focus-visible:ring-[#1f3d8f]"
                 >
                   Не согласен
@@ -405,6 +412,7 @@ function PlanBlock({
                   id="settlement-reject-reason"
                   value={rejectReason}
                   onChange={(event) => onRejectReason(event.currentTarget.value)}
+                  disabled={Boolean(actionKey)}
                   className="min-h-24 rounded-2xl border border-[#c6cbdc] bg-white p-3 text-sm font-semibold text-slate-950 outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
                   placeholder="Например, чек ещё не добавлен или сумма спорная"
                 />
@@ -413,6 +421,7 @@ function PlanBlock({
                     type="button"
                     variant="secondary"
                     onClick={onRejectCancel}
+                    disabled={Boolean(actionKey)}
                     className="min-h-11 rounded-xl bg-white text-sm font-black text-slate-700 hover:bg-white/90 focus-visible:ring-[#1f3d8f]"
                   >
                     Отмена
@@ -420,7 +429,7 @@ function PlanBlock({
                   <Button
                     type="button"
                     onClick={() => onReject(plan)}
-                    disabled={actionKey === "reject" || !rejectReason.trim()}
+                    disabled={Boolean(actionKey) || !rejectReason.trim()}
                     className="min-h-11 rounded-xl bg-[#8a1c1c] text-sm font-black text-white hover:bg-[#8a1c1c]/90 focus-visible:ring-[#1f3d8f] disabled:bg-slate-300"
                   >
                     {actionKey === "reject" ? "Отклоняем..." : "Отклонить план"}
@@ -437,7 +446,7 @@ function PlanBlock({
             <Button
               type="button"
               onClick={() => onExecute(plan)}
-              disabled={actionKey === "execute"}
+              disabled={Boolean(actionKey)}
               className="min-h-12 rounded-2xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90 focus-visible:ring-[#1f3d8f] disabled:bg-slate-300"
             >
               {actionKey === "execute" ? "Создаём запросы..." : "Создать запросы на оплату"}
@@ -446,7 +455,19 @@ function PlanBlock({
         ) : null}
 
         {plan.status === "completed" ? (
-          <p className="rounded-2xl bg-[#eef1f7] p-3 text-sm font-black text-[#1f3d8f]">Все переводы подтверждены</p>
+          <div className="grid gap-2 rounded-2xl bg-[#eef1f7] p-3">
+            <p className="text-sm font-black text-[#1f3d8f]">Все переводы подтверждены</p>
+            {canProposePlan ? (
+              <Button
+                type="button"
+                onClick={onCreate}
+                disabled={Boolean(actionKey)}
+                className="min-h-11 rounded-xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90 focus-visible:ring-[#1f3d8f] disabled:bg-slate-300"
+              >
+                {actionKey === "create" ? "Создаём..." : "Предложить новый план"}
+              </Button>
+            ) : null}
+          </div>
         ) : null}
 
         {terminalPlanStatuses.has(plan.status) ? (
@@ -454,6 +475,7 @@ function PlanBlock({
             plan={plan}
             canProposePlan={canProposePlan}
             isCreating={actionKey === "create"}
+            isBusy={Boolean(actionKey)}
             onRefresh={onRefresh}
             onCreate={onCreate}
           />
@@ -464,6 +486,7 @@ function PlanBlock({
           requests={paymentRequests}
           peopleById={peopleById}
           currentUserId={currentUserId}
+          isClosed={isClosed}
           actionKey={actionKey}
           onMarkPaid={onMarkPaid}
           onConfirmReceived={onConfirmReceived}
@@ -477,12 +500,14 @@ function TerminalPlanActions({
   plan,
   canProposePlan,
   isCreating,
+  isBusy,
   onRefresh,
   onCreate
 }: {
   plan: SettlementPlan;
   canProposePlan: boolean;
   isCreating: boolean;
+  isBusy: boolean;
   onRefresh: () => void;
   onCreate: () => void;
 }) {
@@ -492,7 +517,7 @@ function TerminalPlanActions({
         {plan.status === "stale"
           ? "Баланс события изменился после создания плана. Обновите расчёты и предложите новый план."
           : plan.status === "expired"
-            ? "План истёк. Если preview всё ещё сокращает переводы, можно предложить новый план."
+            ? "Срок согласования закончился. Обновите расчёты и предложите новый план."
             : `План отклонён${plan.rejection_reason ? `: ${plan.rejection_reason}` : "."}`}
       </p>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -508,7 +533,7 @@ function TerminalPlanActions({
           <Button
             type="button"
             onClick={onCreate}
-            disabled={isCreating}
+            disabled={isBusy}
             className="min-h-11 rounded-xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90 focus-visible:ring-[#1f3d8f] disabled:bg-slate-300"
           >
             {isCreating ? "Создаём..." : "Предложить план"}
@@ -524,6 +549,7 @@ function PlanEdges({
   requests,
   peopleById,
   currentUserId,
+  isClosed,
   actionKey,
   onMarkPaid,
   onConfirmReceived
@@ -532,6 +558,7 @@ function PlanEdges({
   requests: PaymentRequest[];
   peopleById: Map<string, SettlementPerson>;
   currentUserId?: string | null;
+  isClosed: boolean;
   actionKey: ActionKey;
   onMarkPaid: (request: PaymentRequest) => void;
   onConfirmReceived: (paymentId: string) => void;
@@ -542,8 +569,8 @@ function PlanEdges({
       {plan.edges.map((edge) => {
         const request = findRequestForEdge(requests, plan, edge);
         const paymentId = request?.payment_id;
-        const canMarkPaid = Boolean(request && currentUserId === edge.debtor_id && request.status === "requested");
-        const canConfirmReceived = Boolean(request && currentUserId === edge.creditor_id && request.status === "paid" && paymentId);
+        const canMarkPaid = Boolean(!isClosed && request && currentUserId === edge.debtor_id && request.status === "requested");
+        const canConfirmReceived = Boolean(!isClosed && request && currentUserId === edge.creditor_id && request.status === "paid" && paymentId);
         return (
           <div key={edge.edge_id} className="grid min-w-0 gap-2 rounded-2xl bg-[#f5f5f7] p-3">
             <div className="grid min-w-0 grid-cols-[1fr_auto] gap-2">
@@ -553,16 +580,11 @@ function PlanEdges({
               <span className="text-sm font-black text-slate-950">{money(edge.amount_kopecks)}</span>
             </div>
             <p className="text-sm font-semibold leading-5 text-slate-600">{requestStatusText(request, edge)}</p>
-            {request ? (
-              <p className="text-xs font-bold text-slate-500">
-                Связанный запрос: {request.id.slice(0, 8)} · статус: {request.status}
-              </p>
-            ) : null}
             {canMarkPaid && request ? (
               <Button
                 type="button"
                 onClick={() => onMarkPaid(request)}
-                disabled={actionKey === `mark-paid:${request.id}`}
+                disabled={Boolean(actionKey)}
                 className="min-h-11 rounded-xl bg-[#1f3d8f] text-sm font-black text-white hover:bg-[#1f3d8f]/90 focus-visible:ring-[#1f3d8f] disabled:bg-slate-300"
               >
                 {actionKey === `mark-paid:${request.id}` ? "Отмечаем..." : "Я оплатил"}
@@ -572,7 +594,7 @@ function PlanEdges({
               <Button
                 type="button"
                 onClick={() => onConfirmReceived(paymentId)}
-                disabled={actionKey === `confirm:${paymentId}`}
+                disabled={Boolean(actionKey)}
                 className="min-h-11 rounded-xl bg-[#111111] text-sm font-black text-white hover:bg-[#111111]/90 focus-visible:ring-[#1f3d8f] disabled:bg-slate-300"
               >
                 {actionKey === `confirm:${paymentId}` ? "Подтверждаем..." : "Подтвердить получение"}
@@ -597,8 +619,7 @@ function compareSettlementPlans(left: SettlementPlan, right: SettlementPlan) {
 
 function planPriority(status: SettlementPlanStatus) {
   if (activePlanStatuses.has(status)) return 0;
-  if (completedPlanStatuses.has(status)) return 1;
-  return 2;
+  return 1;
 }
 
 function previewSummaryText(preview: SettlementPreview) {
@@ -626,11 +647,11 @@ function planStatusDescription(plan: SettlementPlan, preview?: SettlementPreview
   if (plan.status === "approved") return "Можно создать запросы на оплату. Это ещё не оплата.";
   if (plan.status === "executing") return "Следите за каждым запросом: кто должен оплатить и кто подтверждает получение.";
   if (plan.status === "partially_settled") return "Некоторые переводы уже в процессе или подтверждены, остальные остаются видимыми.";
-  if (plan.status === "completed") return "Backend подтвердил все переводы по плану.";
-  if (plan.status === "stale") return "Состояние события изменилось, старый snapshot нельзя исполнять.";
-  if (plan.status === "expired") return "TTL плана истёк. Обновите preview перед новым предложением.";
+  if (plan.status === "completed") return "Все участники подтвердили получение денег.";
+  if (plan.status === "stale") return "После создания плана расходы изменились. Сначала обновите расчёты.";
+  if (plan.status === "expired") return "Срок согласования закончился. Обновите расчёты перед новым предложением.";
   if (plan.status === "rejected") return plan.rejection_reason ? `Причина: ${plan.rejection_reason}` : "Один из участников отклонил план.";
-  return preview?.transfer_count_reduced ? "Preview всё ещё можно использовать для нового плана." : "План больше не активен.";
+  return preview?.transfer_count_reduced ? "Расчёты можно обновить и предложить участникам снова." : "План больше не активен.";
 }
 
 function findRequestForEdge(requests: PaymentRequest[], plan: SettlementPlan, edge: SettlementPlanEdge) {
@@ -643,7 +664,6 @@ function findRequestForEdge(requests: PaymentRequest[], plan: SettlementPlan, ed
 
 function requestStatusText(request: PaymentRequest | undefined, edge: SettlementPlanEdge) {
   if (!request) {
-    if (edge.status) return `Запрос ещё не связан. Статус перевода: ${edge.status}.`;
     return "Запрос ещё не создан.";
   }
   const labels: Record<string, string> = {
@@ -655,20 +675,19 @@ function requestStatusText(request: PaymentRequest | undefined, edge: Settlement
     rejected: "Оплата отклонена получателем.",
     acknowledged: "Должник видел запрос, оплаты ещё нет."
   };
-  return labels[request.status] ?? `Статус запроса: ${request.status}.`;
+  return labels[request.status] ?? "Статус запроса обновляется. Попробуйте открыть событие ещё раз.";
 }
 
 function personName(peopleById: Map<string, SettlementPerson>, userId: string) {
-  return peopleById.get(userId)?.name ?? `Участник ${userId.slice(0, 8)}`;
+  return peopleById.get(userId)?.name ?? "Участник события";
 }
 
 function settlementActionErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
     if (error.status === 401 || error.status === 403) return "Не удалось выполнить действие: проверьте доступ к событию.";
     if (error.status === 409) return "Состояние расчётов изменилось. Обновите расчёты и попробуйте снова.";
-    if (error.message) return `Не удалось выполнить действие: ${error.message}`;
+    return "Не удалось выполнить действие. Обновите расчёты и попробуйте снова.";
   }
-  if (error instanceof Error && error.message) return error.message;
   return "Не удалось выполнить действие. Проверьте сеть и попробуйте снова.";
 }
 
