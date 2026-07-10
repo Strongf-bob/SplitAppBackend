@@ -108,6 +108,136 @@ export type ReceiptPage = {
   total: number;
 };
 
+export type BalanceContribution = {
+  source_type: string;
+  source_id: string;
+  amount_kopecks: number;
+};
+
+export type EventBalanceExplanation = {
+  event_id: string;
+  debitor_id: string;
+  creditor_id: string;
+  amount_kopecks: number;
+  contributions: BalanceContribution[];
+};
+
+export type SettlementNetPosition = {
+  user_id: string;
+  direction: "owes" | "receives";
+  amount_kopecks: number;
+};
+
+export type SettlementTransfer = {
+  debtor_id: string;
+  creditor_id: string;
+  amount_kopecks: number;
+};
+
+export type SettlementPreview = {
+  event_id: string;
+  raw_debts: EventBalanceExplanation[];
+  net_positions: SettlementNetPosition[];
+  recommended_transfers: SettlementTransfer[];
+  source_participant_ids: string[];
+  original_transfer_count: number;
+  recommended_transfer_count: number;
+  original_gross_kopecks: number;
+  recommended_total_kopecks: number;
+  transfer_count_reduced: boolean;
+};
+
+export type SettlementPlanStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "stale"
+  | "expired"
+  | "executing"
+  | "partially_settled"
+  | "completed";
+
+export type SettlementPlanEdge = {
+  edge_id: string;
+  debtor_id: string;
+  creditor_id: string;
+  amount_kopecks: number;
+  payment_request_id?: string | null;
+  status?: string | null;
+};
+
+export type SettlementPlanApproval = {
+  user_id: string;
+  approved_at: string;
+};
+
+export type SettlementPlan = {
+  id: string;
+  event_id: string;
+  status: SettlementPlanStatus;
+  algorithm_version: "greedy-net-v1";
+  preview: SettlementPreview;
+  edges: SettlementPlanEdge[];
+  required_approver_ids: string[];
+  approvals: SettlementPlanApproval[];
+  created_by: string;
+  expires_at: string;
+  created_at: string;
+  updated_at: string;
+  rejected_by?: string | null;
+  rejection_reason?: string | null;
+  rejected_at?: string | null;
+};
+
+export type SettlementPlanPage = {
+  items: SettlementPlan[];
+  limit: number;
+  offset: number;
+  total: number;
+};
+
+export type PaymentRequest = {
+  id: string;
+  event_id: string;
+  debtor_id: string;
+  creditor_id: string;
+  amount_kopecks: number;
+  note?: string;
+  status: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  payment_id?: string | null;
+  deadline_at?: string | null;
+  acknowledged_at?: string | null;
+  cancelled_at?: string | null;
+  disputed_at?: string | null;
+  extension_requested_at?: string | null;
+  origin?: string | null;
+  settlement_plan_id?: string | null;
+  settlement_edge_id?: string | null;
+};
+
+export type PaymentRequestPage = {
+  items: PaymentRequest[];
+  limit: number;
+  offset: number;
+  total: number;
+};
+
+export type Payment = {
+  id: string;
+  event_id: string;
+  sender_id: string;
+  receiver_id: string;
+  amount_kopecks: number;
+  status: string;
+  confirmed: boolean;
+  created_at: string;
+  payment_request_id?: string | null;
+  rejected_at?: string | null;
+};
+
 export type SplitikDraft = {
   id: string;
   type: string;

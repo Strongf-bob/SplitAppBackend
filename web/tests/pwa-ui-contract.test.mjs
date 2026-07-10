@@ -32,8 +32,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v34/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v34"/);
+  assert.match(sw, /splitapp-next-pwa-v35/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v35"/);
   assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
