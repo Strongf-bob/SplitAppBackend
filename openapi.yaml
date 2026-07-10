@@ -1533,6 +1533,64 @@
         }
       }
     },
+    "/api/settlement-plans/{id}/execute": {
+      "post": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Execute Settlement Plan",
+        "operationId": "execute_settlement_plan_api_settlement_plans__id__execute_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettlementPlan"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/settlement-plans/{id}/reject": {
       "post": {
         "tags": [
@@ -6826,6 +6884,41 @@
               }
             ],
             "title": "Extension Requested At"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          },
+          "settlement_plan_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settlement Plan Id"
+          },
+          "settlement_edge_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settlement Edge Id"
           }
         },
         "type": "object",
@@ -7612,7 +7705,10 @@
               "approved",
               "rejected",
               "stale",
-              "expired"
+              "expired",
+              "executing",
+              "partially_settled",
+              "completed"
             ],
             "title": "Status"
           },
@@ -7623,6 +7719,13 @@
           },
           "preview": {
             "$ref": "#/components/schemas/SettlementPreview"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/SettlementPlanEdge"
+            },
+            "type": "array",
+            "title": "Edges"
           },
           "required_approver_ids": {
             "items": {
@@ -7702,6 +7805,7 @@
           "status",
           "algorithm_version",
           "preview",
+          "edges",
           "required_approver_ids",
           "approvals",
           "created_by",
@@ -7730,6 +7834,61 @@
           "approved_at"
         ],
         "title": "SettlementPlanApproval"
+      },
+      "SettlementPlanEdge": {
+        "properties": {
+          "edge_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Edge Id"
+          },
+          "debtor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Debtor Id"
+          },
+          "creditor_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Creditor Id"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Kopecks"
+          },
+          "payment_request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Request Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "edge_id",
+          "debtor_id",
+          "creditor_id",
+          "amount_kopecks"
+        ],
+        "title": "SettlementPlanEdge"
       },
       "SettlementPlanPage": {
         "properties": {

@@ -17,7 +17,7 @@ from app.main import configure_exception_handlers, configure_request_logging
 from app.routers.client_reports import router as client_reports_router
 from app.routers.events import router as events_router
 from app.routers.health import router as health_router
-from app.services import receipts
+from app.services import indexes, receipts
 from tests.conftest import EVENT_ID, USER_A, USER_B, USER_C, confirm_receipt_for_all, seed_event
 
 
@@ -700,6 +700,46 @@ def test_settlement_plan_endpoints_create_list_get_approve_and_reject(db):
     assert too_long_reason.status_code == 422
 
 
+def test_settlement_plan_execute_endpoint_requires_key_and_materializes_requests(db):
+    import importlib
+
+    settlements = importlib.import_module("app.services.settlements")
+    access_token, _ = tokens.create_access_token(USER_A)
+    create_cycle_source(db)
+    plan = settlements.create_settlement_plan(
+        db, EVENT_ID, USER_A, idempotency_key="settlement-plan-api-execute"
+    )
+    approved = plan
+    for user_id in plan["required_approver_ids"]:
+        approved = settlements.approve_settlement_plan(db, plan["id"], user_id)
+
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+    api.dependency_overrides[get_db] = lambda: db
+    api.include_router(events_router)
+    client = TestClient(api)
+
+    missing_key = client.post(
+        f"/api/settlement-plans/{approved['id']}/execute",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert missing_key.status_code == 422
+
+    executed_response = client.post(
+        f"/api/settlement-plans/{approved['id']}/execute",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Idempotency-Key": "settlement-execute-api-1",
+        },
+    )
+
+    assert executed_response.status_code == 200
+    executed = executed_response.json()
+    assert executed["status"] == "executing"
+    assert executed["edges"][0]["status"] == "requested"
+    assert executed["edges"][0]["payment_request_id"]
+    assert db.payment_requests.count_documents({}) == 1
+
+
 def test_openapi_exposes_settlement_preview_contract():
     schema = app_main.app.openapi()
     preview = schema["components"]["schemas"]["SettlementPreview"]
@@ -727,6 +767,7 @@ def test_openapi_exposes_settlement_plan_contract():
     schema = app_main.app.openapi()
     paths = schema["paths"]
     plan = schema["components"]["schemas"]["SettlementPlan"]
+    edge = schema["components"]["schemas"]["SettlementPlanEdge"]
     page = schema["components"]["schemas"]["SettlementPlanPage"]
     reject = schema["components"]["schemas"]["SettlementPlanReject"]
 
@@ -734,15 +775,19 @@ def test_openapi_exposes_settlement_plan_contract():
     assert "/api/settlement-plans/{id}" in paths
     assert "/api/settlement-plans/{id}/approve" in paths
     assert "/api/settlement-plans/{id}/reject" in paths
+    assert "/api/settlement-plans/{id}/execute" in paths
     assert paths["/api/events/{id}/settlement-plans"]["post"]["parameters"][1]["name"] == (
         "Idempotency-Key"
     )
+    execute_parameters = paths["/api/settlement-plans/{id}/execute"]["post"]["parameters"]
+    assert any(parameter["name"] == "Idempotency-Key" for parameter in execute_parameters)
     assert plan["required"] == [
         "id",
         "event_id",
         "status",
         "algorithm_version",
         "preview",
+        "edges",
         "required_approver_ids",
         "approvals",
         "created_by",
@@ -756,9 +801,27 @@ def test_openapi_exposes_settlement_plan_contract():
         "rejected",
         "stale",
         "expired",
+        "executing",
+        "partially_settled",
+        "completed",
     }
+    assert edge["required"] == ["edge_id", "debtor_id", "creditor_id", "amount_kopecks"]
     assert page["required"] == ["items", "limit", "offset", "total"]
     assert reject["properties"]["reason"]["maxLength"] == 500
+
+
+def test_payment_requests_have_unique_sparse_settlement_edge_index(db):
+    indexes.ensure_indexes(db)
+
+    matching_indexes = [
+        info
+        for info in db.payment_requests.index_information().values()
+        if info["key"] == [("settlement_plan_id", 1), ("settlement_edge_id", 1)]
+    ]
+
+    assert matching_indexes
+    assert matching_indexes[0]["unique"] is True
+    assert matching_indexes[0]["sparse"] is True
 
 
 def test_operations_scrape_allows_private_and_loopback_clients():

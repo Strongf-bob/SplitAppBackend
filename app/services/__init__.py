@@ -77,6 +77,7 @@ from app.services.settlements import get_settlement_preview
 from app.services.settlements import (
     approve_settlement_plan,
     create_settlement_plan,
+    execute_settlement_plan,
     get_settlement_plan,
     list_settlement_plans,
     reject_settlement_plan,
@@ -111,6 +112,7 @@ __all__ = [
     "delete_event",
     "decline_event_invite",
     "dispute_receipt_share_review",
+    "execute_settlement_plan",
     "create_payment",
     "create_payment_request",
     "dispute_payment_request",

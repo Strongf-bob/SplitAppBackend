@@ -18,11 +18,14 @@ from app.services.balances import (
     get_event_balance_explanations,
 )
 from app.services.common import new_uuid, record_audit_event, strip_mongo_id, utc_now
+from app.services.common import active_filter
 from app.services.idempotency import run_idempotent_create
+import app.services.payments as payment_services
 from app.services.settlement_algorithm import build_settlement_edges
 
 ALGORITHM_VERSION = "greedy-net-v1"
 PENDING_PLAN_TTL = timedelta(hours=24)
+EXECUTION_REFRESH_STATUSES = {"executing", "partially_settled", "completed"}
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -168,6 +171,39 @@ def _get_settlement_preview_unchecked(db: Database, event_id: str) -> dict:
     return _build_settlement_preview(event_id, raw_debts)
 
 
+def _edges_from_recommended_transfers(recommended_transfers: list[dict]) -> list[dict]:
+    return [
+        {
+            "edge_id": new_uuid(),
+            "debtor_id": transfer["debtor_id"],
+            "creditor_id": transfer["creditor_id"],
+            "amount_kopecks": transfer["amount_kopecks"],
+        }
+        for transfer in recommended_transfers
+    ]
+
+
+def _plan_edges_to_api(plan: dict) -> list[dict]:
+    edges = []
+    for edge in plan.get("edges", []):
+        if not all(
+            key in edge for key in ("edge_id", "debtor_id", "creditor_id", "amount_kopecks")
+        ):
+            continue
+        cleaned_edge = {
+            "edge_id": edge["edge_id"],
+            "debtor_id": edge["debtor_id"],
+            "creditor_id": edge["creditor_id"],
+            "amount_kopecks": int(edge["amount_kopecks"]),
+        }
+        if edge.get("payment_request_id") is not None:
+            cleaned_edge["payment_request_id"] = edge["payment_request_id"]
+        if edge.get("status") is not None:
+            cleaned_edge["status"] = edge["status"]
+        edges.append(cleaned_edge)
+    return edges
+
+
 def _plan_to_api(plan: dict) -> dict:
     cleaned = strip_mongo_id(plan)
     preview = cleaned.get("preview") or cleaned.get("canonical_snapshot", {}).get("preview")
@@ -181,6 +217,7 @@ def _plan_to_api(plan: dict) -> dict:
         "status": cleaned["status"],
         "algorithm_version": cleaned.get("algorithm_version", ALGORITHM_VERSION),
         "preview": preview,
+        "edges": _plan_edges_to_api(cleaned),
         "required_approver_ids": sorted(cleaned.get("required_approver_ids", [])),
         "approvals": approvals,
         "created_by": cleaned["created_by"],
@@ -288,6 +325,159 @@ def _ensure_current_snapshot_or_mark_stale(
     raise HTTPException(status_code=409, detail="Settlement plan snapshot is stale.")
 
 
+def _find_payment_request_for_edge(db: Database, plan_id: str, edge: dict) -> dict | None:
+    if edge.get("payment_request_id"):
+        payment_request = db.payment_requests.find_one(
+            active_filter({"id": edge["payment_request_id"]})
+        )
+        if payment_request:
+            return payment_request
+    return db.payment_requests.find_one(
+        active_filter(
+            {
+                "settlement_plan_id": plan_id,
+                "settlement_edge_id": edge["edge_id"],
+            }
+        )
+    )
+
+
+def _derive_edge_progress(db: Database, plan: dict) -> tuple[list[dict], int, int]:
+    refreshed_edges = []
+    linked_count = 0
+    confirmed_count = 0
+    for edge in plan.get("edges", []):
+        refreshed_edge = dict(edge)
+        payment_request = _find_payment_request_for_edge(db, plan["id"], edge)
+        if payment_request:
+            linked_count += 1
+            refreshed_edge["payment_request_id"] = payment_request["id"]
+            refreshed_edge["status"] = payment_request["status"]
+            if payment_request["status"] == "confirmed":
+                confirmed_count += 1
+        refreshed_edges.append(refreshed_edge)
+    return refreshed_edges, linked_count, confirmed_count
+
+
+def _desired_execution_status(
+    plan: dict, *, edge_count: int, linked_count: int, confirmed_count: int
+) -> str:
+    if edge_count == 0 or linked_count == 0:
+        return plan["status"]
+    if confirmed_count == edge_count:
+        return "completed"
+    if confirmed_count > 0:
+        return "partially_settled"
+    return "executing"
+
+
+def _refresh_plan_progress(db: Database, plan: dict, actor_user_id: str) -> dict:
+    if plan["status"] not in EXECUTION_REFRESH_STATUSES:
+        return plan
+    edges = plan.get("edges", [])
+    if not edges:
+        return plan
+
+    refreshed_edges, linked_count, confirmed_count = _derive_edge_progress(db, plan)
+    desired_status = _desired_execution_status(
+        plan,
+        edge_count=len(refreshed_edges),
+        linked_count=linked_count,
+        confirmed_count=confirmed_count,
+    )
+    now = utc_now()
+    if refreshed_edges != edges:
+        db.settlement_plans.update_one(
+            {"id": plan["id"]},
+            {"$set": {"edges": refreshed_edges, "updated_at": now}},
+        )
+        plan = _get_plan_or_404(db, plan["id"])
+
+    if desired_status != plan["status"]:
+        result = db.settlement_plans.update_one(
+            {"id": plan["id"], "status": plan["status"]},
+            {"$set": {"status": desired_status, "updated_at": utc_now()}},
+        )
+        if result.modified_count:
+            _record_plan_mutation(db, plan["id"], actor_user_id, desired_status)
+        plan = _get_plan_or_404(db, plan["id"])
+    return plan
+
+
+def refresh_settlement_plan_progress_for_payment_request(
+    db: Database, payment_request_id: str, actor_user_id: str
+) -> dict | None:
+    payment_request = db.payment_requests.find_one(active_filter({"id": payment_request_id}))
+    if not payment_request or not payment_request.get("settlement_plan_id"):
+        return None
+    plan = _get_plan_or_404(db, payment_request["settlement_plan_id"])
+    return _refresh_plan_progress(db, plan, actor_user_id)
+
+
+def _create_or_get_settlement_payment_request(
+    db: Database, plan: dict, edge: dict, actor_user_id: str
+) -> dict:
+    return payment_services.create_or_get_settlement_payment_request(db, plan, edge, actor_user_id)
+
+
+def _transition_approved_plan_to_executing(db: Database, plan: dict, actor_user_id: str) -> dict:
+    result = db.settlement_plans.update_one(
+        {"id": plan["id"], "status": "approved"},
+        {"$set": {"status": "executing", "updated_at": utc_now()}},
+    )
+    if result.modified_count:
+        _record_plan_mutation(db, plan["id"], actor_user_id, "executing")
+    current = _get_plan_or_404(db, plan["id"])
+    if current["status"] in EXECUTION_REFRESH_STATUSES:
+        return current
+    if current["status"] == "approved":
+        raise HTTPException(status_code=409, detail="Settlement execution could not be started.")
+    raise HTTPException(status_code=409, detail="Settlement plan is no longer executable.")
+
+
+def _link_edge_payment_request(
+    db: Database, plan_id: str, edge_id: str, payment_request: dict
+) -> None:
+    db.settlement_plans.update_one(
+        {"id": plan_id, "edges.edge_id": edge_id},
+        {
+            "$set": {
+                "edges.$.payment_request_id": payment_request["id"],
+                "edges.$.status": payment_request["status"],
+                "updated_at": utc_now(),
+            }
+        },
+    )
+
+
+def _execute_settlement_plan(db: Database, plan_id: str, actor_user_id: str) -> dict:
+    plan = _get_plan_or_404(db, plan_id)
+    event = assert_event_access(db, plan["event_id"], actor_user_id)
+    if plan["status"] != "completed":
+        assert_event_open(event)
+
+    plan = _refresh_plan_progress(db, plan, actor_user_id)
+    if plan["status"] == "approved":
+        plan = _ensure_current_snapshot_or_mark_stale(
+            db, plan, actor_user_id, statuses={"approved"}
+        )
+        plan = _transition_approved_plan_to_executing(db, plan, actor_user_id)
+    elif plan["status"] not in EXECUTION_REFRESH_STATUSES:
+        raise HTTPException(status_code=409, detail="Settlement plan is not approved.")
+
+    for edge in plan.get("edges", []):
+        payment_request = _find_payment_request_for_edge(db, plan["id"], edge)
+        if payment_request is None:
+            payment_request = _create_or_get_settlement_payment_request(
+                db, plan, edge, actor_user_id
+            )
+        _link_edge_payment_request(db, plan["id"], edge["edge_id"], payment_request)
+        plan = _get_plan_or_404(db, plan["id"])
+
+    plan = _refresh_plan_progress(db, plan, actor_user_id)
+    return _plan_to_api(plan)
+
+
 @track_service_operation("settlements.preview")
 def get_settlement_preview(db: Database, event_id: str, actor_user_id: str) -> dict:
     raw_debts = get_event_balance_explanations(db, event_id, actor_user_id)
@@ -336,6 +526,7 @@ def _create_settlement_plan(db: Database, event_id: str, actor_user_id: str) -> 
         "raw_debts": preview["raw_debts"],
         "net_positions": preview["net_positions"],
         "recommended_transfers": preview["recommended_transfers"],
+        "edges": _edges_from_recommended_transfers(preview["recommended_transfers"]),
         "required_approver_ids": preview["source_participant_ids"],
         "approvals": [],
         "created_by": actor_user_id,
@@ -362,6 +553,7 @@ def get_settlement_plan(db: Database, plan_id: str, actor_user_id: str) -> dict:
     plan = _get_plan_or_404(db, plan_id)
     assert_event_access(db, plan["event_id"], actor_user_id)
     plan = _transition_expired_if_needed(db, plan, actor_user_id)
+    plan = _refresh_plan_progress(db, plan, actor_user_id)
     return _plan_to_api(plan)
 
 
@@ -378,10 +570,26 @@ def list_settlement_plans(
         .skip(offset)
         .limit(limit)
     )
-    items = [
-        _plan_to_api(_transition_expired_if_needed(db, plan, actor_user_id)) for plan in cursor
-    ]
+    items = []
+    for plan in cursor:
+        plan = _transition_expired_if_needed(db, plan, actor_user_id)
+        plan = _refresh_plan_progress(db, plan, actor_user_id)
+        items.append(_plan_to_api(plan))
     return {"items": items, "limit": limit, "offset": offset, "total": total}
+
+
+@track_service_operation("settlement_plans.execute")
+def execute_settlement_plan(
+    db: Database, plan_id: str, actor_user_id: str, *, idempotency_key: str
+) -> dict:
+    return run_idempotent_create(
+        db,
+        actor_user_id=actor_user_id,
+        scope=f"settlement_plans:{plan_id}:execute",
+        key=idempotency_key,
+        request_payload={"plan_id": plan_id},
+        create=lambda: _execute_settlement_plan(db, plan_id, actor_user_id),
+    )
 
 
 def _ensure_required_approver(plan: dict, actor_user_id: str) -> None:
