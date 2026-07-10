@@ -8355,6 +8355,7 @@
           },
           "message": {
             "type": "string",
+            "maxLength": 8000,
             "minLength": 1,
             "title": "Message"
           },

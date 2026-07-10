@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app import schemas
 from app.dependencies import get_actor_user_id, get_db, get_s3
@@ -1705,3 +1706,8 @@ def test_seed_demo_friends_is_idempotent(db, monkeypatch):
     assert seed_demo_friends.main() == 0
     assert db.users.count_documents({"public_handle": {"$regex": "_demo$"}}) == 6
     assert db.friends.count_documents({"requester_id": USER_A, "status": "accepted"}) == 6
+
+
+def test_splitik_message_rejects_oversized_prompt():
+    with pytest.raises(ValidationError):
+        schemas.SplitikMessageRequest(message="x" * 8001)

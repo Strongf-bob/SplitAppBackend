@@ -154,39 +154,33 @@ def list_payments_by_event(
 def update_payment(
     db: Database, payment_id: str, payload: schemas.PaymentUpdate, actor_user_id: str
 ) -> dict:
-    payment = get_payment_or_404(db, payment_id)
-    event = assert_event_access(db, payment["event_id"], actor_user_id)
-    assert_event_open(event)
-    if actor_user_id != payment["receiver_id"]:
-        raise HTTPException(
-            status_code=403,
-            detail="Only the payment receiver can update confirmation.",
-        )
-    if payment.get("confirmed") and not payload.confirmed:
-        raise HTTPException(status_code=409, detail="Confirmed payments cannot be unconfirmed.")
-    status = "confirmed" if payload.confirmed else "pending"
-    db.payments.update_one(
-        {"id": payment_id},
-        {"$set": {"confirmed": payload.confirmed, "status": status, "updated_at": utc_now()}},
-    )
-    record_domain_event("payments", "confirmed" if payload.confirmed else "unconfirmed")
-    record_audit_event(
-        db,
-        action="payment.confirmation_updated",
-        resource_type="payment",
-        resource_id=payment_id,
-        actor_user_id=actor_user_id,
-    )
-    return _payment_to_api(get_payment_or_404(db, payment_id))
+    if not payload.confirmed:
+        raise HTTPException(status_code=409, detail="Payments cannot be unconfirmed.")
+    return _confirm_payment(db, payment_id, actor_user_id)
 
 
 @track_service_operation("payments.confirm")
 def confirm_payment(db: Database, payment_id: str, actor_user_id: str) -> dict:
+    return _confirm_payment(db, payment_id, actor_user_id)
+
+
+def _confirm_payment(db: Database, payment_id: str, actor_user_id: str) -> dict:
     payment = get_payment_or_404(db, payment_id)
     event = assert_event_access(db, payment["event_id"], actor_user_id)
     assert_event_open(event)
     if actor_user_id != payment["receiver_id"]:
         raise HTTPException(status_code=403, detail="Only the payment receiver can confirm.")
+    if payment.get("confirmed") or payment.get("status", "pending") != "pending":
+        raise HTTPException(status_code=409, detail="Only pending payments can be confirmed.")
+
+    payment_request = None
+    if payment.get("payment_request_id"):
+        payment_request = _get_payment_request_or_404(db, payment["payment_request_id"])
+        if payment_request["status"] != "paid":
+            raise HTTPException(
+                status_code=409,
+                detail="Only paid payment requests can be confirmed.",
+            )
 
     now = utc_now()
     update_fields = {
@@ -196,9 +190,9 @@ def confirm_payment(db: Database, payment_id: str, actor_user_id: str) -> dict:
         "updated_at": now,
     }
     db.payments.update_one({"id": payment_id}, {"$set": update_fields})
-    if payment.get("payment_request_id"):
+    if payment_request:
         db.payment_requests.update_one(
-            {"id": payment["payment_request_id"]},
+            {"id": payment_request["id"], "status": "paid"},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
     record_domain_event("payments", "confirmed")
@@ -209,9 +203,9 @@ def confirm_payment(db: Database, payment_id: str, actor_user_id: str) -> dict:
         resource_id=payment_id,
         actor_user_id=actor_user_id,
     )
-    if payment.get("payment_request_id"):
+    if payment_request:
         _best_effort_refresh_settlement_progress_for_request(
-            db, payment["payment_request_id"], actor_user_id
+            db, payment_request["id"], actor_user_id
         )
     return _payment_to_api(get_payment_or_404(db, payment_id))
 
@@ -223,8 +217,8 @@ def reject_payment(db: Database, payment_id: str, actor_user_id: str) -> dict:
     assert_event_open(event)
     if actor_user_id != payment["receiver_id"]:
         raise HTTPException(status_code=403, detail="Only the payment receiver can reject.")
-    if payment.get("confirmed"):
-        raise HTTPException(status_code=409, detail="Confirmed payments cannot be rejected.")
+    if payment.get("confirmed") or payment.get("status", "pending") != "pending":
+        raise HTTPException(status_code=409, detail="Only pending payments can be rejected.")
 
     now = utc_now()
     db.payments.update_one(
