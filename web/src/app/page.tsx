@@ -5,18 +5,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import {
   Bell,
-  Bot,
-  CalendarCheck,
   Camera,
   ChevronDown,
   Image as ImageIcon,
   MessageSquareWarning,
   Search,
-  Send,
-  Check,
-  PencilLine,
-  ExternalLink,
-  ReceiptText,
   Users
 } from "lucide-react";
 
@@ -24,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { SplitikScreen, type ChatMessage } from "@/components/splitik-chat";
 import {
   SettlementPanel,
   settlementLoadErrorMessage,
@@ -53,7 +47,6 @@ import {
   SettlementPlanPage,
   SettlementPreview,
   SplitikAttachment,
-  SplitikDraft,
   SplitikMessageResponse,
   SplitAppTokens,
   saveTokens,
@@ -70,19 +63,8 @@ type NotificationTab = "incoming" | "read";
 type PermissionId = "contacts" | "camera" | "gallery" | "notifications";
 type PermissionStatus = "pending" | "granted" | "unsupported" | "denied" | "skipped";
 type PermissionState = Record<PermissionId, { status: PermissionStatus; detail: string }>;
-type ChatMessage = {
-  id: string;
-  from: "user" | "splitik";
-  text: string;
-  delivery?: "failed";
-  retryMessage?: string;
-  idempotencyKey?: string;
-  drafts?: SplitikDraft[];
-  questions?: Array<{ id: string; text: string }>;
-};
 type EventReceipts = Record<string, { loading: boolean; items: ReceiptSummary[] }>;
 type EventSettlementCache = Record<string, SettlementEventState>;
-type MarkdownBlock = { type: "paragraph"; text: string } | { type: "list"; items: string[] };
 type FriendOption = { id: string; initials: string; name: string; subtitle: string; amount: number; tone: string };
 type ProblemReportState = {
   open: boolean;
@@ -118,7 +100,7 @@ const splitikMessageTimeoutMs = 15000;
 
 const figmaHomeAsset = (name: string) => `/assets/figma-home/${name}`;
 
-function useVisualViewportHeight(enabled: boolean) {
+function useLegacyVisualViewportHeight(enabled: boolean) {
   const [height, setHeight] = useState<number | null>(null);
 
   useEffect(() => {
@@ -2422,7 +2404,8 @@ function ProfileRow({ label, value, tone }: { label: string; value: string; tone
   );
 }
 
-function SplitikScreen({
+/* Legacy implementation retained temporarily for source-history reference; active implementation lives in splitik-chat.tsx.
+function LegacySplitikScreen({
   messages,
   draft,
   onDraft,
@@ -2878,6 +2861,7 @@ function renderInlineMarkdown(text: string) {
   });
 }
 
+*/
 function SegmentedControl({
   name,
   items,

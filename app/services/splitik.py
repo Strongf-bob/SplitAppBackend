@@ -423,6 +423,7 @@ def _planner_context(
     payload: schemas.SplitikMessageRequest,
     actor_user_id: str,
     session_id: str,
+    session: dict,
 ) -> dict:
     event_id = _event_id_from_payload(payload)
     attachments = []
@@ -439,12 +440,7 @@ def _planner_context(
         "event_id": event_id,
         "attachment_ids": attachment_ids,
         "attachments": attachments,
-        "recent_messages": splitik_tools.read_recent_session_messages(
-            db,
-            actor_user_id=actor_user_id,
-            session_id=session_id,
-            limit=6,
-        ),
+        "recent_messages": list(session.get("messages", []))[-6:],
         "active_draft": splitik_tools.read_active_draft(
             db,
             actor_user_id=actor_user_id,
@@ -656,6 +652,7 @@ def _planner_draft_result(
     payload: schemas.SplitikMessageRequest,
     actor_user_id: str,
     session_id: str,
+    session: dict,
 ) -> dict:
     try:
         candidate = splitik_llm.generate_splitik_plan_candidate(
@@ -665,6 +662,7 @@ def _planner_draft_result(
                 payload=payload,
                 actor_user_id=actor_user_id,
                 session_id=session_id,
+                session=session,
             ),
         )
     except HTTPException as exc:
@@ -771,6 +769,7 @@ def _maybe_create_draft(
     payload: schemas.SplitikMessageRequest,
     actor_user_id: str,
     session_id: str,
+    session: dict,
 ) -> dict:
     mode = payload.mode.strip().lower()
     lowered = payload.message.casefold()
@@ -804,6 +803,7 @@ def _maybe_create_draft(
         payload=payload,
         actor_user_id=actor_user_id,
         session_id=session_id,
+        session=session,
     )
     if intent_model_id:
         planner_result["model_ids"] = [
@@ -820,12 +820,7 @@ def _maybe_create_draft(
     if mode == "general":
         if not _looks_like_event_creation_request(payload.message):
             return _empty_draft_result()
-        recent_messages = splitik_tools.read_recent_session_messages(
-            db,
-            actor_user_id=actor_user_id,
-            session_id=session_id,
-            limit=6,
-        )
+        recent_messages = list(session.get("messages", []))[-6:]
         event_candidate = _event_draft_candidate(
             payload.message,
             context={
@@ -1294,7 +1289,13 @@ def send_splitik_message(
         stage = "context.build"
         context, chips, capabilities = _build_context(db, payload, actor_user_id)
         stage = "drafts.create"
-        draft_result = _maybe_create_draft(db, payload, actor_user_id, session["id"])
+        draft_result = _maybe_create_draft(
+            db,
+            payload,
+            actor_user_id,
+            session["id"],
+            session,
+        )
         drafts = draft_result["drafts"]
         questions = _draft_questions(drafts) + draft_result["questions"]
         if draft_result["guardrail_decision"]:
