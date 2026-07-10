@@ -47,6 +47,11 @@ def ensure_indexes(db: Database) -> None:
     db.payment_requests.create_index([("event_id", 1), ("created_at", -1)])
     db.payment_requests.create_index([("debtor_id", 1), ("status", 1)])
     db.payment_requests.create_index([("creditor_id", 1), ("status", 1)])
+    db.payment_requests.create_index(
+        [("settlement_plan_id", 1), ("settlement_edge_id", 1)],
+        unique=True,
+        sparse=True,
+    )
     db.settlement_plans.create_index("id", unique=True)
     db.settlement_plans.create_index([("event_id", 1), ("created_at", -1)])
     db.settlement_plans.create_index("active_key", unique=True, sparse=True)

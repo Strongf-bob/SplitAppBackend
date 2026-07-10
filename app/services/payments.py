@@ -1,4 +1,5 @@
 from fastapi import HTTPException
+from pymongo.errors import DuplicateKeyError
 from pymongo.database import Database
 from datetime import timedelta
 
@@ -11,6 +12,7 @@ from app.services.common import money_to_storage, stored_money_to_kopecks
 from app.services.idempotency import run_idempotent_create
 
 _MIN_PAYMENT_REQUEST_DEADLINE = timedelta(minutes=30)
+_SETTLEMENT_REQUEST_NOTE = "optimized event settlement payment request"
 
 
 def _payment_to_api(payment: dict) -> dict:
@@ -40,6 +42,19 @@ def _get_payment_request_or_404(db: Database, payment_request_id: str) -> dict:
 def _assert_payment_request_party(payment_request: dict, actor_user_id: str) -> None:
     if actor_user_id not in {payment_request["debtor_id"], payment_request["creditor_id"]}:
         raise HTTPException(status_code=403, detail="Not a party to this payment request.")
+
+
+def _refresh_settlement_progress_for_request(
+    db: Database, payment_request_id: str, actor_user_id: str
+) -> None:
+    payment_request = db.payment_requests.find_one(active_filter({"id": payment_request_id}))
+    if not payment_request or not payment_request.get("settlement_plan_id"):
+        return
+    from app.services import settlements
+
+    settlements.refresh_settlement_plan_progress_for_payment_request(
+        db, payment_request_id, actor_user_id
+    )
 
 
 @track_service_operation("payments.create")
@@ -171,6 +186,7 @@ def confirm_payment(db: Database, payment_id: str, actor_user_id: str) -> dict:
             {"id": payment["payment_request_id"]},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
+        _refresh_settlement_progress_for_request(db, payment["payment_request_id"], actor_user_id)
     record_domain_event("payments", "confirmed")
     record_audit_event(
         db,
@@ -209,6 +225,7 @@ def reject_payment(db: Database, payment_id: str, actor_user_id: str) -> dict:
             {"id": payment["payment_request_id"]},
             {"$set": {"status": "rejected", "updated_at": now}},
         )
+        _refresh_settlement_progress_for_request(db, payment["payment_request_id"], actor_user_id)
     record_domain_event("payments", "rejected")
     record_audit_event(
         db,
@@ -327,6 +344,79 @@ def _create_payment_request(
         actor_user_id=actor_user_id,
     )
     observe_money_amount("payment_request_amount", payload.amount_kopecks / 100)
+    return _payment_request_to_api(payment_request)
+
+
+def _validate_settlement_edge(plan: dict, edge: dict) -> dict:
+    if plan.get("status") not in {"approved", "executing", "partially_settled"}:
+        raise HTTPException(status_code=409, detail="Settlement plan is not executable.")
+    edge_id = edge.get("edge_id")
+    stored_edge = next(
+        (candidate for candidate in plan.get("edges", []) if candidate.get("edge_id") == edge_id),
+        None,
+    )
+    if not stored_edge:
+        raise HTTPException(status_code=400, detail="Settlement edge is not part of this plan.")
+    for field in ("debtor_id", "creditor_id", "amount_kopecks"):
+        if stored_edge.get(field) != edge.get(field):
+            raise HTTPException(status_code=400, detail="Settlement edge does not match plan.")
+    return stored_edge
+
+
+def create_or_get_settlement_payment_request(
+    db: Database,
+    plan: dict,
+    edge: dict,
+    actor_user_id: str,
+) -> dict:
+    event = assert_event_access(db, plan["event_id"], actor_user_id)
+    assert_event_open(event)
+    stored_edge = _validate_settlement_edge(plan, edge)
+
+    query = active_filter(
+        {
+            "settlement_plan_id": plan["id"],
+            "settlement_edge_id": stored_edge["edge_id"],
+        }
+    )
+    existing = db.payment_requests.find_one(query)
+    if existing:
+        return _payment_request_to_api(existing)
+
+    now = utc_now()
+    payment_request = {
+        "id": new_uuid(),
+        "event_id": plan["event_id"],
+        "debtor_id": stored_edge["debtor_id"],
+        "creditor_id": stored_edge["creditor_id"],
+        "amount_kopecks": money_to_storage(stored_edge["amount_kopecks"]),
+        "note": _SETTLEMENT_REQUEST_NOTE,
+        "status": "requested",
+        "created_by": actor_user_id,
+        "deadline_at": None,
+        "origin": "settlement_plan",
+        "settlement_plan_id": plan["id"],
+        "settlement_edge_id": stored_edge["edge_id"],
+        "created_at": now,
+        "updated_at": now,
+    }
+    try:
+        db.payment_requests.insert_one(payment_request)
+    except DuplicateKeyError:
+        existing = db.payment_requests.find_one(query)
+        if existing:
+            return _payment_request_to_api(existing)
+        raise
+
+    record_domain_event("payment_requests", "created")
+    record_audit_event(
+        db,
+        action="payment_request.created",
+        resource_type="payment_request",
+        resource_id=payment_request["id"],
+        actor_user_id=actor_user_id,
+    )
+    observe_money_amount("payment_request_amount", stored_edge["amount_kopecks"] / 100)
     return _payment_request_to_api(payment_request)
 
 

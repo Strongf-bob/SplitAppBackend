@@ -34,7 +34,16 @@ DisputeResourceType = Literal["receipt", "payment", "payment_request"]
 SplitikMode = Literal["general", "event", "receipt", "member"]
 ClientReportKind = Literal["automatic_error", "manual_feedback"]
 ClientReportSeverity = Literal["info", "warning", "error", "critical"]
-SettlementPlanStatus = Literal["pending", "approved", "rejected", "stale", "expired"]
+SettlementPlanStatus = Literal[
+    "pending",
+    "approved",
+    "rejected",
+    "stale",
+    "expired",
+    "executing",
+    "partially_settled",
+    "completed",
+]
 ClientReportScreen = Literal[
     "home",
     "events",
@@ -523,6 +532,9 @@ class PaymentRequest(BaseModel):
     cancelled_at: datetime | None = None
     disputed_at: datetime | None = None
     extension_requested_at: datetime | None = None
+    origin: str | None = None
+    settlement_plan_id: UUID | None = None
+    settlement_edge_id: UUID | None = None
 
 
 class PaymentRequestPage(BaseModel):
@@ -676,12 +688,22 @@ class SettlementPlanApproval(BaseModel):
     approved_at: datetime
 
 
+class SettlementPlanEdge(BaseModel):
+    edge_id: UUID
+    debtor_id: UUID
+    creditor_id: UUID
+    amount_kopecks: int = Field(gt=0)
+    payment_request_id: UUID | None = None
+    status: str | None = None
+
+
 class SettlementPlan(BaseModel):
     id: UUID
     event_id: UUID
     status: SettlementPlanStatus
     algorithm_version: Literal["greedy-net-v1"]
     preview: SettlementPreview
+    edges: list[SettlementPlanEdge]
     required_approver_ids: list[UUID]
     approvals: list[SettlementPlanApproval]
     created_by: UUID

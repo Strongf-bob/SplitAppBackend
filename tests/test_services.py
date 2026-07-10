@@ -183,8 +183,23 @@ def create_settlement_source_change(db, *, title: str = "Changed source") -> dic
     return receipt
 
 
+def create_approved_settlement_plan(db, *, extra_same_edge: bool = False) -> tuple[object, dict]:
+    create_cycle_settlement_source(db, extra_same_edge=extra_same_edge)
+    service = settlement_service()
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+    approved = plan
+    for user_id in plan["required_approver_ids"]:
+        approved = service.approve_settlement_plan(db, plan["id"], user_id)
+    assert approved["status"] == "approved"
+    return service, approved
+
+
 def audit_action_count(db, action: str, resource_id: str) -> int:
     return db.audit_events.count_documents({"action": action, "resource_id": resource_id})
+
+
+def audit_action_total(db, action: str) -> int:
+    return db.audit_events.count_documents({"action": action})
 
 
 def remove_active_member(db, user_id: str) -> None:
@@ -1995,6 +2010,317 @@ def test_list_settlement_plans_returns_paginated_event_member_page(db):
     assert page["offset"] == 0
     assert page["total"] == 2
     assert [item["id"] for item in page["items"]] == [second["id"]]
+
+
+def test_settlement_plan_create_persists_server_edges_without_preview_edge_ids(db):
+    create_cycle_settlement_source(db, extra_same_edge=True)
+    service = settlement_service()
+
+    plan = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+
+    assert set(plan["preview"]["recommended_transfers"][0]) == {
+        "debtor_id",
+        "creditor_id",
+        "amount_kopecks",
+    }
+    assert len(plan["edges"]) == 2
+    edge_ids = [edge["edge_id"] for edge in plan["edges"]]
+    assert len(edge_ids) == len(set(edge_ids))
+    for edge, transfer in zip(plan["edges"], plan["preview"]["recommended_transfers"], strict=True):
+        assert edge["debtor_id"] == transfer["debtor_id"]
+        assert edge["creditor_id"] == transfer["creditor_id"]
+        assert edge["amount_kopecks"] == transfer["amount_kopecks"]
+        assert edge.get("payment_request_id") is None
+        assert edge.get("status") is None
+
+    stored = db.settlement_plans.find_one({"id": plan["id"]})
+    assert stored["edges"] == plan["edges"]
+
+
+def test_settlement_execute_requires_approval_open_event_and_event_member(db):
+    create_cycle_settlement_source(db)
+    service = settlement_service()
+    pending = service.create_settlement_plan(db, EVENT_ID, USER_A, idempotency_key="plan")
+
+    try:
+        service.execute_settlement_plan(
+            db, pending["id"], USER_A, idempotency_key="execute-before-approval"
+        )
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected execution before approval to fail")
+
+    approved = pending
+    for user_id in pending["required_approver_ids"]:
+        approved = service.approve_settlement_plan(db, pending["id"], user_id)
+
+    non_member = "44444444-4444-4444-4444-444444444444"
+    try:
+        service.execute_settlement_plan(
+            db, approved["id"], non_member, idempotency_key="execute-non-member"
+        )
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-member execution to fail")
+
+    db.events.update_one({"id": EVENT_ID}, {"$set": {"is_closed": True}})
+    try:
+        service.execute_settlement_plan(
+            db, approved["id"], USER_A, idempotency_key="execute-closed"
+        )
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected closed event execution to fail")
+
+    assert db.payment_requests.count_documents({}) == 0
+
+
+def test_settlement_execute_stales_approved_plan_when_snapshot_changed(db):
+    service, approved = create_approved_settlement_plan(db)
+    create_settlement_source_change(db)
+
+    try:
+        service.execute_settlement_plan(db, approved["id"], USER_B, idempotency_key="execute-stale")
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected stale approved plan execution to fail")
+
+    stored = db.settlement_plans.find_one({"id": approved["id"]})
+    assert stored["status"] == "stale"
+    assert stored.get("active_key") is None
+    assert db.payment_requests.count_documents({}) == 0
+
+
+def test_settlement_execute_rejects_forged_or_mutated_edge_materialization(db):
+    service, approved = create_approved_settlement_plan(db)
+    stored = db.settlement_plans.find_one({"id": approved["id"]})
+    forged_edge = dict(stored["edges"][0])
+    forged_edge["amount_kopecks"] += 1
+
+    try:
+        service._create_or_get_settlement_payment_request(db, stored, forged_edge, USER_A)
+    except Exception as exc:
+        assert_status(exc, 400)
+    else:
+        raise AssertionError("Expected forged settlement edge materialization to fail")
+
+    assert db.payment_requests.count_documents({}) == 0
+
+
+def test_settlement_execute_partial_creation_failure_is_retryable_without_duplicates(
+    db, monkeypatch
+):
+    service, approved = create_approved_settlement_plan(db, extra_same_edge=True)
+    original_create = service._create_or_get_settlement_payment_request
+    calls = 0
+
+    def fail_second_edge(db_arg, plan_arg, edge_arg, actor_user_id):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("simulated payment request failure")
+        return original_create(db_arg, plan_arg, edge_arg, actor_user_id)
+
+    monkeypatch.setattr(service, "_create_or_get_settlement_payment_request", fail_second_edge)
+    try:
+        service.execute_settlement_plan(db, approved["id"], USER_A, idempotency_key="execute-fail")
+    except RuntimeError as exc:
+        assert str(exc) == "simulated payment request failure"
+    else:
+        raise AssertionError("Expected partial payment request creation failure")
+
+    after_failure = db.settlement_plans.find_one({"id": approved["id"]})
+    assert after_failure["status"] == "executing"
+    assert sum(1 for edge in after_failure["edges"] if edge.get("payment_request_id")) == 1
+    assert db.payment_requests.count_documents({}) == 1
+
+    monkeypatch.setattr(service, "_create_or_get_settlement_payment_request", original_create)
+    retried = service.execute_settlement_plan(db, approved["id"], USER_B, idempotency_key="retry")
+
+    assert retried["status"] == "executing"
+    assert [edge["status"] for edge in retried["edges"]] == ["requested", "requested"]
+    assert db.payment_requests.count_documents({}) == 2
+    assert audit_action_count(db, "settlement_plan.executing", approved["id"]) == 1
+    assert audit_action_total(db, "payment_request.created") == 2
+
+
+def test_settlement_execute_same_and_different_actor_keys_link_existing_request_once(db):
+    service, approved = create_approved_settlement_plan(db)
+
+    first = service.execute_settlement_plan(db, approved["id"], USER_A, idempotency_key="execute-a")
+    same_key = service.execute_settlement_plan(
+        db, approved["id"], USER_A, idempotency_key="execute-a"
+    )
+    different_actor = service.execute_settlement_plan(
+        db, approved["id"], USER_B, idempotency_key="execute-b"
+    )
+
+    first_request_id = first["edges"][0]["payment_request_id"]
+    assert same_key["edges"][0]["payment_request_id"] == first_request_id
+    assert different_actor["edges"][0]["payment_request_id"] == first_request_id
+    assert db.payment_requests.count_documents({}) == 1
+    assert audit_action_count(db, "settlement_plan.executing", approved["id"]) == 1
+    assert audit_action_total(db, "payment_request.created") == 1
+
+
+def test_settlement_execute_links_exact_payment_request_provenance_without_payment(db):
+    service, approved = create_approved_settlement_plan(db)
+
+    executed = service.execute_settlement_plan(
+        db, approved["id"], USER_C, idempotency_key="execute-provenance"
+    )
+
+    edge = executed["edges"][0]
+    request = db.payment_requests.find_one({"id": edge["payment_request_id"]})
+    assert executed["status"] == "executing"
+    assert edge["status"] == "requested"
+    assert request["origin"] == "settlement_plan"
+    assert request["settlement_plan_id"] == approved["id"]
+    assert request["settlement_edge_id"] == edge["edge_id"]
+    assert request["debtor_id"] == edge["debtor_id"]
+    assert request["creditor_id"] == edge["creditor_id"]
+    assert request["amount_kopecks"] == edge["amount_kopecks"]
+    assert request["created_by"] == USER_C
+    assert "optimized event settlement" in request["note"]
+    assert db.payments.count_documents({}) == 0
+
+
+def test_settlement_one_edge_mark_paid_then_confirm_completes_plan(db):
+    service, approved = create_approved_settlement_plan(db)
+    executed = service.execute_settlement_plan(
+        db, approved["id"], USER_A, idempotency_key="execute"
+    )
+    edge = executed["edges"][0]
+
+    payment = payments.mark_payment_request_paid(
+        db,
+        edge["payment_request_id"],
+        edge["debtor_id"],
+        idempotency_key="mark-paid",
+    )
+    paid_plan = service.get_settlement_plan(db, approved["id"], USER_A)
+
+    assert payment["status"] == "pending"
+    assert paid_plan["status"] == "executing"
+    assert paid_plan["edges"][0]["status"] == "paid"
+
+    payments.confirm_payment(db, payment["id"], edge["creditor_id"])
+    completed = service.get_settlement_plan(db, approved["id"], USER_A)
+
+    assert completed["status"] == "completed"
+    assert completed["edges"][0]["status"] == "confirmed"
+    assert audit_action_count(db, "settlement_plan.completed", approved["id"]) == 1
+
+
+def test_settlement_multi_edge_progresses_partial_then_completed(db):
+    service, approved = create_approved_settlement_plan(db, extra_same_edge=True)
+    executed = service.execute_settlement_plan(
+        db, approved["id"], USER_A, idempotency_key="execute"
+    )
+    first_edge, second_edge = executed["edges"]
+
+    first_payment = payments.mark_payment_request_paid(
+        db,
+        first_edge["payment_request_id"],
+        first_edge["debtor_id"],
+        idempotency_key="mark-first",
+    )
+    payments.confirm_payment(db, first_payment["id"], first_edge["creditor_id"])
+    partial = service.get_settlement_plan(db, approved["id"], USER_A)
+
+    assert partial["status"] == "partially_settled"
+    assert [edge["status"] for edge in partial["edges"]] == ["confirmed", "requested"]
+
+    second_payment = payments.mark_payment_request_paid(
+        db,
+        second_edge["payment_request_id"],
+        second_edge["debtor_id"],
+        idempotency_key="mark-second",
+    )
+    payments.confirm_payment(db, second_payment["id"], second_edge["creditor_id"])
+    completed = service.get_settlement_plan(db, approved["id"], USER_B)
+
+    assert completed["status"] == "completed"
+    assert [edge["status"] for edge in completed["edges"]] == ["confirmed", "confirmed"]
+    assert audit_action_count(db, "settlement_plan.partially_settled", approved["id"]) == 1
+    assert audit_action_count(db, "settlement_plan.completed", approved["id"]) == 1
+
+
+def test_settlement_rejected_payment_remains_visible_and_not_completed(db):
+    service, approved = create_approved_settlement_plan(db)
+    executed = service.execute_settlement_plan(
+        db, approved["id"], USER_A, idempotency_key="execute"
+    )
+    edge = executed["edges"][0]
+    payment = payments.mark_payment_request_paid(
+        db,
+        edge["payment_request_id"],
+        edge["debtor_id"],
+        idempotency_key="mark-paid",
+    )
+
+    payments.reject_payment(db, payment["id"], edge["creditor_id"])
+    refreshed = service.get_settlement_plan(db, approved["id"], USER_A)
+
+    assert refreshed["status"] == "executing"
+    assert refreshed["edges"][0]["payment_request_id"] == edge["payment_request_id"]
+    assert refreshed["edges"][0]["status"] == "rejected"
+    assert audit_action_count(db, "settlement_plan.partially_settled", approved["id"]) == 0
+    assert audit_action_count(db, "settlement_plan.completed", approved["id"]) == 0
+
+
+def test_settlement_public_payment_request_authorization_rule_is_unchanged(db):
+    seed_event(db)
+
+    try:
+        payments.create_payment_request(
+            db,
+            EVENT_ID,
+            schemas.PaymentRequestCreate(
+                debtor_id=USER_B,
+                creditor_id=USER_A,
+                amount_kopecks=3000,
+                note="Ordinary request",
+            ),
+            USER_B,
+            idempotency_key="ordinary-forbidden",
+        )
+    except Exception as exc:
+        assert_status(exc, 403)
+    else:
+        raise AssertionError("Expected non-creditor public payment request creation to fail")
+
+    forged_payload = schemas.PaymentRequestCreate.model_validate(
+        {
+            "debtor_id": USER_B,
+            "creditor_id": USER_A,
+            "amount_kopecks": 3000,
+            "note": "Ordinary request",
+            "origin": "settlement_plan",
+            "settlement_plan_id": "aaaaaaaa-0000-0000-0000-000000000099",
+            "settlement_edge_id": "aaaaaaaa-0000-0000-0000-000000000100",
+        }
+    )
+    request = payments.create_payment_request(
+        db,
+        EVENT_ID,
+        forged_payload,
+        USER_A,
+        idempotency_key="ordinary-allowed",
+    )
+
+    stored = db.payment_requests.find_one({"id": request["id"]})
+    assert request["created_by"] == USER_A
+    assert "origin" not in request
+    assert "settlement_plan_id" not in request
+    assert "settlement_edge_id" not in request
+    assert "origin" not in stored
+    assert "settlement_plan_id" not in stored
+    assert "settlement_edge_id" not in stored
 
 
 def test_confirmed_receipt_financial_fields_cannot_be_changed(db):

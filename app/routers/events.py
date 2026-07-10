@@ -223,6 +223,18 @@ def approve_settlement_plan(
     return services.approve_settlement_plan(db, str(id), current_user_id)
 
 
+@router.post("/api/settlement-plans/{id}/execute", response_model=schemas.SettlementPlan)
+def execute_settlement_plan(
+    id: UUID,
+    idempotency_key: str = Header(min_length=1, alias="Idempotency-Key"),
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.execute_settlement_plan(
+        db, str(id), current_user_id, idempotency_key=idempotency_key
+    )
+
+
 @router.post("/api/settlement-plans/{id}/reject", response_model=schemas.SettlementPlan)
 def reject_settlement_plan(
     id: UUID,
