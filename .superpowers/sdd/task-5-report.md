@@ -46,3 +46,10 @@
 ## Concerns
 
 - No known backend contract mismatch after verification.
+
+## Review follow-up
+
+- Removed the wording that implied `/balances` claims an absolute minimum transfer count.
+- Clarified in API and domain docs that `greedy-net-v1` returns a deterministic recommendation that preserves net positions, not a proven global minimum.
+- Clarified that `stale` compares current state against the canonical snapshot persisted during `POST /api/events/{id}/settlement-plans`, not against an earlier read-only preview.
+- Corrected the `payment_requests(settlement_plan_id, settlement_edge_id)` index description to the exact collection-level uniqueness semantics and documented that retries reuse the existing document.

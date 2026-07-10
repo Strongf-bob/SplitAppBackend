@@ -73,8 +73,10 @@ Settlement optimization тоже работает как explicit-review flow:
   промежуточных участников с нулевой итоговой net position;
 - plan lifecycle использует точные статусы `pending`, `approved`, `rejected`,
   `stale`, `expired`, `executing`, `partially_settled`, `completed`;
-- `stale` защищает от гонок: если balances/memberships успели измениться между preview,
-  approve и execute, backend помечает старый snapshot как неактуальный;
+- `stale` защищает от гонок: backend сравнивает текущее состояние события с canonical
+  snapshot, который был сохранен в `POST /api/events/{id}/settlement-plans`, а не с каким-то
+  более ранним read-only preview; если balances/memberships успели измениться после создания
+  plan, snapshot помечается как неактуальный;
 - `POST /api/settlement-plans/{id}/execute` не создает confirmed payment и не меняет
   balances сам по себе: он только materialize'ит уникальные `payment_requests` с
   provenance-полями `origin=settlement_plan`, `settlement_plan_id`, `settlement_edge_id`;

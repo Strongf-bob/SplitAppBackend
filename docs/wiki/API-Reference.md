@@ -133,13 +133,14 @@ Event settings include settlement policies: `split_strategy`, `receipt_creation_
 
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
-| `GET` | `/api/events/{id}/balances` | Рассчитать долги внутри события. | Возвращает globally simplified debtor-creditor edges: backend схлопывает raw graph до минимально достаточных переводов между итоговыми должниками и получателями. |
+| `GET` | `/api/events/{id}/balances` | Рассчитать долги внутри события. | Возвращает deterministic recommended simplification из `greedy-net-v1`, которая сохраняет net positions и строится поверх raw debt graph. |
 | `GET` | `/api/events/{id}/balances/explain` | Объяснить рассчитанные долги. | Возвращает raw pairwise obligations с `contributions` от confirmed receipts и confirmed payments для audit/explanation; это исходный граф, а не упрощенный settlement result. |
 
 Упрощение в `GET /api/events/{id}/balances` строится из net positions и source graph из
-`GET /api/events/{id}/balances/explain`. Оно может соединять участников, между которыми не
-было прямого receipt/payment edge, поэтому клиент не должен трактовать simplified edge как
-«владение чеком» или как фиктивную историю прямых переводов.
+`GET /api/events/{id}/balances/explain`. Это deterministic recommendation алгоритма
+`greedy-net-v1`, а не доказанный глобальный минимум по числу переводов. Оно может соединять
+участников, между которыми не было прямого receipt/payment edge, поэтому клиент не должен
+трактовать simplified edge как «владение чеком» или как фиктивную историю прямых переводов.
 
 ## Settlement optimization
 
