@@ -670,6 +670,39 @@ class SettlementPreview(BaseModel):
     transfer_count_reduced: bool
 
 
+class SettlementPlanApproval(BaseModel):
+    user_id: UUID
+    approved_at: datetime
+
+
+class SettlementPlan(BaseModel):
+    id: UUID
+    event_id: UUID
+    status: str
+    algorithm_version: Literal["greedy-net-v1"]
+    preview: SettlementPreview
+    required_approver_ids: list[UUID]
+    approvals: list[SettlementPlanApproval]
+    created_by: UUID
+    expires_at: datetime
+    created_at: datetime
+    updated_at: datetime
+    rejected_by: UUID | None = None
+    rejection_reason: str | None = None
+    rejected_at: datetime | None = None
+
+
+class SettlementPlanPage(BaseModel):
+    items: list[SettlementPlan]
+    limit: int
+    offset: int
+    total: int
+
+
+class SettlementPlanReject(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class SplitikEntryPoint(BaseModel):
     type: SplitikMode = "general"
     event_id: UUID | None = None
