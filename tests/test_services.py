@@ -2376,6 +2376,76 @@ def test_settlement_rejected_payment_remains_visible_and_not_completed(db):
     assert audit_action_count(db, "settlement_plan.completed", approved["id"]) == 0
 
 
+def test_settlement_payment_patch_confirms_linked_request_and_completes_plan(db):
+    service, approved = create_approved_settlement_plan(db)
+    executed = service.execute_settlement_plan(
+        db, approved["id"], USER_A, idempotency_key="execute-patch-confirm"
+    )
+    edge = executed["edges"][0]
+    payment = payments.mark_payment_request_paid(
+        db,
+        edge["payment_request_id"],
+        edge["debtor_id"],
+        idempotency_key="mark-paid-patch-confirm",
+    )
+
+    confirmed = payments.update_payment(
+        db, payment["id"], schemas.PaymentUpdate(confirmed=True), edge["creditor_id"]
+    )
+
+    assert confirmed["status"] == "confirmed"
+    assert db.payment_requests.find_one({"id": edge["payment_request_id"]})["status"] == "confirmed"
+    assert service.get_settlement_plan(db, approved["id"], USER_A)["status"] == "completed"
+
+
+def test_rejected_payment_cannot_be_confirmed_without_new_payment(db):
+    service, approved = create_approved_settlement_plan(db)
+    executed = service.execute_settlement_plan(
+        db, approved["id"], USER_A, idempotency_key="execute-rejected-confirm"
+    )
+    edge = executed["edges"][0]
+    payment = payments.mark_payment_request_paid(
+        db,
+        edge["payment_request_id"],
+        edge["debtor_id"],
+        idempotency_key="mark-paid-rejected-confirm",
+    )
+    payments.reject_payment(db, payment["id"], edge["creditor_id"])
+
+    try:
+        payments.confirm_payment(db, payment["id"], edge["creditor_id"])
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected rejected payment confirmation to fail")
+
+    assert db.payment_requests.find_one({"id": edge["payment_request_id"]})["status"] == "rejected"
+
+
+def test_disputed_payment_request_blocks_linked_payment_confirmation(db):
+    service, approved = create_approved_settlement_plan(db)
+    executed = service.execute_settlement_plan(
+        db, approved["id"], USER_A, idempotency_key="execute-disputed-confirm"
+    )
+    edge = executed["edges"][0]
+    payment = payments.mark_payment_request_paid(
+        db,
+        edge["payment_request_id"],
+        edge["debtor_id"],
+        idempotency_key="mark-paid-disputed-confirm",
+    )
+    payments.dispute_payment_request(db, edge["payment_request_id"], edge["debtor_id"])
+
+    try:
+        payments.confirm_payment(db, payment["id"], edge["creditor_id"])
+    except Exception as exc:
+        assert_status(exc, 409)
+    else:
+        raise AssertionError("Expected disputed payment confirmation to fail")
+
+    assert db.payment_requests.find_one({"id": edge["payment_request_id"]})["status"] == "disputed"
+
+
 def test_settlement_confirm_refresh_failure_does_not_rollback_money_audit_or_domain(
     db, monkeypatch
 ):

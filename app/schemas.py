@@ -744,7 +744,7 @@ class SplitikAttachment(BaseModel):
 class SplitikMessageRequest(BaseModel):
     session_id: UUID | None = None
     mode: SplitikMode = "general"
-    message: str = Field(min_length=1)
+    message: str = Field(min_length=1, max_length=8000)
     entry_point: SplitikEntryPoint | None = None
     attachment_ids: list[UUID] = Field(default_factory=list)
     locale: str = "ru-RU"
