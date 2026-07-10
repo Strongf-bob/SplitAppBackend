@@ -32,8 +32,8 @@ test("PWA exposes working mobile affordances from the SVG design", () => {
 });
 
 test("service worker cache version is bumped for the redesigned shell", () => {
-  assert.match(sw, /splitapp-next-pwa-v36/);
-  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v36"/);
+  assert.match(sw, /splitapp-next-pwa-v37/);
+  assert.match(page, /const clientShellVersion = "splitapp-next-pwa-v37"/);
   assert.match(sw, /\/assets\/figma-home\/quick-scan\.svg/);
   assert.match(page, /navigator\.serviceWorker\.addEventListener\("controllerchange", reloadOnControllerChange\)/);
   assert.match(page, /sessionStorage\.setItem\(reloadKey, clientShellVersion\)/);
@@ -220,6 +220,16 @@ test("Splitik chat keeps backend error detail visible to diagnose LLM failures",
   assert.doesNotMatch(page, /catch \{\n      setChatMessages/);
 });
 
+test("Splitik chat is keyboard-safe and gives a manual event recovery route", () => {
+  assert.match(page, /useVisualViewportHeight/);
+  assert.match(page, /data-testid="splitik-message-end"/);
+  assert.match(page, /text-\[16px\]/);
+  assert.doesNotMatch(page, /data-testid="splitik-composer"[\s\S]{0,450}fixed/);
+  assert.match(page, /Создать событие вручную/);
+  assert.match(page, /Повторить отправку/);
+  assert.match(page, /"Idempotency-Key": userMessage\.idempotencyKey/);
+});
+
 test("authenticated startup refreshes expired access tokens instead of showing a fake offline slice", () => {
   assert.match(api, /\/api\/refresh/);
   assert.match(api, /const nextTokens = \{ \.\.\.tokens, \.\.\.refreshedTokens \}/);
@@ -325,11 +335,11 @@ test("refreshed tokens update React state, not only localStorage", () => {
   assert.match(page, /api<T>\(path, tokens, init, \(nextTokens\) =>/);
 });
 
-test("Splitik composer is fixed above the bottom nav and keyboard viewport", () => {
+test("Splitik composer follows the visual viewport instead of a fixed page offset", () => {
   assert.match(page, /data-testid="splitik-composer"/);
-  assert.match(page, /fixed inset-x-4 bottom-\[calc\(86px\+env\(safe-area-inset-bottom\)\)\]/);
-  assert.match(page, /pb-\[calc\(160px\+env\(safe-area-inset-bottom\)\)\]/);
-  assert.match(page, /max-w-\[calc\(100vw-2rem\)\]/);
+  assert.match(page, /useVisualViewportHeight\(true\)/);
+  assert.doesNotMatch(page, /data-testid="splitik-composer"[\s\S]{0,450}fixed/);
+  assert.match(page, /view === "splitik" && "hidden"/);
 });
 
 test("Splitik chat can attach receipt photos and send their attachment ids", () => {
@@ -421,10 +431,10 @@ test("Splitik chat uses a messenger-style bottom anchored message list", () => {
   assert.match(page, /data-testid="splitik-chat-shell"/);
   assert.match(page, /data-testid="splitik-message-list"/);
   assert.match(page, /data-testid="splitik-chat-screen"/);
-  assert.match(page, /min-h-\[calc\(100dvh-92px\)\] bg-\[#1f3d8f\]/);
+  assert.match(page, /style=\{visualViewportHeight \? \{ height: `\$\{visualViewportHeight\}px` \} : undefined\}/);
   assert.match(page, /flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto/);
   assert.match(page, /<textarea[\s\S]*data-testid="splitik-message-input"/);
-  assert.match(page, /max-h-\[132px\][\s\S]*resize-y[\s\S]*overflow-y-auto/);
+  assert.match(page, /max-h-\[132px\][\s\S]*resize-none[\s\S]*text-\[16px\]/);
   assert.match(page, /const messageInputRef = useRef<HTMLTextAreaElement \| null>\(null\)/);
   assert.doesNotMatch(page, /data-testid="splitik-intro-card"/);
   assert.doesNotMatch(page, /<Input[\s\S]{0,300}data-testid="splitik-message-input"/);
@@ -598,7 +608,8 @@ test("friends add-by-code is a compact expandable control, not an always-open fo
 test("Splitik uses a continuous Telegram-style chat surface", () => {
   assert.match(page, /data-testid="splitik-chat-screen"/);
   assert.match(page, /flex min-h-0 flex-1 flex-col justify-end/);
-  assert.match(page, /fixed inset-x-4 bottom-\[calc\(86px\+env\(safe-area-inset-bottom\)\)\]/);
+  assert.match(page, /data-testid="splitik-message-end"/);
+  assert.match(page, /scrollToLatestMessage/);
   assert.doesNotMatch(page, /rounded-\[28px\] bg-white px-4 py-5/);
 });
 

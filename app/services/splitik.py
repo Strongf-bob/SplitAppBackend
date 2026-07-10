@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 import traceback
 
@@ -335,6 +336,23 @@ def _looks_like_event_creation_request(message: str) -> bool:
         )
     )
     return has_event and has_create_verb
+
+
+def _explicit_event_name(message: str) -> str | None:
+    match = re.match(
+        r"^\s*(?:давай\s+)?(?:создай|создать|добавь|добавить)\s+(?:новое\s+)?событи[ея]\s*(?:про|:|-)?\s*(.+?)\s*$",
+        message,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    raw_name = match.group(1).strip()
+    if raw_name.startswith("."):
+        return None
+    name = raw_name.strip(" .,!?")
+    if not name or _looks_like_invalid_event_name(name):
+        return None
+    return name[:80]
 
 
 def _looks_like_invalid_event_name(name: str) -> bool:
@@ -756,6 +774,24 @@ def _maybe_create_draft(
 ) -> dict:
     mode = payload.mode.strip().lower()
     lowered = payload.message.casefold()
+    explicit_event_name = _explicit_event_name(payload.message) if mode == "general" else None
+    if explicit_event_name:
+        draft = splitik_tools.create_event_draft(
+            db,
+            actor_user_id=actor_user_id,
+            session_id=session_id,
+            payload={"name": explicit_event_name},
+            source="heuristic",
+            model_metadata={
+                "assistant_message": f"Подготовил черновик события **{explicit_event_name}**."
+            },
+        )
+        return {
+            **_empty_draft_result(),
+            "drafts": [draft],
+            "assistant_message": f"Подготовил черновик события **{explicit_event_name}**.\n\nПроверь название и подтверди создание.",
+            "intent": "draft",
+        }
     user_intent, intent_model_id = _classify_user_intent(payload)
     if user_intent != "mutation":
         result = _empty_draft_result()
@@ -965,6 +1001,7 @@ def _build_tool_results(
     payload: schemas.SplitikMessageRequest,
     actor_user_id: str,
     session_id: str,
+    session: dict,
 ) -> dict:
     mode = payload.mode.strip().lower()
     results = {
@@ -973,12 +1010,7 @@ def _build_tool_results(
             actor_user_id=actor_user_id,
             session_id=session_id,
         ),
-        "splitik.get_recent_session_messages": splitik_tools.read_recent_session_messages(
-            db,
-            actor_user_id=actor_user_id,
-            session_id=session_id,
-            limit=6,
-        ),
+        "splitik.get_recent_session_messages": list(session.get("messages", []))[-6:],
     }
     event_id = _event_id_from_payload(payload)
     if event_id and "splitik.get_event_history" in _available_tools(mode):
@@ -1276,6 +1308,7 @@ def send_splitik_message(
             payload=payload,
             actor_user_id=actor_user_id,
             session_id=session["id"],
+            session=session,
         )
         context["available_tools"] = tools
         context["tool_results"] = tool_results

@@ -74,6 +74,9 @@ type ChatMessage = {
   id: string;
   from: "user" | "splitik";
   text: string;
+  delivery?: "failed";
+  retryMessage?: string;
+  idempotencyKey?: string;
   drafts?: SplitikDraft[];
   questions?: Array<{ id: string; text: string }>;
 };
@@ -109,11 +112,30 @@ declare global {
 }
 
 const validViews: View[] = ["home", "events", "people", "notifications", "profile", "splitik"];
-const clientShellVersion = "splitapp-next-pwa-v36";
+const clientShellVersion = "splitapp-next-pwa-v37";
 const initialSyncRetryDelayMs = 900;
 const splitikMessageTimeoutMs = 15000;
 
 const figmaHomeAsset = (name: string) => `/assets/figma-home/${name}`;
+
+function useVisualViewportHeight(enabled: boolean) {
+  const [height, setHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !window.visualViewport) return;
+    const viewport = window.visualViewport;
+    const updateHeight = () => setHeight(Math.round(viewport.height));
+    updateHeight();
+    viewport.addEventListener("resize", updateHeight);
+    viewport.addEventListener("scroll", updateHeight);
+    return () => {
+      viewport.removeEventListener("resize", updateHeight);
+      viewport.removeEventListener("scroll", updateHeight);
+    };
+  }, [enabled]);
+
+  return height;
+}
 
 type BottomNavItem =
   | { id: Exclude<View, "splitik">; label: string; emoji: string }
@@ -929,6 +951,15 @@ export default function SplitAppPage() {
     navigate("splitik");
   };
 
+  const createEventManuallyFromSplitik = (chatMessage: string) => {
+    setNewEventName(eventNameFromChatMessage(chatMessage));
+    setSelectedEventId(null);
+    setSelectedEventFriendIds([]);
+    setIsCreatingEvent(true);
+    setEventTab("active");
+    navigate("events");
+  };
+
   const createEvent = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
     const name = newEventName.trim();
@@ -1010,22 +1041,30 @@ export default function SplitAppPage() {
     }
   };
 
-  const sendSplitikMessage = async (event?: FormEvent<HTMLFormElement>) => {
-    event?.preventDefault();
-    const text = chatDraft.trim();
+  const sendSplitikMessage = async (retryMessage?: string, retryUserMessageId?: string, retryIdempotencyKey?: string) => {
+    const text = (retryMessage ?? chatDraft).trim();
     if ((!text && !splitikAttachments.length) || !tokens || isSplitikSending || isSplitikAttachmentUploading) return;
     const splitikEventId = isUuid(selectedEventId) ? selectedEventId : null;
     const messageText = text || "Создай черновик чека по фото";
     const userMessage = {
-      id: `u-${Date.now()}`,
+      id: retryUserMessageId ?? `u-${Date.now()}`,
       from: "user" as const,
+      idempotencyKey: retryIdempotencyKey ?? crypto.randomUUID(),
       text: splitikAttachments.length
         ? `${messageText}\n\n${splitikAttachments.map((attachment) => `Фото: ${attachment.filename}`).join("\n")}`
         : messageText
     };
-    setChatMessagesAndCache((items) => [...items, userMessage]);
-    setChatDraft("");
-    setSplitikAttachments([]);
+    if (retryUserMessageId) {
+      setChatMessagesAndCache((items) =>
+        items
+          .filter((item) => item.retryMessage !== retryMessage)
+          .map((item) => (item.id === retryUserMessageId ? { ...item, delivery: undefined } : item))
+      );
+    } else {
+      setChatMessagesAndCache((items) => [...items, userMessage]);
+      setChatDraft("");
+      setSplitikAttachments([]);
+    }
     setIsSplitikSending(true);
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), splitikMessageTimeoutMs);
@@ -1033,6 +1072,7 @@ export default function SplitAppPage() {
       const response = await authedApi<SplitikMessageResponse>("/api/splitik/messages", {
         method: "POST",
         signal: controller.signal,
+        headers: { "Idempotency-Key": userMessage.idempotencyKey },
         body: JSON.stringify({
           session_id: splitikSessionId,
           mode: splitikEventId ? "event" : "general",
@@ -1070,8 +1110,13 @@ export default function SplitAppPage() {
       }
       setMessage(splitikErrorMessage(error));
       setChatMessagesAndCache((items) => [
-        ...items,
-        { id: `s-${Date.now()}`, from: "splitik", text: splitikErrorMessage(error) }
+        ...items.map((item) => (item.id === userMessage.id ? { ...item, delivery: "failed" as const } : item)),
+        {
+          id: `s-${Date.now()}`,
+          from: "splitik" as const,
+          text: splitikErrorMessage(error),
+          retryMessage: messageText
+        }
       ]);
     } finally {
       window.clearTimeout(timeoutId);
@@ -1191,6 +1236,7 @@ export default function SplitAppPage() {
             isAttachmentUploading={isSplitikAttachmentUploading}
             onAttachReceipt={uploadSplitikAttachment}
             onConfirmDraft={confirmSplitikDraft}
+            onCreateEventManually={createEventManuallyFromSplitik}
             onShowFriendCode={showFriendCode}
             onAddFriendByCode={addFriendByCode}
             onNavigate={navigate}
@@ -1330,7 +1376,10 @@ function PhoneShell({
       {loggedIn ? (
         <nav
           data-platform-nav="transparent-tab-bar"
-          className="transparent-tabbar fixed bottom-[max(env(safe-area-inset-bottom),2.25rem)] left-1/2 z-30 w-[var(--nav-width)] -translate-x-1/2 rounded-[30px] px-1.5 py-1.5"
+          className={cn(
+            "transparent-tabbar fixed bottom-[max(env(safe-area-inset-bottom),2.25rem)] left-1/2 z-30 w-[var(--nav-width)] -translate-x-1/2 rounded-[30px] px-1.5 py-1.5",
+            view === "splitik" && "hidden"
+          )}
         >
           <div className="transparent-tabbar__items grid grid-cols-5 gap-1">
             {navItems.map((item) => (
@@ -1468,6 +1517,7 @@ function WorkspaceScreen({
   isAttachmentUploading,
   onAttachReceipt,
   onConfirmDraft,
+  onCreateEventManually,
   onShowFriendCode,
   onAddFriendByCode,
   onNavigate
@@ -1509,12 +1559,13 @@ function WorkspaceScreen({
   chatMessages: ChatMessage[];
   chatDraft: string;
   onChatDraft: (value: string) => void;
-  onSendChat: (event?: FormEvent<HTMLFormElement>) => void;
+  onSendChat: (retryMessage?: string, retryUserMessageId?: string, retryIdempotencyKey?: string) => void;
   isSplitikSending: boolean;
   attachments: SplitikAttachment[];
   isAttachmentUploading: boolean;
   onAttachReceipt: (file: File) => void;
   onConfirmDraft: (draftId: string) => void;
+  onCreateEventManually: (message: string) => void;
   onShowFriendCode: () => void;
   onAddFriendByCode: (code: string) => Promise<boolean>;
   onNavigate: (view: View) => void;
@@ -1579,6 +1630,7 @@ function WorkspaceScreen({
             isAttachmentUploading={isAttachmentUploading}
             onAttachReceipt={onAttachReceipt}
             onConfirmDraft={onConfirmDraft}
+            onCreateEventManually={onCreateEventManually}
           />
         ) : null}
       </motion.div>
@@ -2379,20 +2431,35 @@ function SplitikScreen({
   attachments,
   isAttachmentUploading,
   onAttachReceipt,
-  onConfirmDraft
+  onConfirmDraft,
+  onCreateEventManually
 }: {
   messages: ChatMessage[];
   draft: string;
   onDraft: (value: string) => void;
-  onSend: (event?: FormEvent<HTMLFormElement>) => void;
+  onSend: (retryMessage?: string, retryUserMessageId?: string, retryIdempotencyKey?: string) => void;
   isSending: boolean;
   attachments: SplitikAttachment[];
   isAttachmentUploading: boolean;
   onAttachReceipt: (file: File) => void;
   onConfirmDraft: (draftId: string) => void;
+  onCreateEventManually: (message: string) => void;
 }) {
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const messageListRef = useRef<HTMLDivElement | null>(null);
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
   const [activeDraft, setActiveDraft] = useState<SplitikDraft | null>(null);
+  const [isNearLatestMessage, setIsNearLatestMessage] = useState(true);
+  const visualViewportHeight = useVisualViewportHeight(true);
+  const scrollToLatestMessage = useCallback((force = false) => {
+    if (!force && !isNearLatestMessage) return;
+    messageEndRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
+  }, [isNearLatestMessage]);
+
+  useEffect(() => {
+    scrollToLatestMessage();
+  }, [messages.length, scrollToLatestMessage, visualViewportHeight]);
+
   const updateDraft = (value: string) => {
     onDraft(value);
     window.requestAnimationFrame(() => {
@@ -2404,12 +2471,19 @@ function SplitikScreen({
   };
   const applyDraftPrompt = (value: string) => {
     updateDraft(value);
-    window.requestAnimationFrame(() => messageInputRef.current?.focus());
+    window.requestAnimationFrame(() => {
+      messageInputRef.current?.focus();
+      scrollToLatestMessage(true);
+    });
   };
 
   return (
-    <div data-testid="splitik-chat-screen" className="flex min-h-[calc(100dvh-92px)] bg-[#1f3d8f] text-white">
-      <section className="mx-auto flex min-h-0 w-[var(--content-width)] flex-1 flex-col pb-[calc(160px+env(safe-area-inset-bottom))] pt-[max(env(safe-area-inset-top),1.5rem)]">
+    <div
+      data-testid="splitik-chat-screen"
+      style={visualViewportHeight ? { height: `${visualViewportHeight}px` } : undefined}
+      className="flex min-h-0 bg-[#1f3d8f] text-white"
+    >
+      <section className="mx-auto flex min-h-0 w-[var(--content-width)] flex-1 flex-col pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-[max(env(safe-area-inset-top),1.5rem)]">
         <div className="mb-4 flex min-h-12 items-center justify-between gap-4">
           <h2 className="text-[32px] font-black leading-none tracking-normal">Сплитик</h2>
           <span className="grid h-14 w-14 place-items-center rounded-[18px] border-2 border-white/86 bg-white/8 text-white">
@@ -2417,13 +2491,22 @@ function SplitikScreen({
           </span>
         </div>
         <div data-testid="splitik-chat-shell" className="flex min-h-0 flex-1 flex-col">
-          <div data-testid="splitik-message-list" className="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto px-1 pb-3 pt-2">
+          <div
+            ref={messageListRef}
+            data-testid="splitik-message-list"
+            className="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto px-1 pb-3 pt-2"
+            onScroll={(event) => {
+              const element = event.currentTarget;
+              setIsNearLatestMessage(element.scrollHeight - element.scrollTop - element.clientHeight < 96);
+            }}
+          >
           {messages.map((item) => (
             <div key={item.id} className={cn("grid gap-2", item.from === "user" ? "justify-items-end" : "justify-items-start")}>
               <div
                 className={cn(
                   "max-w-[86%] rounded-2xl px-3 py-2 text-[15px] leading-6",
-                  item.from === "user" ? "ml-auto bg-white font-bold text-[#1f3d8f]" : "mr-auto bg-[#eef1f7] font-medium text-slate-900"
+                  item.from === "user" ? "ml-auto bg-white font-bold text-[#1f3d8f]" : "mr-auto bg-[#eef1f7] font-medium text-slate-900",
+                  item.delivery === "failed" && "border border-amber-300"
                 )}
               >
                 {item.from === "splitik" ? <MarkdownMessage text={item.text} /> : item.text}
@@ -2445,23 +2528,41 @@ function SplitikScreen({
                   ))}
                 </div>
               ) : null}
+              {item.retryMessage ? (
+                <div className="flex flex-wrap gap-2 px-1">
+                  <Button type="button" variant="secondary" className="min-h-11 rounded-xl bg-white text-sm font-black text-[#1f3d8f] hover:bg-[#eef1f7]" onClick={() => {
+                    const retryUserMessage = [...messages].reverse().find((message) => message.from === "user" && message.text.startsWith(item.retryMessage!));
+                    onSend(item.retryMessage, retryUserMessage?.id, retryUserMessage?.idempotencyKey);
+                  }}>
+                    Повторить отправку
+                  </Button>
+                  <Button type="button" variant="ghost" className="min-h-11 rounded-xl px-2 text-sm font-black text-white underline hover:bg-white/10" onClick={() => onCreateEventManually(item.retryMessage!)}>
+                    Создать событие вручную
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ))}
+          <div ref={messageEndRef} data-testid="splitik-message-end" />
         </div>
-        {attachments.length ? (
-          <div className="fixed inset-x-4 bottom-[calc(150px+env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-[calc(100vw-2rem)] flex-wrap gap-2">
-            {attachments.map((attachment) => (
-              <span key={attachment.id} className="rounded-full bg-white px-3 py-1.5 text-xs font-black text-[#1f3d8f] shadow-sm">
-                {attachment.filename}
-              </span>
-            ))}
-          </div>
-        ) : null}
         <form
-          onSubmit={onSend}
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSend();
+          }}
           data-testid="splitik-composer"
-          className="fixed inset-x-4 bottom-[calc(86px+env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-[calc(100vw-2rem)] gap-2 rounded-2xl bg-white p-2 shadow-[0_14px_36px_rgba(15,23,42,0.18)]"
+          className="mt-2 grid shrink-0 gap-2 rounded-2xl bg-white p-2 shadow-[0_14px_36px_rgba(15,23,42,0.18)]"
         >
+          {attachments.length ? (
+            <div className="flex flex-wrap gap-2 px-1 pt-1">
+              {attachments.map((attachment) => (
+                <span key={attachment.id} className="rounded-full bg-[#eef1f7] px-3 py-1.5 text-xs font-black text-[#1f3d8f]">
+                  {attachment.filename}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex gap-2">
           <Button
             asChild
             type="button"
@@ -2490,10 +2591,11 @@ function SplitikScreen({
             aria-label="Сообщение Сплитику"
             data-testid="splitik-message-input"
             rows={1}
-            className="min-h-12 max-h-[132px] flex-1 resize-y overflow-y-auto rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold leading-5 text-slate-950 outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
+            className="min-h-12 max-h-[132px] flex-1 resize-none overflow-y-auto rounded-xl border border-slate-200 bg-white px-3 py-3 text-[16px] font-semibold leading-5 text-slate-950 outline-none focus-visible:ring-2 focus-visible:ring-[#1f3d8f]"
             placeholder="Напишите сообщение..."
             value={draft}
             onChange={(event) => updateDraft(event.target.value)}
+            onFocus={() => scrollToLatestMessage(true)}
           />
           <Button
             type="submit"
@@ -2503,6 +2605,7 @@ function SplitikScreen({
           >
             {isSending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <Send className="h-5 w-5" />}
           </Button>
+          </div>
         </form>
         <SplitikDraftSheet
           draft={activeDraft}
@@ -2909,6 +3012,13 @@ function friendshipsToOptions(friendships: Friendship[]): FriendOption[] {
 
 function normalizeFriendCode(code: string) {
   return code.trim().replace(/^@+/, "").replace(/\s+/g, "_").toLowerCase();
+}
+
+function eventNameFromChatMessage(message: string) {
+  const withoutCommand = message
+    .replace(/^\s*(?:давай\s+)?(?:создай|создать|добавь|добавить)\s+(?:новое\s+)?событи[ея]\s*(?:про|:|-)?\s*/i, "")
+    .trim();
+  return (withoutCommand || "Новое событие").slice(0, 80);
 }
 
 function defaultFriendHandle(user: UserProfile) {
