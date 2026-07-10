@@ -49,9 +49,14 @@ DEFAULT_CORS_ALLOWED_ORIGINS = (
 
 def cors_allowed_origins() -> list[str]:
     raw = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
-    if not raw:
-        return list(DEFAULT_CORS_ALLOWED_ORIGINS)
-    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    origins = (
+        list(DEFAULT_CORS_ALLOWED_ORIGINS)
+        if not raw
+        else [origin.strip() for origin in raw.split(",") if origin.strip()]
+    )
+    if "https://split-app.ru" in origins and "https://www.split-app.ru" not in origins:
+        origins.append("https://www.split-app.ru")
+    return origins
 
 
 def configure_cors(api: FastAPI) -> None:

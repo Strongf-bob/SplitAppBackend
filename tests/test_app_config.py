@@ -88,6 +88,12 @@ def test_cors_allowed_origins_parse_env(monkeypatch):
     assert cors_allowed_origins() == ["https://a.example", "https://b.example"]
 
 
+def test_cors_allows_www_alias_for_split_app_production_origin(monkeypatch):
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "https://split-app.ru")
+
+    assert cors_allowed_origins() == ["https://split-app.ru", "https://www.split-app.ru"]
+
+
 def test_cors_allows_configured_origin(monkeypatch):
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "https://app.example")
     api = FastAPI()
