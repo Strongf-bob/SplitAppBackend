@@ -326,7 +326,7 @@ def test_get_current_user_profile_returns_authenticated_actor(db):
     assert user["phone_number"] == "+10000000001"
 
 
-def test_yandex_login_stores_extended_profile_fields_and_allows_missing_phone(db, monkeypatch):
+def test_yandex_login_imports_profile_once_and_reuses_stored_fields(db, fake_s3, monkeypatch):
     profile = {
         "id": "yandex-1",
         "login": "alice_login",
@@ -338,8 +338,15 @@ def test_yandex_login_stores_extended_profile_fields_and_allows_missing_phone(db
         "default_avatar_id": "avatar-1",
     }
     monkeypatch.setattr(auth, "_fetch_yandex_profile", lambda _: profile)
+    imported_avatar_urls = []
 
-    result = auth.login_with_yandex_oauth(db, "token")
+    def import_avatar(_s3, *, user_id, yandex_avatar_url):
+        imported_avatar_urls.append((user_id, yandex_avatar_url))
+        return f"users/{user_id}/avatar.jpg"
+
+    monkeypatch.setattr(auth, "import_yandex_avatar", import_avatar)
+
+    result = auth.login_with_yandex_oauth(db, "token", s3=fake_s3)
     stored = db.users.find_one({"yandex_id": "yandex-1"})
 
     assert result["user"]["name"] == "Alice Ivanova"
@@ -349,13 +356,30 @@ def test_yandex_login_stores_extended_profile_fields_and_allows_missing_phone(db
     assert result["user"]["sex"] == "female"
     assert result["user"]["birthday"] == "1990-01-02"
     assert stored["default_avatar_id"] == "avatar-1"
+    assert stored["avatar_key"] == f"users/{stored['id']}/avatar.jpg"
+    assert stored["yandex_profile_imported_at"] is not None
+    assert result["user"]["avatar_url"] == f"/avatars/{stored['id']}"
 
     profile["default_phone"] = {"number": "8 (999) 000-00-01"}
-    second = auth.login_with_yandex_oauth(db, "token")
+    profile["first_name"] = "Changed in Yandex"
+    second = auth.login_with_yandex_oauth(db, "token", s3=fake_s3)
 
     assert db.users.count_documents({"yandex_id": "yandex-1"}) == 1
-    assert second["user"]["phone_number"] == "+79990000001"
-    assert db.users.find_one({"yandex_id": "yandex-1"})["phone_number"] == "+79990000001"
+    assert second["user"]["name"] == "Alice Ivanova"
+    assert second["user"]["phone_number"] == "yandex:yandex-1"
+    assert len(imported_avatar_urls) == 1
+
+
+def test_yandex_login_succeeds_when_avatar_import_fails(db, fake_s3, monkeypatch):
+    monkeypatch.setattr(auth, "_fetch_yandex_profile", lambda _: {"id": "yandex-1"})
+    monkeypatch.setattr(auth, "import_yandex_avatar", lambda *_args, **_kwargs: None)
+
+    result = auth.login_with_yandex_oauth(db, "token", s3=fake_s3)
+
+    stored = db.users.find_one({"yandex_id": "yandex-1"})
+    assert result["user"]["avatar_url"] is None
+    assert "avatar_key" not in stored
+    assert stored["yandex_profile_imported_at"] is not None
 
 
 def test_update_current_user_discovery_and_payment_hints(db):

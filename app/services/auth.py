@@ -8,8 +8,9 @@ from pymongo.database import Database
 from app.core import tokens
 from app.core.monitoring import track_service_operation
 
-from app.services.common import new_uuid, utc_now, user_to_api_dict
+from app.services.common import new_uuid, utc_now, user_to_api_dict, yandex_avatar_url
 from app.services.contacts import normalize_phone_number
+from app.services.user_avatar import import_yandex_avatar
 
 YANDEX_INFO_URL = "https://login.yandex.ru/info"
 logger = logging.getLogger("splitapp")
@@ -114,8 +115,31 @@ def _issue_refresh_token(db: Database, user_id: str) -> str:
     return raw
 
 
+def _build_imported_user(
+    fields: dict,
+    *,
+    user_id: str,
+    now,
+    s3,
+) -> dict:
+    user = {
+        "id": user_id,
+        **fields,
+        "yandex_profile_imported_at": now,
+        "updated_at": now,
+    }
+    avatar_key = import_yandex_avatar(
+        s3,
+        user_id=user_id,
+        yandex_avatar_url=yandex_avatar_url(fields["default_avatar_id"]),
+    )
+    if avatar_key:
+        user["avatar_key"] = avatar_key
+    return user
+
+
 @track_service_operation("auth.login_yandex")
-def login_with_yandex_oauth(db: Database, oauth_token: str) -> dict:
+def login_with_yandex_oauth(db: Database, oauth_token: str, *, s3) -> dict:
     try:
         tokens.ensure_jwt_secret_configured()
     except RuntimeError:
@@ -129,52 +153,25 @@ def login_with_yandex_oauth(db: Database, oauth_token: str) -> dict:
 
     existing = db.users.find_one({"yandex_id": yandex_id})
     if existing:
-        user_id = existing["id"]
-        conflict = db.users.find_one(
-            {"phone_number": fields["phone_number"], "id": {"$ne": user_id}}
-        )
-        if conflict:
-            raise HTTPException(
-                status_code=409,
-                detail="phone_number already in use by another account.",
+        if existing.get("yandex_profile_imported_at"):
+            user = existing
+        else:
+            imported = _build_imported_user(
+                fields,
+                user_id=existing["id"],
+                now=now,
+                s3=s3,
             )
-        db.users.update_one(
-            {"id": user_id},
-            {
-                "$set": {
-                    "name": fields["name"],
-                    "phone_number": fields["phone_number"],
-                    "email": fields["email"],
-                    "first_name": fields["first_name"],
-                    "last_name": fields["last_name"],
-                    "sex": fields["sex"],
-                    "birthday": fields["birthday"],
-                    "default_avatar_id": fields["default_avatar_id"],
-                    "updated_at": now,
-                }
-            },
-        )
-        user = db.users.find_one({"id": user_id})
+            db.users.update_one({"id": existing["id"]}, {"$set": imported})
+            user = db.users.find_one({"id": existing["id"]})
     else:
         if db.users.find_one({"phone_number": fields["phone_number"]}):
             raise HTTPException(
                 status_code=409,
                 detail="phone_number already in use.",
             )
-        user = {
-            "id": new_uuid(),
-            "yandex_id": yandex_id,
-            "name": fields["name"],
-            "phone_number": fields["phone_number"],
-            "email": fields["email"],
-            "first_name": fields["first_name"],
-            "last_name": fields["last_name"],
-            "sex": fields["sex"],
-            "birthday": fields["birthday"],
-            "default_avatar_id": fields["default_avatar_id"],
-            "created_at": now,
-            "updated_at": now,
-        }
+        user = _build_imported_user(fields, user_id=new_uuid(), now=now, s3=s3)
+        user["created_at"] = now
         db.users.insert_one(user)
 
     assert user is not None

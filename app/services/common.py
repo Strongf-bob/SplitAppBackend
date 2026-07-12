@@ -94,7 +94,9 @@ def user_to_api_dict(user: dict) -> dict:
         "last_name": user.get("last_name"),
         "sex": user.get("sex"),
         "birthday": user.get("birthday"),
-        "avatar_url": user.get("avatar_url") or yandex_avatar_url(user.get("default_avatar_id")),
+        "avatar_url": f"/avatars/{user['id']}"
+        if user.get("avatar_key")
+        else user.get("avatar_url"),
         "public_handle": user.get("public_handle"),
         "discovery_enabled": bool(user.get("discovery_enabled", False)),
         "payment_phone": user.get("payment_phone"),
