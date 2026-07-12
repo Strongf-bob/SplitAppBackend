@@ -16,6 +16,13 @@ test("PWA keeps Splitik chat in a dedicated component boundary", () => {
   assert.doesNotMatch(page, /function SplitikScreen/);
 });
 
+test("Splitik shows an accessible progress status and keeps its send button fixed", () => {
+  assert.match(splitikChat, /data-testid="splitik-progress-status"/);
+  assert.match(splitikChat, /aria-live="polite"/);
+  assert.match(splitikChat, /h-12 w-12 self-center/);
+  assert.doesNotMatch(splitikChat, /self-stretch/);
+});
+
 test("PWA implements the SVG screen set as navigable app views", () => {
   for (const view of ["home", "events", "people", "profile", "notifications", "splitik"]) {
     assert.match(page, new RegExp(`["']${view}["']`), `missing view: ${view}`);
