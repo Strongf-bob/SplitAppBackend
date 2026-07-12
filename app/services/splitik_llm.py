@@ -319,6 +319,35 @@ def generate_splitik_reply(
     model_role: Literal["primary", "fast_chat"] = "primary",
 ) -> str:
     config = load_config()
+
+    try:
+        return _generate_splitik_reply_for_role(
+            config=config,
+            system_prompt=system_prompt,
+            user_message=user_message,
+            context=context,
+            model_role=model_role,
+        )
+    except HTTPException as exc:
+        if model_role != "fast_chat" or exc.status_code != 502:
+            raise
+        return _generate_splitik_reply_for_role(
+            config=config,
+            system_prompt=system_prompt,
+            user_message=user_message,
+            context=context,
+            model_role="primary",
+        )
+
+
+def _generate_splitik_reply_for_role(
+    *,
+    config: SplitikLLMConfig,
+    system_prompt: str,
+    user_message: str,
+    context: dict,
+    model_role: Literal["primary", "fast_chat"],
+) -> str:
     model = _model_for_role(config, model_role)
 
     payload = {

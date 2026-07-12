@@ -773,24 +773,6 @@ def _maybe_create_draft(
 ) -> dict:
     mode = payload.mode.strip().lower()
     lowered = payload.message.casefold()
-    explicit_event_name = _explicit_event_name(payload.message) if mode == "general" else None
-    if explicit_event_name:
-        draft = splitik_tools.create_event_draft(
-            db,
-            actor_user_id=actor_user_id,
-            session_id=session_id,
-            payload={"name": explicit_event_name},
-            source="heuristic",
-            model_metadata={
-                "assistant_message": f"Подготовил черновик события **{explicit_event_name}**."
-            },
-        )
-        return {
-            **_empty_draft_result(),
-            "drafts": [draft],
-            "assistant_message": f"Подготовил черновик события **{explicit_event_name}**.\n\nПроверь название и подтверди создание.",
-            "intent": "draft",
-        }
     user_intent, intent_model_id = _classify_user_intent(payload)
     if user_intent != "mutation":
         result = _empty_draft_result()
