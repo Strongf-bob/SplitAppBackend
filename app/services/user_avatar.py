@@ -2,6 +2,7 @@ import os
 from typing import Any
 
 import httpx
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import HTTPException
 from fastapi.responses import RedirectResponse
 from pymongo.database import Database
@@ -37,7 +38,7 @@ def import_yandex_avatar(s3: Any, *, user_id: str, yandex_avatar_url: str | None
             ContentType=content_type,
         )
         return key
-    except httpx.HTTPError:
+    except (httpx.HTTPError, BotoCoreError, ClientError):
         return None
 
 
