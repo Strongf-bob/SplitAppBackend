@@ -97,13 +97,17 @@ def _mock_intent_candidate(monkeypatch, *, intent: str, confidence: float = 0.9)
     return calls
 
 
-def test_explicit_event_command_creates_draft_without_llm(db, monkeypatch):
+def test_explicit_event_command_creates_draft_from_llm_plan(db, monkeypatch):
     seed_users(db)
-
-    def fail_llm(**_kwargs):
-        pytest.fail("explicit event creation must not wait for an LLM")
-
-    monkeypatch.setattr(splitik_llm, "generate_splitik_intent_candidate", fail_llm)
+    intent_calls = _mock_intent_candidate(monkeypatch, intent="mutation")
+    planner_calls = _mock_plan_candidate(
+        monkeypatch,
+        {
+            "intent": "create_drafts",
+            "assistant_message": "Подготовил черновик события.",
+            "actions": [{"type": "create_event_draft", "payload": {"name": "Такси до дома"}}],
+        },
+    )
 
     response = splitik.send_splitik_message(
         db,
@@ -115,24 +119,8 @@ def test_explicit_event_command_creates_draft_without_llm(db, monkeypatch):
     assert len(response["drafts"]) == 1
     assert response["drafts"][0]["type"] == "create_event"
     assert response["drafts"][0]["payload"]["name"] == "Такси до дома"
-
-
-def test_help_create_event_request_uses_deterministic_draft_without_llm(db, monkeypatch):
-    seed_users(db)
-
-    def fail_llm(**_kwargs):
-        pytest.fail("explicit event creation must not wait for an LLM")
-
-    monkeypatch.setattr(splitik_llm, "generate_splitik_intent_candidate", fail_llm)
-
-    response = splitik.send_splitik_message(
-        db,
-        schemas.SplitikMessageRequest(message="Помоги создать событие для совместных расходов"),
-        USER_A,
-    )
-
-    assert response["intent"] == "draft"
-    assert response["drafts"][0]["payload"]["name"] == "совместных расходов"
+    assert intent_calls[0]["user_message"] == "Создай событие Такси до дома"
+    assert planner_calls[0]["user_message"] == "Создай событие Такси до дома"
 
 
 def test_planner_context_uses_already_loaded_session_messages(db, monkeypatch):
