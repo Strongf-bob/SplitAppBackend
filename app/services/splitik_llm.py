@@ -429,11 +429,30 @@ def _generate_json_candidate(
         "json": payload,
         "timeout": _role_timeout(config, model_role),
     }
+    response_model_role = model_role
     try:
         response = httpx.post(_chat_completions_url(config.base_url), **request_kwargs)
     except httpx.ReadTimeout:
         try:
             response = httpx.post(_chat_completions_url(config.base_url), **request_kwargs)
+        except httpx.ReadTimeout as exc:
+            if model_role != "primary":
+                raise HTTPException(status_code=502, detail="Splitik LLM request failed.") from exc
+            model = _model_for_role(config, "fast_chat")
+            fallback_request_kwargs = {
+                **request_kwargs,
+                "json": {**payload, "model": model},
+                "timeout": _role_timeout(config, "fast_chat"),
+            }
+            try:
+                response = httpx.post(
+                    _chat_completions_url(config.base_url), **fallback_request_kwargs
+                )
+                response_model_role = "fast_chat"
+            except httpx.HTTPError as fallback_exc:
+                raise HTTPException(
+                    status_code=502, detail="Splitik LLM request failed."
+                ) from fallback_exc
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=502, detail="Splitik LLM request failed.") from exc
     except httpx.HTTPError as exc:
@@ -450,7 +469,7 @@ def _generate_json_candidate(
         raise HTTPException(status_code=502, detail="Splitik LLM response was invalid.") from exc
 
     return {
-        "model_role": model_role,
+        "model_role": response_model_role,
         "model_id": model,
         "content": _parse_json_object(_extract_chat_content(body)),
     }

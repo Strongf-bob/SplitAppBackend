@@ -117,6 +117,35 @@ def test_planner_retries_once_after_provider_read_timeout(monkeypatch):
     ]
 
 
+def test_planner_falls_back_to_fast_model_after_two_primary_read_timeouts(monkeypatch):
+    _set_smoke_env(monkeypatch)
+    calls = []
+
+    def fake_post(url, headers, json, timeout):
+        calls.append({"model": json["model"], "timeout": timeout})
+        if len(calls) < 3:
+            raise splitik_llm.httpx.ReadTimeout("primary provider timed out")
+        return _FakeSmokeResponse(
+            {"choices": [{"message": {"content": '{"intent":"none","actions":[]}'}}]}
+        )
+
+    monkeypatch.setattr(splitik_llm.httpx, "post", fake_post)
+
+    candidate = splitik_llm.generate_splitik_plan_candidate(
+        user_message="Создай чек на 200 рублей",
+        context={},
+    )
+
+    assert candidate["model_role"] == "fast_chat"
+    assert candidate["model_id"] == "deepseek-v4-flash"
+    assert candidate["content"] == {"intent": "none", "actions": []}
+    assert calls == [
+        {"model": "primary-model", "timeout": 9.0},
+        {"model": "primary-model", "timeout": 9.0},
+        {"model": "deepseek-v4-flash", "timeout": 4.0},
+    ]
+
+
 def test_splitik_configured_models_answer_within_role_sla(monkeypatch):
     if splitik_llm._env("SPLITIK_LLM_SMOKE_TEST") != "1":
         pytest.skip("Set SPLITIK_LLM_SMOKE_TEST=1 to run live Splitik LLM smoke checks.")
