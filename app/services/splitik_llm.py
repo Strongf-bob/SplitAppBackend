@@ -421,16 +421,21 @@ def _generate_json_candidate(
         "response_format": {"type": "json_object"},
     }
 
+    request_kwargs = {
+        "headers": {
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json",
+        },
+        "json": payload,
+        "timeout": _role_timeout(config, model_role),
+    }
     try:
-        response = httpx.post(
-            _chat_completions_url(config.base_url),
-            headers={
-                "Authorization": f"Bearer {config.api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=_role_timeout(config, model_role),
-        )
+        response = httpx.post(_chat_completions_url(config.base_url), **request_kwargs)
+    except httpx.ReadTimeout:
+        try:
+            response = httpx.post(_chat_completions_url(config.base_url), **request_kwargs)
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail="Splitik LLM request failed.") from exc
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail="Splitik LLM request failed.") from exc
 
