@@ -7,6 +7,8 @@ Backend использует Yandex OAuth как внешний identity provide
 1. iOS получает Yandex token.
 2. iOS отправляет его в `POST /api/login`.
 3. Backend валидирует Yandex token и создает или находит backend user.
+
+При первом успешном входе backend сохраняет полученные профильные поля и копирует аватар в object storage. Повторный OAuth-вход по-прежнему валидирует credential, но возвращает сохранённый профиль без повторного импорта данных Яндекса. Аватар хранится как `avatar_key` и загружается клиентом через публичный `GET /avatars/{user_id}`.
 4. Backend возвращает app access token и refresh token.
 5. Protected API calls используют `Authorization: Bearer <access_token>`.
 6. `POST /api/refresh` ротирует refresh token и возвращает новый access token.
