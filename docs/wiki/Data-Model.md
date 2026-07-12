@@ -45,6 +45,8 @@ erDiagram
 | Collection | Назначение | Ключевые связи |
 | --- | --- | --- |
 | `users` | Профиль пользователя после Yandex login, discovery и payment hints. | `id` используется во всех actor/member/payment связях. |
+
+Для Yandex-пользователя документ также содержит `yandex_id`, `yandex_profile_imported_at` и, при успешной загрузке изображения, `avatar_key`. Поля фиксируют разовый импорт профиля и backend-owned аватар; локальный iOS-кэш удаляется при logout или невалидной refresh-сессии.
 | `refresh_tokens` | Hash refresh token, срок жизни и факт использования. | `user_id -> users.id`. |
 | `friends` | Private friendship flow: request, accept, reject, block, remove. | `requester_id/addressee_id -> users.id`, `pair_key` уникален. |
 | `user_contacts` | Импортированные контакты текущего пользователя. | `owner_user_id -> users.id`, optional `matched_user_id -> users.id`. |
