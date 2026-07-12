@@ -15,4 +15,5 @@ def get_avatar(
     db: Database = Depends(get_db),
     s3: Any = Depends(get_s3),
 ):
+    """Serve public profile avatars for image clients that cannot attach bearer tokens."""
     return get_avatar_redirect(db, s3, user_id)
