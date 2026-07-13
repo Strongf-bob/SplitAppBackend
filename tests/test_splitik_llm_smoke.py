@@ -206,8 +206,7 @@ def test_splitik_vision_model_accepts_multimodal_receipt_image():
         model_role="vision",
         attachment_metadata=[{"id": "smoke-image", "content_type": "image/png"}],
         image_urls=[
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/"
-            "Placeholder_view_vector.svg/1px-Placeholder_view_vector.svg.png"
+            "https://raw.githubusercontent.com/github/explore/main/topics/python/python.png"
         ],
         user_message="Тестовое изображение чека для проверки формата.",
         context={
