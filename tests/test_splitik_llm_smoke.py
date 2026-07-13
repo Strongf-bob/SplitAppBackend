@@ -58,6 +58,12 @@ def test_receipt_image_candidate_uses_vision_model_and_multimodal_content(monkey
     ]
 
 
+def test_splitik_llm_extracts_json_after_model_thinking_block():
+    assert splitik_llm._parse_json_object(
+        '<think>Сначала рассуждение модели.</think>\n```json\n{"payload": {}}\n```'
+    ) == {"payload": {}}
+
+
 def test_splitik_llm_smoke_checks_each_configured_model_role(monkeypatch):
     _set_smoke_env(monkeypatch)
     calls = []

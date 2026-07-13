@@ -244,10 +244,13 @@ def _extract_chat_content(response_body: object) -> str:
 
 def _parse_json_object(content: str) -> dict:
     cleaned = content.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.strip("`")
-        if cleaned.startswith("json"):
-            cleaned = cleaned[4:].strip()
+    fence_start = cleaned.find("```")
+    if fence_start >= 0:
+        fence_end = cleaned.find("```", fence_start + 3)
+        if fence_end > fence_start:
+            cleaned = cleaned[fence_start + 3 : fence_end].strip()
+            if cleaned.startswith("json"):
+                cleaned = cleaned[4:].strip()
     try:
         parsed = json.loads(cleaned)
     except ValueError as exc:
