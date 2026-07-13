@@ -11,3 +11,4 @@ prometheus-client==0.25.0
 sentry-sdk==2.63.0
 ruff==0.15.20
 pip-audit==2.10.1
+langgraph==1.2.9

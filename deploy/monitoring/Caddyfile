@@ -1,0 +1,9 @@
+observability.split-app.ru {
+    handle /api/reports/* {
+        basic_auth {
+            {$REPORTS_USER} {$REPORTS_PASSWORD_HASH}
+        }
+        reverse_proxy log-reviewer:8080
+    }
+    reverse_proxy grafana:3000
+}

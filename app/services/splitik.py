@@ -34,6 +34,7 @@ from app.services.splitik_guardrails import (
     strip_disallowed_emoji,
 )
 from app.services.splitik_interactions import log_interaction
+from app.core.splitik_trace import emit_splitik_trace
 from app.services import splitik_attachments, splitik_tools
 
 logger = logging.getLogger("splitapp")
@@ -1201,6 +1202,20 @@ def _log_splitik_failure(
             latency_ms=round((time.monotonic() - started) * 1000, 2),
             error=error,
         )
+        emit_splitik_trace(
+            request_id=request_id,
+            message_id=message_id,
+            system_prompt=_SYSTEM_PROMPT,
+            user_message=payload.message,
+            assistant_message="",
+            model_ids=["primary"] if stage.startswith("llm.") else [],
+            context=context or {},
+            tool_calls=[{"name": name, "status": "available"} for name in (tools or [])],
+            guardrail_decision=guardrail_decision or {},
+            latency_ms=round((time.monotonic() - started) * 1000, 2),
+            status="error",
+            stage=stage,
+        )
     except Exception:
         logger.error("splitik_failure_log_write_failed", exc_info=True)
 
@@ -1290,6 +1305,20 @@ def send_splitik_message(
                 stage="completed",
                 context_summary=_context_summary(payload, mode=mode),
                 latency_ms=round((time.monotonic() - started) * 1000, 2),
+            )
+            emit_splitik_trace(
+                request_id=request_id,
+                message_id=message_id,
+                system_prompt=_SYSTEM_PROMPT,
+                user_message=payload.message,
+                assistant_message=reply,
+                model_ids=[],
+                context=context,
+                tool_calls=[],
+                guardrail_decision=guardrail_decision,
+                latency_ms=round((time.monotonic() - started) * 1000, 2),
+                status="success",
+                stage="completed",
             )
             return {
                 "session_id": session["id"],
@@ -1494,6 +1523,20 @@ def send_splitik_message(
             ],
             draft_ids=[str(draft["id"]) for draft in drafts],
             latency_ms=round((time.monotonic() - started) * 1000, 2),
+        )
+        emit_splitik_trace(
+            request_id=request_id,
+            message_id=message_id,
+            system_prompt=_SYSTEM_PROMPT,
+            user_message=payload.message,
+            assistant_message=reply,
+            model_ids=[reply_model_role],
+            context=context,
+            tool_calls=[{"name": name, "status": "completed"} for name in context["tool_results"]],
+            guardrail_decision=guardrail_decision,
+            latency_ms=round((time.monotonic() - started) * 1000, 2),
+            status="success",
+            stage="completed",
         )
         return {
             "session_id": session["id"],
