@@ -195,6 +195,31 @@ def test_splitik_configured_models_answer_within_role_sla(monkeypatch):
     assert {result.model_role for result in results} >= {"primary", "fast_chat"}
 
 
+def test_splitik_vision_model_accepts_multimodal_receipt_image():
+    if splitik_llm._env("SPLITIK_LLM_SMOKE_TEST") != "1":
+        pytest.skip("Set SPLITIK_LLM_SMOKE_TEST=1 to run live Splitik LLM smoke checks.")
+
+    candidate = splitik_llm.generate_receipt_image_candidate(
+        model_role="vision",
+        attachment_metadata=[{"id": "smoke-image", "content_type": "image/png"}],
+        image_data_urls=[
+            "data:image/png;base64,"
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/"
+            "z1aKkwAAAABJRU5ErkJggg=="
+        ],
+        user_message="Тестовое изображение чека для проверки формата.",
+        context={
+            "event_id": "00000000-0000-0000-0000-000000000000",
+            "attachment_ids": ["smoke-image"],
+            "human_review_required": True,
+        },
+    )
+
+    assert candidate["model_role"] == "vision"
+    assert candidate["model_id"] == "minimax-m3"
+    assert isinstance(candidate["content"], dict)
+
+
 class _FakeSmokeResponse:
     def __init__(self, body, status_code=200):
         self._body = body
