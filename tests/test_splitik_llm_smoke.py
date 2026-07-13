@@ -33,7 +33,7 @@ def test_receipt_image_candidate_uses_vision_model_and_multimodal_content(monkey
     candidate = splitik_llm.generate_receipt_image_candidate(
         model_role="vision",
         attachment_metadata=[{"id": "attachment-1", "content_type": "image/jpeg"}],
-        image_data_urls=["data:image/jpeg;base64,aW1hZ2U="],
+        image_urls=["https://signed.example/test-bucket/receipt.jpg?expires=900"],
         user_message="Это чек за ужин",
         context={"event_id": "event-1"},
     )
@@ -51,7 +51,10 @@ def test_receipt_image_candidate_uses_vision_model_and_multimodal_content(monkey
                 "Разрешенный backend context JSON:\n{'event_id': 'event-1'}\n\nВерни только JSON."
             ),
         },
-        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,aW1hZ2U="}},
+        {
+            "type": "image_url",
+            "image_url": {"url": "https://signed.example/test-bucket/receipt.jpg?expires=900"},
+        },
     ]
 
 
@@ -202,10 +205,9 @@ def test_splitik_vision_model_accepts_multimodal_receipt_image():
     candidate = splitik_llm.generate_receipt_image_candidate(
         model_role="vision",
         attachment_metadata=[{"id": "smoke-image", "content_type": "image/png"}],
-        image_data_urls=[
-            "data:image/png;base64,"
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/"
-            "z1aKkwAAAABJRU5ErkJggg=="
+        image_urls=[
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/"
+            "Placeholder_view_vector.svg/1px-Placeholder_view_vector.svg.png"
         ],
         user_message="Тестовое изображение чека для проверки формата.",
         context={

@@ -1,5 +1,4 @@
 import json
-import base64
 import os
 from dataclasses import dataclass
 import time
@@ -587,13 +586,12 @@ def generate_receipt_image_candidate(
     *,
     model_role: str,
     attachment_metadata: list[dict],
-    image_data_urls: list[str],
+    image_urls: list[str],
     user_message: str,
     context: dict,
 ) -> dict:
     image_parts = [
-        {"type": "image_url", "image_url": {"url": image_data_url}}
-        for image_data_url in image_data_urls
+        {"type": "image_url", "image_url": {"url": image_data_url}} for image_data_url in image_urls
     ]
     return _generate_json_candidate(
         model_role=model_role,
@@ -620,8 +618,3 @@ def generate_receipt_image_candidate(
             *image_parts,
         ],
     )
-
-
-def image_data_url(content_type: str, content: bytes) -> str:
-    encoded = base64.b64encode(content).decode("ascii")
-    return f"data:{content_type};base64,{encoded}"

@@ -105,14 +105,14 @@ def list_attachments_for_actor(
     return [_public_metadata(attachment) for attachment in attachments]
 
 
-def read_attachments_for_actor(
+def image_urls_for_actor(
     db: Database,
     s3: Any | None,
     *,
     actor_user_id: str,
     attachment_ids: list[str],
-) -> list[tuple[dict, bytes]]:
-    """Return private image bytes only for an authenticated model request."""
+) -> list[tuple[dict, str]]:
+    """Return private image URLs only for an authenticated model request."""
     if not attachment_ids:
         return []
     stored = list(
@@ -122,7 +122,7 @@ def read_attachments_for_actor(
     if len(by_id) != len(set(attachment_ids)):
         raise HTTPException(status_code=404, detail="Splitik attachment not found.")
 
-    result: list[tuple[dict, bytes]] = []
+    result: list[tuple[dict, str]] = []
     for attachment_id in attachment_ids:
         attachment = by_id[attachment_id]
         if attachment.get("storage") == "s3":
@@ -131,18 +131,20 @@ def read_attachments_for_actor(
                     status_code=503, detail="Splitik attachment storage is unavailable."
                 )
             try:
-                content = s3.get_object(Bucket=attachment["bucket"], Key=attachment["key"])[
-                    "Body"
-                ].read()
+                image_url = s3.generate_presigned_url(
+                    "get_object",
+                    Params={"Bucket": attachment["bucket"], "Key": attachment["key"]},
+                    ExpiresIn=900,
+                )
             except Exception as exc:
                 raise HTTPException(
                     status_code=503, detail="Splitik attachment storage is unavailable."
                 ) from exc
         else:
-            content = attachment.get("content")
-        if not isinstance(content, (bytes, bytearray)):
+            image_url = ""
+        if not image_url:
             raise HTTPException(
                 status_code=503, detail="Splitik attachment storage is unavailable."
             )
-        result.append((_public_metadata(attachment), bytes(content)))
+        result.append((_public_metadata(attachment), image_url))
     return result

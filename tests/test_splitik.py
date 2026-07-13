@@ -984,14 +984,12 @@ def test_splitik_vision_receives_all_attachment_metadata(db, fake_s3, monkeypatc
     )
     vision_calls = []
 
-    def fake_image_candidate(
-        *, model_role, attachment_metadata, image_data_urls, user_message, context
-    ):
+    def fake_image_candidate(*, model_role, attachment_metadata, image_urls, user_message, context):
         vision_calls.append(
             {
                 "model_role": model_role,
                 "attachment_metadata": attachment_metadata,
-                "image_data_urls": image_data_urls,
+                "image_urls": image_urls,
                 "user_message": user_message,
                 "context": context,
             }
@@ -1015,7 +1013,7 @@ def test_splitik_vision_receives_all_attachment_metadata(db, fake_s3, monkeypatc
     attachment_ids = [attachment["id"] for attachment in vision_calls[0]["attachment_metadata"]]
     assert attachment_ids == [first["id"], second["id"]]
     assert "key" not in str(vision_calls[0]["attachment_metadata"])
-    assert len(vision_calls[0]["image_data_urls"]) == 2
+    assert len(vision_calls[0]["image_urls"]) == 2
     assert response["intent"] == "draft"
     assert db.splitik_drafts.count_documents({}) == 1
 
@@ -1519,14 +1517,12 @@ def test_splitik_creates_receipt_draft_from_image_attachment(db, fake_s3, monkey
     )
     image_calls = []
 
-    def fake_image_candidate(
-        *, model_role, attachment_metadata, image_data_urls, user_message, context
-    ):
+    def fake_image_candidate(*, model_role, attachment_metadata, image_urls, user_message, context):
         image_calls.append(
             {
                 "model_role": model_role,
                 "attachment_metadata": attachment_metadata,
-                "image_data_urls": image_data_urls,
+                "image_urls": image_urls,
                 "user_message": user_message,
                 "context": context,
             }
@@ -1550,7 +1546,7 @@ def test_splitik_creates_receipt_draft_from_image_attachment(db, fake_s3, monkey
     assert image_calls[0]["model_role"] == "vision"
     assert image_calls[0]["attachment_metadata"][0]["id"] == attachment["id"]
     assert "key" not in image_calls[0]["attachment_metadata"][0]
-    assert image_calls[0]["image_data_urls"][0].startswith("data:image/jpeg;base64,")
+    assert image_calls[0]["image_urls"][0].startswith("https://signed.example/")
     assert response["intent"] == "draft"
     draft = response["drafts"][0]
     assert draft["type"] == "create_receipt"
@@ -1590,14 +1586,12 @@ def test_splitik_routes_event_image_to_vision_receipt_draft(db, fake_s3, monkeyp
 
     image_calls = []
 
-    def fake_image_candidate(
-        *, model_role, attachment_metadata, image_data_urls, user_message, context
-    ):
+    def fake_image_candidate(*, model_role, attachment_metadata, image_urls, user_message, context):
         image_calls.append(
             {
                 "model_role": model_role,
                 "attachment_metadata": attachment_metadata,
-                "image_data_urls": image_data_urls,
+                "image_urls": image_urls,
                 "user_message": user_message,
                 "context": context,
             }
@@ -1623,8 +1617,8 @@ def test_splitik_routes_event_image_to_vision_receipt_draft(db, fake_s3, monkeyp
     assert image_calls[0]["model_role"] == "vision"
     assert image_calls[0]["attachment_metadata"][0]["id"] == attachment["id"]
     assert "key" not in image_calls[0]["attachment_metadata"][0]
-    assert image_calls[0]["image_data_urls"][0].startswith("data:image/jpeg;base64,")
-    assert "receipt-image-bytes" not in image_calls[0]["image_data_urls"][0]
+    assert image_calls[0]["image_urls"][0].startswith("https://signed.example/")
+    assert "receipt-image-bytes" not in image_calls[0]["image_urls"][0]
     assert response["drafts"][0]["type"] == "create_receipt"
     assert response["drafts"][0]["status"] == "pending"
     assert db.receipts.count_documents({"event_id": EVENT_ID}) == 0

@@ -781,20 +781,17 @@ def _maybe_create_draft(
     attachment_ids = [str(attachment_id) for attachment_id in payload.attachment_ids]
     if mode == "event" and event_id and attachment_ids:
         attachment_storage = s3 if s3 is not None else s3_provider() if s3_provider else None
-        attachments_with_content = splitik_attachments.read_attachments_for_actor(
+        attachments_with_urls = splitik_attachments.image_urls_for_actor(
             db,
             attachment_storage,
             actor_user_id=actor_user_id,
             attachment_ids=attachment_ids,
         )
-        attachments = [metadata for metadata, _content in attachments_with_content]
+        attachments = [metadata for metadata, _image_url in attachments_with_urls]
         candidate = splitik_llm.generate_receipt_image_candidate(
             model_role="vision",
             attachment_metadata=attachments,
-            image_data_urls=[
-                splitik_llm.image_data_url(metadata["content_type"], content)
-                for metadata, content in attachments_with_content
-            ],
+            image_urls=[image_url for _metadata, image_url in attachments_with_urls],
             user_message=payload.message,
             context={
                 "event_id": event_id,

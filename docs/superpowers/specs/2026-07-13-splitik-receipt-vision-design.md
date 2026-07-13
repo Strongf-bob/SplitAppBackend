@@ -6,7 +6,7 @@ When a user sends one or more images while chatting inside an event, Splitik mus
 
 ## Decision
 
-The backend bypasses the text intent router and text planner for event messages that contain attachments. It reads the authenticated user's private attachment bytes, sends them only in an OpenAI-compatible multimodal `image_url` message to the dedicated `vision` model role, and creates an uncommitted receipt draft. The optional user text is passed as extraction context.
+The backend bypasses the text intent router and text planner for event messages that contain attachments. It creates a 15-minute S3 URL for an authenticated attachment, sends that URL only in an OpenAI-compatible multimodal `image_url` message to the dedicated `vision` model role, and creates an uncommitted receipt draft. The optional user text is passed as extraction context.
 
 The model receives the image data, but attachment storage keys, bucket names, bytes, and any data URL are never written to interaction logs or returned to the client. All existing ownership and event-access checks remain backend-owned.
 
