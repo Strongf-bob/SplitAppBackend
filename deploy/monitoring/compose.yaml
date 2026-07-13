@@ -5,6 +5,8 @@ services:
     image: grafana/loki:3.3.2
     restart: unless-stopped
     command: ["-config.file=/etc/loki/config.yml"]
+    ports:
+      - "127.0.0.1:13101:3100"
     volumes:
       - ./loki.yml:/etc/loki/config.yml:ro
       - loki-data:/loki
@@ -13,9 +15,16 @@ services:
   prometheus:
     image: prom/prometheus:v2.55.1
     restart: unless-stopped
-    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d"]
+    env_file: .env
+    entrypoint: ["sh", "-ec"]
+    command:
+      - |
+        test -n "$${METRICS_ACCESS_TOKEN:-}"
+        escaped_token=$$(printf '%s' "$${METRICS_ACCESS_TOKEN}" | sed 's/[\/&]/\\&/g')
+        sed "s/__METRICS_ACCESS_TOKEN__/$${escaped_token}/g" /etc/prometheus/prometheus.yml.template > /tmp/prometheus.yml
+        exec /bin/prometheus --config.file=/tmp/prometheus.yml --storage.tsdb.retention.time=30d
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml.template:ro
       - prometheus-data:/prometheus
     networks: [monitoring]
 

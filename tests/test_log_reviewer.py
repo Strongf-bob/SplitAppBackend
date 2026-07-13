@@ -25,3 +25,10 @@ def test_monitoring_grafana_provisions_the_existing_splitapp_dashboard():
 
     assert "../observability/grafana/provisioning" in compose
     assert "../observability/grafana/dashboards" in compose
+
+
+def test_monitoring_prometheus_scrapes_backend_only_through_the_internal_tunnel():
+    config = Path("deploy/monitoring/prometheus.yml").read_text()
+
+    assert 'targets: ["splitapp-production-metrics-tunnel:18080"]' in config
+    assert "__METRICS_ACCESS_TOKEN__" in config
