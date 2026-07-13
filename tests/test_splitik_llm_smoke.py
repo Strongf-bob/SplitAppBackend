@@ -11,11 +11,48 @@ def _set_smoke_env(monkeypatch):
     monkeypatch.setenv("SPLITIK_INTENT_MODEL", "intent-model")
     monkeypatch.setenv("SPLITIK_VERIFICATION_MODEL", "verification-model")
     monkeypatch.setenv("SPLITIK_ESCALATION_MODEL", "escalation-model")
+    monkeypatch.setenv("SPLITIK_VISION_MODEL", "minimax-m3")
     monkeypatch.setenv("SPLITIK_PRIMARY_TIMEOUT_SECONDS", "9")
     monkeypatch.setenv("SPLITIK_FAST_CHAT_TIMEOUT_SECONDS", "4")
     monkeypatch.setenv("SPLITIK_INTENT_TIMEOUT_SECONDS", "5")
     monkeypatch.setenv("SPLITIK_VERIFICATION_TIMEOUT_SECONDS", "7")
     monkeypatch.setenv("SPLITIK_ESCALATION_TIMEOUT_SECONDS", "8")
+    monkeypatch.setenv("SPLITIK_VISION_TIMEOUT_SECONDS", "11")
+
+
+def test_receipt_image_candidate_uses_vision_model_and_multimodal_content(monkeypatch):
+    _set_smoke_env(monkeypatch)
+    calls = []
+
+    def fake_post(url, headers, json, timeout):
+        calls.append({"payload": json, "timeout": timeout})
+        return _FakeSmokeResponse({"choices": [{"message": {"content": '{"payload": {}}'}}]})
+
+    monkeypatch.setattr(splitik_llm.httpx, "post", fake_post)
+
+    candidate = splitik_llm.generate_receipt_image_candidate(
+        model_role="vision",
+        attachment_metadata=[{"id": "attachment-1", "content_type": "image/jpeg"}],
+        image_data_urls=["data:image/jpeg;base64,aW1hZ2U="],
+        user_message="Это чек за ужин",
+        context={"event_id": "event-1"},
+    )
+
+    assert candidate["model_role"] == "vision"
+    assert candidate["model_id"] == "minimax-m3"
+    assert calls[0]["timeout"] == 11.0
+    assert calls[0]["payload"]["model"] == "minimax-m3"
+    assert calls[0]["payload"]["messages"][1]["content"] == [
+        {
+            "type": "text",
+            "text": (
+                "Комментарий пользователя:\nЭто чек за ужин\n\n"
+                "Метаданные вложений:\n[{'id': 'attachment-1', 'content_type': 'image/jpeg'}]\n\n"
+                "Разрешенный backend context JSON:\n{'event_id': 'event-1'}\n\nВерни только JSON."
+            ),
+        },
+        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,aW1hZ2U="}},
+    ]
 
 
 def test_splitik_llm_smoke_checks_each_configured_model_role(monkeypatch):
@@ -36,6 +73,7 @@ def test_splitik_llm_smoke_checks_each_configured_model_role(monkeypatch):
         "intent",
         "verification",
         "escalation",
+        "vision",
     ]
     assert [call["model"] for call in calls] == [
         "primary-model",
@@ -43,8 +81,9 @@ def test_splitik_llm_smoke_checks_each_configured_model_role(monkeypatch):
         "intent-model",
         "verification-model",
         "escalation-model",
+        "minimax-m3",
     ]
-    assert [call["timeout"] for call in calls] == [9, 4, 5, 7, 8]
+    assert [call["timeout"] for call in calls] == [9, 4, 5, 7, 8, 11]
 
 
 def test_splitik_llm_smoke_fails_when_model_exceeds_role_sla(monkeypatch):

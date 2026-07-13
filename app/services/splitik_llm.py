@@ -1,6 +1,7 @@
+import json
+import base64
 import os
 from dataclasses import dataclass
-import json
 import time
 from typing import Literal
 
@@ -17,6 +18,7 @@ class SplitikLLMConfig:
     intent_model: str | None
     verification_model: str | None
     escalation_model: str | None
+    vision_model: str
     timeout_seconds: float
 
     @property
@@ -29,6 +31,7 @@ class SplitikLLMConfig:
                 self.intent_model,
                 self.verification_model,
                 self.escalation_model,
+                self.vision_model,
             }
             if model
         }
@@ -62,6 +65,7 @@ def is_llm_configured() -> bool:
         or _env("SPLITIK_INTENT_MODEL")
         or _env("SPLITIK_VERIFICATION_MODEL")
         or _env("SPLITIK_ESCALATION_MODEL")
+        or _env("SPLITIK_VISION_MODEL")
         or _env("SPLITIK_LLM_MODEL")
     )
 
@@ -86,6 +90,7 @@ def load_config() -> SplitikLLMConfig:
         intent_model=_env("SPLITIK_INTENT_MODEL") or None,
         verification_model=_env("SPLITIK_VERIFICATION_MODEL") or None,
         escalation_model=_env("SPLITIK_ESCALATION_MODEL") or None,
+        vision_model=_env("SPLITIK_VISION_MODEL") or "minimax-m3",
         timeout_seconds=timeout,
     )
 
@@ -97,6 +102,7 @@ def _role_timeout(config: SplitikLLMConfig, model_role: str) -> float:
         "intent": os.getenv("SPLITIK_INTENT_TIMEOUT_SECONDS"),
         "verification": os.getenv("SPLITIK_VERIFICATION_TIMEOUT_SECONDS"),
         "escalation": os.getenv("SPLITIK_ESCALATION_TIMEOUT_SECONDS"),
+        "vision": os.getenv("SPLITIK_VISION_TIMEOUT_SECONDS"),
     }
     raw_timeout = timeout_by_role.get(model_role)
     if model_role == "fast_chat" and not raw_timeout:
@@ -111,7 +117,7 @@ def _role_timeout(config: SplitikLLMConfig, model_role: str) -> float:
 
 def _model_for_role(
     config: SplitikLLMConfig,
-    model_role: Literal["primary", "fast_chat", "intent", "verification", "escalation"],
+    model_role: Literal["primary", "fast_chat", "intent", "verification", "escalation", "vision"],
 ) -> str:
     model_by_role = {
         "primary": config.primary_model,
@@ -119,6 +125,7 @@ def _model_for_role(
         "intent": config.intent_model or config.primary_model,
         "verification": config.verification_model,
         "escalation": config.escalation_model,
+        "vision": config.vision_model,
     }
     model = model_by_role[model_role]
     if not model:
@@ -136,6 +143,7 @@ def _configured_model_roles(config: SplitikLLMConfig) -> list[str]:
         roles.append("verification")
     if config.escalation_model:
         roles.append("escalation")
+    roles.append("vision")
     return roles
 
 
@@ -155,7 +163,7 @@ def smoke_check_configured_models(
     results: list[SplitikLLMSmokeResult] = []
 
     for role in roles:
-        if role not in {"primary", "fast_chat", "intent", "verification", "escalation"}:
+        if role not in {"primary", "fast_chat", "intent", "verification", "escalation", "vision"}:
             raise RuntimeError(f"Splitik LLM smoke role is invalid: {role}")
 
         model = _model_for_role(config, role)  # type: ignore[arg-type]
@@ -398,9 +406,10 @@ def _generate_json_candidate(
     user_label: str,
     user_message: str,
     context: dict,
+    user_content: str | list[dict] | None = None,
 ) -> dict:
     config = load_config()
-    if model_role not in {"primary", "intent", "verification", "escalation"}:
+    if model_role not in {"primary", "intent", "verification", "escalation", "vision"}:
         raise HTTPException(status_code=400, detail="Invalid Splitik model role.")
     model = _model_for_role(config, model_role)  # type: ignore[arg-type]
 
@@ -410,7 +419,9 @@ def _generate_json_candidate(
             {"role": "system", "content": system_prompt},
             {
                 "role": "user",
-                "content": (
+                "content": user_content
+                if user_content is not None
+                else (
                     f"{user_label}:\n{user_message}\n\n"
                     f"Разрешенный backend context JSON:\n{context}\n\n"
                     "Верни только JSON."
@@ -575,15 +586,42 @@ def generate_splitik_intent_candidate(*, user_message: str, context: dict) -> di
 def generate_receipt_image_candidate(
     *,
     model_role: str,
-    attachment_metadata: dict,
+    attachment_metadata: list[dict],
+    image_data_urls: list[str],
+    user_message: str,
     context: dict,
 ) -> dict:
-    return generate_receipt_draft_candidate(
+    image_parts = [
+        {"type": "image_url", "image_url": {"url": image_data_url}}
+        for image_data_url in image_data_urls
+    ]
+    return _generate_json_candidate(
         model_role=model_role,
         system_prompt=(
-            "Ты создаешь черновики чеков SplitApp по metadata фото чека и "
-            "OCR/vision input. Верни только JSON в форме черновика чека."
+            "Ты создаешь черновик чека SplitApp по фото. Верни только JSON в форме "
+            '{"payload":{...},"questions":[...]}. Поля payload должны соответствовать '
+            "CreateReceiptRequest: суммы в копейках, payer_id и share_items.user_id "
+            "только из backend context. Если поле нельзя надежно извлечь, не выдумывай "
+            "его и добавь уточняющий вопрос. Не утверждай, что чек уже добавлен: "
+            "backend создаст только черновик."
         ),
-        user_message=f"Metadata фото чека:\n{attachment_metadata}",
+        user_label="Комментарий пользователя",
+        user_message=user_message,
         context=context,
+        user_content=[
+            {
+                "type": "text",
+                "text": (
+                    f"Комментарий пользователя:\n{user_message}\n\n"
+                    f"Метаданные вложений:\n{attachment_metadata}\n\n"
+                    f"Разрешенный backend context JSON:\n{context}\n\nВерни только JSON."
+                ),
+            },
+            *image_parts,
+        ],
     )
+
+
+def image_data_url(content_type: str, content: bytes) -> str:
+    encoded = base64.b64encode(content).decode("ascii")
+    return f"data:{content_type};base64,{encoded}"

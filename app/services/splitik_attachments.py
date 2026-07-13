@@ -103,3 +103,46 @@ def list_attachments_for_actor(
     if len(attachments) != len(set(attachment_ids)):
         raise HTTPException(status_code=404, detail="Splitik attachment not found.")
     return [_public_metadata(attachment) for attachment in attachments]
+
+
+def read_attachments_for_actor(
+    db: Database,
+    s3: Any | None,
+    *,
+    actor_user_id: str,
+    attachment_ids: list[str],
+) -> list[tuple[dict, bytes]]:
+    """Return private image bytes only for an authenticated model request."""
+    if not attachment_ids:
+        return []
+    stored = list(
+        db.splitik_attachments.find({"id": {"$in": attachment_ids}, "owner_user_id": actor_user_id})
+    )
+    by_id = {str(attachment["id"]): attachment for attachment in stored}
+    if len(by_id) != len(set(attachment_ids)):
+        raise HTTPException(status_code=404, detail="Splitik attachment not found.")
+
+    result: list[tuple[dict, bytes]] = []
+    for attachment_id in attachment_ids:
+        attachment = by_id[attachment_id]
+        if attachment.get("storage") == "s3":
+            if s3 is None:
+                raise HTTPException(
+                    status_code=503, detail="Splitik attachment storage is unavailable."
+                )
+            try:
+                content = s3.get_object(Bucket=attachment["bucket"], Key=attachment["key"])[
+                    "Body"
+                ].read()
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=503, detail="Splitik attachment storage is unavailable."
+                ) from exc
+        else:
+            content = attachment.get("content")
+        if not isinstance(content, (bytes, bytearray)):
+            raise HTTPException(
+                status_code=503, detail="Splitik attachment storage is unavailable."
+            )
+        result.append((_public_metadata(attachment), bytes(content)))
+    return result
