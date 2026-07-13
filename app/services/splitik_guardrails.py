@@ -156,6 +156,7 @@ def evaluate_planner_action(action: dict) -> dict:
     action_type = str(action.get("type") or action.get("operation") or action.get("tool") or "")
     allowed_types = {
         "create_event_draft",
+        "create_event_bundle_draft",
         "create_receipt_draft",
         "update_receipt_draft",
         "ask_clarifying_question",

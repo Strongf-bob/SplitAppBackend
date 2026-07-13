@@ -9,7 +9,7 @@ from app import schemas
 from app.services.access import active_event_memberships, assert_event_access
 from app.services.balances import get_event_balances
 from app.services.common import new_uuid, strip_mongo_id, utc_now
-from app.services.events import create_event
+from app.services.events import add_participants, create_event
 from app.services.receipts import create_receipt
 
 
@@ -39,6 +39,59 @@ def create_event_draft(
         "payload": payload,
         "version": 1,
         "source": source,
+        "attachment_ids": [],
+        "questions": questions or [],
+        "model_metadata": model_metadata or {},
+        "created_at": now,
+        "updated_at": now,
+    }
+    db.splitik_drafts.insert_one(draft)
+    return draft_to_api(draft)
+
+
+def create_event_bundle_draft(
+    db: Database,
+    *,
+    actor_user_id: str,
+    session_id: str | None,
+    payload: dict,
+    questions: list[dict] | None = None,
+    model_metadata: dict | None = None,
+) -> dict:
+    name = str(payload.get("name") or "").strip()
+    participant_ids = [str(value) for value in payload.get("participant_ids", [])]
+    receipts = payload.get("receipts")
+    if not name or not isinstance(receipts, list):
+        raise HTTPException(status_code=400, detail="Invalid event plan draft payload.")
+    member_ids = list(dict.fromkeys([actor_user_id, *participant_ids]))
+    if any(not db.users.find_one({"id": user_id}) for user_id in member_ids):
+        raise HTTPException(status_code=404, detail="Event plan references an unknown user.")
+    normalized_receipts = []
+    for receipt in receipts:
+        if not isinstance(receipt, dict):
+            raise HTTPException(status_code=400, detail="Invalid event plan receipt.")
+        amount = receipt.get("amount_kopecks")
+        payer_id = str(receipt.get("payer_id") or actor_user_id)
+        title = str(receipt.get("title") or "Чек").strip()
+        if not isinstance(amount, int) or amount <= 0 or payer_id not in member_ids or not title:
+            raise HTTPException(status_code=400, detail="Invalid event plan receipt.")
+        normalized_receipts.append(
+            {"title": title[:120], "amount_kopecks": amount, "payer_id": payer_id, "split": "equal"}
+        )
+    now = utc_now()
+    draft = {
+        "id": new_uuid(),
+        "owner_user_id": actor_user_id,
+        "session_id": session_id,
+        "type": "create_event_bundle",
+        "status": "pending",
+        "payload": {
+            "name": name[:80],
+            "participant_ids": participant_ids,
+            "receipts": normalized_receipts,
+        },
+        "version": 1,
+        "source": "planner",
         "attachment_ids": [],
         "questions": questions or [],
         "model_metadata": model_metadata or {},
@@ -219,6 +272,52 @@ def commit_draft(db: Database, *, actor_user_id: str, draft_id: str) -> dict:
             actor_user_id,
             idempotency_key=f"splitik-draft:{draft_id}",
         )
+    elif draft["type"] == "create_event_bundle":
+        payload = draft["payload"]
+        event = create_event(db, schemas.EventCreate(name=payload["name"]), actor_user_id)
+        participant_ids = [
+            user_id for user_id in payload["participant_ids"] if user_id != actor_user_id
+        ]
+        if participant_ids:
+            add_participants(
+                db,
+                event["id"],
+                schemas.AddParticipantsRequest(user_ids=participant_ids),
+                actor_user_id,
+            )
+        member_ids = [
+            membership["user_id"] for membership in active_event_memberships(db, event["id"])
+        ]
+        share_value = Decimal("1") / Decimal(len(member_ids))
+        receipts = []
+        for receipt in payload["receipts"]:
+            receipt_payload = schemas.CreateReceiptRequest(
+                payer_id=receipt["payer_id"],
+                title=receipt["title"],
+                category=None,
+                total_amount_kopecks=receipt["amount_kopecks"],
+                items=[
+                    schemas.CreateReceiptItemRequest(
+                        name=receipt["title"],
+                        cost_kopecks=receipt["amount_kopecks"],
+                        split_mode="custom",
+                        share_items=[
+                            schemas.CreateShareItemRequest(user_id=user_id, share_value=share_value)
+                            for user_id in member_ids
+                        ],
+                    )
+                ],
+            )
+            receipts.append(
+                create_receipt(
+                    db,
+                    event["id"],
+                    receipt_payload,
+                    actor_user_id,
+                    idempotency_key=f"splitik-draft:{draft_id}:{len(receipts)}",
+                )
+            )
+        resource = {"event": event, "receipts": receipts}
     else:
         raise HTTPException(status_code=400, detail="Unsupported Splitik draft type.")
 
@@ -229,7 +328,7 @@ def commit_draft(db: Database, *, actor_user_id: str, draft_id: str) -> dict:
             "$set": {
                 "status": "committed",
                 "committed_at": now,
-                "committed_resource_id": resource["id"],
+                "committed_resource_id": resource.get("id") or resource.get("event", {}).get("id"),
                 "updated_at": now,
             }
         },

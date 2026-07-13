@@ -123,6 +123,58 @@ def test_explicit_event_command_creates_draft_from_llm_plan(db, monkeypatch):
     assert planner_calls[0]["user_message"] == "Создай событие Такси до дома"
 
 
+def test_splitik_creates_and_commits_event_bundle_draft(db, monkeypatch):
+    seed_users(db)
+    _mock_intent_candidate(monkeypatch, intent="mutation")
+    _mock_plan_candidate(
+        monkeypatch,
+        {
+            "intent": "create_drafts",
+            "assistant_message": "Подготовил план события и чека.",
+            "actions": [
+                {
+                    "type": "create_event_bundle_draft",
+                    "payload": {
+                        "name": "Поездка в такси",
+                        "participant_ids": [USER_B],
+                        "receipts": [
+                            {
+                                "title": "Такси",
+                                "amount_kopecks": 20000,
+                                "payer_id": USER_A,
+                                "split": "equal",
+                            }
+                        ],
+                    },
+                }
+            ],
+        },
+    )
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="general",
+            message="Создай поездку в такси с Бобом, я заплатил 200 рублей, делим поровну",
+        ),
+        USER_A,
+    )
+
+    draft = response["drafts"][0]
+    assert draft["type"] == "create_event_bundle"
+    assert draft["payload"]["participant_ids"] == [USER_B]
+    assert draft["payload"]["receipts"][0]["amount_kopecks"] == 20000
+    assert db.events.count_documents({}) == 0
+
+    committed = splitik.commit_splitik_draft(db, draft["id"], USER_A)
+
+    event_id = committed["resource"]["event"]["id"]
+    assert db.event_memberships.count_documents({"event_id": event_id, "status": "active"}) == 2
+    receipt = db.receipts.find_one({"event_id": event_id})
+    assert receipt is not None
+    assert receipt["total_amount_kopecks"] == 20000
+
+
 def test_planner_context_uses_already_loaded_session_messages(db, monkeypatch):
     session = {
         "id": "session-1",

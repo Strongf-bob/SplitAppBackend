@@ -535,7 +535,7 @@ def generate_splitik_plan_candidate(*, user_message: str, context: dict) -> dict
         system_prompt=(
             "Ты planner Splitik. Верни только JSON-план, без текста вне JSON. "
             "Backend считает твой JSON недоверенным и сам валидирует все поля. "
-            "Разрешенные action type: create_event_draft, create_receipt_draft, "
+            "Разрешенные action type: create_event_draft, create_event_bundle_draft, create_receipt_draft, "
             "update_receipt_draft, ask_clarifying_question. "
             "Нельзя возвращать delete_event, payment, database, mongo, raw_query, "
             "mark_payment_paid, confirm_receipt или любые tool calls. "
@@ -546,6 +546,9 @@ def generate_splitik_plan_candidate(*, user_message: str, context: dict) -> dict
             '{"intent":"create_drafts|ask_clarifying_question|none",'
             '"assistant_message":"короткий Markdown-ответ без emoji",'
             '"actions":[{"type":"create_event_draft","payload":{"name":"..."}},'
+            '{"type":"create_event_bundle_draft","payload":{"name":"...",'
+            '"participant_ids":["uuid"],"receipts":[{"title":"...",'
+            '"amount_kopecks":10000,"payer_id":"uuid","split":"equal"}]}},'
             '{"type":"create_receipt_draft","event_id":"uuid","payload":{...},'
             '"attachment_ids":["uuid"],"questions":[]},'
             '{"type":"update_receipt_draft","draft_id":"uuid","event_id":"uuid",'
