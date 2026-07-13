@@ -64,6 +64,7 @@ _SYSTEM_PROMPT = """
 - Используй Markdown, который удобно читать в мобильном чате.
 - Делай короткие абзацы по 1-2 предложения.
 - Для вариантов действий используй маркированные списки через "- ".
+- После точки, двоеточия и точки с запятой ставь обычный пробел перед следующим словом.
 - Выделяй важные статусы и суммы через **жирный текст**, но не делай весь ответ жирным.
 - Если данных нет, скажи это прямо и предложи 1-2 следующих действия.
 - Не начинай каждый ответ с приветствия, если пользователь уже находится в диалоге.
@@ -74,6 +75,12 @@ _SYSTEM_PROMPT = """
 
 def _clean(document: dict) -> dict:
     return strip_mongo_id(document)
+
+
+def normalize_assistant_copy(reply: str) -> str:
+    """Repair punctuation spacing that makes a mobile chat response hard to read."""
+    reply = re.sub(r"(?<=[.!?])(?=[А-Яа-яЁё])", " ", reply)
+    return re.sub(r"(?<=[;:])(?=[А-Яа-яЁёA-Za-z])", " ", reply)
 
 
 def _env_int(name: str, default: int) -> int:
@@ -989,6 +996,14 @@ def _get_or_create_session(
             raise HTTPException(status_code=404, detail="Splitik session not found.")
         return session
 
+    if payload.mode.strip().lower() == "general":
+        session = db.splitik_sessions.find_one(
+            {"owner_user_id": actor_user_id, "mode": "general"},
+            sort=[("updated_at", -1)],
+        )
+        if session:
+            return session
+
     session = {
         "id": new_uuid(),
         "owner_user_id": actor_user_id,
@@ -1346,6 +1361,7 @@ def send_splitik_message(
             reply = draft_reply or (
                 questions[0]["text"] if questions else "Я не смог безопасно разобрать запрос."
             )
+            reply = normalize_assistant_copy(reply)
             stage = "guardrail.assistant"
             if not guardrail_decision or guardrail_decision["allowed"]:
                 post_guardrail_decision = evaluate_assistant_message(
@@ -1440,6 +1456,7 @@ def send_splitik_message(
             model_role=reply_model_role,
         )
         reply = strip_disallowed_emoji(reply)
+        reply = normalize_assistant_copy(reply)
         stage = "guardrail.assistant"
         post_guardrail_decision = evaluate_assistant_message(
             reply,
@@ -1533,6 +1550,16 @@ def send_splitik_message(
 
 def get_splitik_session(db: Database, session_id: str, actor_user_id: str) -> dict:
     session = db.splitik_sessions.find_one({"id": session_id, "owner_user_id": actor_user_id})
+    if not session:
+        raise HTTPException(status_code=404, detail="Splitik session not found.")
+    return _session_to_api(session)
+
+
+def get_current_splitik_session(db: Database, actor_user_id: str) -> dict:
+    session = db.splitik_sessions.find_one(
+        {"owner_user_id": actor_user_id, "mode": "general"},
+        sort=[("updated_at", -1)],
+    )
     if not session:
         raise HTTPException(status_code=404, detail="Splitik session not found.")
     return _session_to_api(session)
