@@ -97,6 +97,40 @@ def _mock_intent_candidate(monkeypatch, *, intent: str, confidence: float = 0.9)
     return calls
 
 
+def test_splitik_reuses_general_session_when_client_loses_session_id(db, monkeypatch):
+    seed_users(db)
+    monkeypatch.setattr(splitik_llm, "generate_splitik_reply", lambda **_: "Ответ")
+
+    first = splitik.send_splitik_message(
+        db, schemas.SplitikMessageRequest(message="Первое"), USER_A
+    )
+    second = splitik.send_splitik_message(
+        db, schemas.SplitikMessageRequest(message="Второе"), USER_A
+    )
+
+    assert second["session_id"] == first["session_id"]
+    assert len(db.splitik_sessions.find_one({"id": first["session_id"]})["messages"]) == 2
+
+
+def test_splitik_current_session_is_owner_scoped(db, monkeypatch):
+    seed_users(db)
+    monkeypatch.setattr(splitik_llm, "generate_splitik_reply", lambda **_: "Ответ")
+    splitik.send_splitik_message(db, schemas.SplitikMessageRequest(message="Привет"), USER_A)
+
+    assert splitik.get_current_splitik_session(db, USER_A)["owner_user_id"] == USER_A
+    with pytest.raises(HTTPException, match="Splitik session not found"):
+        splitik.get_current_splitik_session(db, USER_B)
+
+
+def test_splitik_normalizes_missing_spaces_in_assistant_copy():
+    assert splitik.normalize_assistant_copy(
+        "Я Сплитик, ассистент SplitApp.Сейчас помогу:показать траты;начать новый счёт.Понял.продолжим?"
+    ) == (
+        "Я Сплитик, ассистент SplitApp. Сейчас помогу: показать траты; начать новый счёт. "
+        "Понял. продолжим?"
+    )
+
+
 def test_explicit_event_command_creates_draft_from_llm_plan(db, monkeypatch):
     seed_users(db)
     intent_calls = _mock_intent_candidate(monkeypatch, intent="mutation")

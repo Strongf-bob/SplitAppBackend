@@ -57,6 +57,14 @@ def send_message(
     )
 
 
+@router.get("/api/splitik/sessions/current", response_model=schemas.SplitikSession)
+def get_current_session(
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+):
+    return splitik.get_current_splitik_session(db, current_user_id)
+
+
 @router.get("/api/splitik/sessions/{id}", response_model=schemas.SplitikSession)
 def get_session(
     id: UUID,
