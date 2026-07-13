@@ -452,6 +452,7 @@ def _planner_context(
         "human_review_required": True,
         "allowed_actions": [
             "create_event_draft",
+            "create_event_bundle_draft",
             "create_receipt_draft",
             "update_receipt_draft",
             "ask_clarifying_question",
@@ -499,7 +500,8 @@ def _execute_planner_actions(
         action
         for action in actions
         if isinstance(action, dict)
-        and action.get("type") in {"create_event_draft", "create_receipt_draft"}
+        and action.get("type")
+        in {"create_event_draft", "create_event_bundle_draft", "create_receipt_draft"}
     ]
     max_drafts_per_request = max(1, _env_int("SPLITIK_MAX_DRAFTS_PER_REQUEST", 3))
     if len(draft_actions) > max_drafts_per_request:
@@ -573,6 +575,21 @@ def _execute_planner_actions(
                     session_id=session_id,
                     payload={"name": name[:80]},
                     source="planner",
+                    questions=_normalize_questions(action.get("questions")),
+                    model_metadata=model_metadata,
+                )
+            )
+        elif action_type == "create_event_bundle_draft":
+            payload_data = action.get("payload") if isinstance(action.get("payload"), dict) else {}
+            if not payload_data:
+                questions.extend(_normalize_questions(action.get("questions")))
+                continue
+            drafts.append(
+                splitik_tools.create_event_bundle_draft(
+                    db,
+                    actor_user_id=actor_user_id,
+                    session_id=session_id,
+                    payload=payload_data,
                     questions=_normalize_questions(action.get("questions")),
                     model_metadata=model_metadata,
                 )
