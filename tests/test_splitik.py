@@ -468,6 +468,7 @@ def test_splitik_startup_validation_accepts_available_runtime_models(monkeypatch
                     {"id": "deepseek-v4-flash"},
                     {"id": "verification-model"},
                     {"id": "escalation-model"},
+                    {"id": "minimax-m3"},
                 ]
             }
         )
@@ -961,7 +962,7 @@ def test_splitik_limits_pending_drafts_per_user(db, monkeypatch):
     assert db.splitik_drafts.count_documents({"owner_user_id": USER_A}) == 1
 
 
-def test_splitik_planner_receives_all_attachment_metadata(db, fake_s3, monkeypatch):
+def test_splitik_vision_receives_all_attachment_metadata(db, fake_s3, monkeypatch):
     _mock_llm(monkeypatch)
     monkeypatch.setenv("S3_BUCKET", "test-bucket")
     seed_event(db)
@@ -981,25 +982,23 @@ def test_splitik_planner_receives_all_attachment_metadata(db, fake_s3, monkeypat
         content_type="image/jpeg",
         content=b"\xff\xd8\xffsecond",
     )
-    planner_calls = _mock_plan_candidate(
-        monkeypatch,
-        {
-            "intent": "ask_clarifying_question",
-            "assistant_message": "Не вижу OCR текста по фото. Уточните суммы.",
-            "actions": [
-                {
-                    "type": "ask_clarifying_question",
-                    "questions": [
-                        {
-                            "id": "receipt_text",
-                            "text": "Пришлите текст или OCR по чекам.",
-                            "required": True,
-                        }
-                    ],
-                }
-            ],
-        },
-    )
+    vision_calls = []
+
+    def fake_image_candidate(
+        *, model_role, attachment_metadata, image_data_urls, user_message, context
+    ):
+        vision_calls.append(
+            {
+                "model_role": model_role,
+                "attachment_metadata": attachment_metadata,
+                "image_data_urls": image_data_urls,
+                "user_message": user_message,
+                "context": context,
+            }
+        )
+        return _receipt_ai_candidate(model_role)
+
+    monkeypatch.setattr(splitik_llm, "generate_receipt_image_candidate", fake_image_candidate)
 
     response = splitik.send_splitik_message(
         db,
@@ -1010,14 +1009,15 @@ def test_splitik_planner_receives_all_attachment_metadata(db, fake_s3, monkeypat
             attachment_ids=[first["id"], second["id"]],
         ),
         USER_A,
+        s3=fake_s3,
     )
 
-    attachment_ids = [attachment["id"] for attachment in planner_calls[0]["context"]["attachments"]]
+    attachment_ids = [attachment["id"] for attachment in vision_calls[0]["attachment_metadata"]]
     assert attachment_ids == [first["id"], second["id"]]
-    assert "key" not in str(planner_calls[0]["context"]["attachments"])
-    assert response["intent"] == "question"
-    assert response["questions"][0]["id"] == "receipt_text"
-    assert db.splitik_drafts.count_documents({}) == 0
+    assert "key" not in str(vision_calls[0]["attachment_metadata"])
+    assert len(vision_calls[0]["image_data_urls"]) == 2
+    assert response["intent"] == "draft"
+    assert db.splitik_drafts.count_documents({}) == 1
 
 
 def test_splitik_rejects_too_many_attachments_per_message(db, monkeypatch):
@@ -1519,11 +1519,15 @@ def test_splitik_creates_receipt_draft_from_image_attachment(db, fake_s3, monkey
     )
     image_calls = []
 
-    def fake_image_candidate(*, model_role, attachment_metadata, context):
+    def fake_image_candidate(
+        *, model_role, attachment_metadata, image_data_urls, user_message, context
+    ):
         image_calls.append(
             {
                 "model_role": model_role,
                 "attachment_metadata": attachment_metadata,
+                "image_data_urls": image_data_urls,
+                "user_message": user_message,
                 "context": context,
             }
         )
@@ -1540,10 +1544,13 @@ def test_splitik_creates_receipt_draft_from_image_attachment(db, fake_s3, monkey
             attachment_ids=[attachment["id"]],
         ),
         USER_A,
+        s3=fake_s3,
     )
 
-    assert image_calls[0]["attachment_metadata"]["id"] == attachment["id"]
-    assert "key" not in image_calls[0]["attachment_metadata"]
+    assert image_calls[0]["model_role"] == "vision"
+    assert image_calls[0]["attachment_metadata"][0]["id"] == attachment["id"]
+    assert "key" not in image_calls[0]["attachment_metadata"][0]
+    assert image_calls[0]["image_data_urls"][0].startswith("data:image/jpeg;base64,")
     assert response["intent"] == "draft"
     draft = response["drafts"][0]
     assert draft["type"] == "create_receipt"
@@ -1560,6 +1567,70 @@ def test_splitik_creates_receipt_draft_from_image_attachment(db, fake_s3, monkey
     assert log is not None
     assert "attachments/" not in str(log)
     assert "test-bucket" not in str(log)
+
+
+def test_splitik_routes_event_image_to_vision_receipt_draft(db, fake_s3, monkeypatch):
+    _mock_llm(monkeypatch)
+    monkeypatch.setenv("S3_BUCKET", "test-bucket")
+    seed_event(db)
+    attachment = splitik_attachments.create_attachment(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        filename="receipt.jpg",
+        content_type="image/jpeg",
+        content=b"\xff\xd8\xffreceipt-image-bytes",
+    )
+
+    def fail_intent(**_kwargs):
+        raise AssertionError("an image receipt must bypass the text intent router")
+
+    def fail_planner(**_kwargs):
+        raise AssertionError("an image receipt must bypass the text planner")
+
+    image_calls = []
+
+    def fake_image_candidate(
+        *, model_role, attachment_metadata, image_data_urls, user_message, context
+    ):
+        image_calls.append(
+            {
+                "model_role": model_role,
+                "attachment_metadata": attachment_metadata,
+                "image_data_urls": image_data_urls,
+                "user_message": user_message,
+                "context": context,
+            }
+        )
+        return _receipt_ai_candidate(model_role)
+
+    monkeypatch.setattr(splitik_llm, "generate_splitik_intent_candidate", fail_intent)
+    monkeypatch.setattr(splitik_llm, "generate_splitik_plan_candidate", fail_planner)
+    monkeypatch.setattr(splitik_llm, "generate_receipt_image_candidate", fake_image_candidate)
+
+    response = splitik.send_splitik_message(
+        db,
+        schemas.SplitikMessageRequest(
+            mode="event",
+            message="Это чек за ужин",
+            entry_point=schemas.SplitikEntryPoint(type="event", event_id=EVENT_ID),
+            attachment_ids=[attachment["id"]],
+        ),
+        USER_A,
+        s3=fake_s3,
+    )
+
+    assert image_calls[0]["model_role"] == "vision"
+    assert image_calls[0]["attachment_metadata"][0]["id"] == attachment["id"]
+    assert "key" not in image_calls[0]["attachment_metadata"][0]
+    assert image_calls[0]["image_data_urls"][0].startswith("data:image/jpeg;base64,")
+    assert "receipt-image-bytes" not in image_calls[0]["image_data_urls"][0]
+    assert response["drafts"][0]["type"] == "create_receipt"
+    assert response["drafts"][0]["status"] == "pending"
+    assert db.receipts.count_documents({"event_id": EVENT_ID}) == 0
+    log = db.splitik_interactions.find_one({"message_id": response["message_id"]})
+    assert "data:image" not in str(log)
+    assert "attachments/" not in str(log)
 
 
 def test_splitik_attachment_upload_endpoint_returns_private_metadata(db, fake_s3, monkeypatch):

@@ -5,6 +5,8 @@ import os
 import re
 import time
 import traceback
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import HTTPException
 from pymongo.database import Database
@@ -770,9 +772,64 @@ def _maybe_create_draft(
     actor_user_id: str,
     session_id: str,
     session: dict,
+    s3: Any | None = None,
+    s3_provider: Callable[[], Any] | None = None,
 ) -> dict:
     mode = payload.mode.strip().lower()
     lowered = payload.message.casefold()
+    event_id = _event_id_from_payload(payload)
+    attachment_ids = [str(attachment_id) for attachment_id in payload.attachment_ids]
+    if mode == "event" and event_id and attachment_ids:
+        attachment_storage = s3 if s3 is not None else s3_provider() if s3_provider else None
+        attachments_with_content = splitik_attachments.read_attachments_for_actor(
+            db,
+            attachment_storage,
+            actor_user_id=actor_user_id,
+            attachment_ids=attachment_ids,
+        )
+        attachments = [metadata for metadata, _content in attachments_with_content]
+        candidate = splitik_llm.generate_receipt_image_candidate(
+            model_role="vision",
+            attachment_metadata=attachments,
+            image_data_urls=[
+                splitik_llm.image_data_url(metadata["content_type"], content)
+                for metadata, content in attachments_with_content
+            ],
+            user_message=payload.message,
+            context={
+                "event_id": event_id,
+                "attachment_ids": attachment_ids,
+                "human_review_required": True,
+            },
+        )
+        content = candidate.get("content", {})
+        receipt_payload = content.get("payload") if isinstance(content, dict) else None
+        if not receipt_payload:
+            return _empty_draft_result()
+        questions = content.get("questions") if isinstance(content, dict) else None
+        if not questions:
+            questions = _receipt_clarifying_questions()
+        draft = splitik_tools.create_receipt_draft(
+            db,
+            actor_user_id=actor_user_id,
+            session_id=session_id,
+            event_id=event_id,
+            payload=receipt_payload,
+            source="image",
+            attachment_ids=attachment_ids,
+            questions=questions,
+            model_metadata={
+                "model_id": candidate.get("model_id"),
+                "model_role": candidate.get("model_role"),
+            },
+        )
+        return {
+            **_empty_draft_result(),
+            "drafts": [draft],
+            "intent": "draft",
+            "model_ids": [candidate["model_id"]] if candidate.get("model_id") else [],
+        }
+
     user_intent, intent_model_id = _classify_user_intent(payload)
     if user_intent != "mutation":
         result = _empty_draft_result()
@@ -835,40 +892,6 @@ def _maybe_create_draft(
         return _empty_draft_result()
 
     event_id = str(payload.entry_point.event_id)
-    attachment_ids = [str(attachment_id) for attachment_id in payload.attachment_ids]
-    if attachment_ids:
-        attachments = splitik_attachments.list_attachments_for_actor(
-            db,
-            actor_user_id=actor_user_id,
-            attachment_ids=attachment_ids,
-        )
-        candidate = splitik_llm.generate_receipt_image_candidate(
-            model_role="primary",
-            attachment_metadata=attachments[0],
-            context={
-                "event_id": event_id,
-                "attachment_ids": attachment_ids,
-                "human_review_required": True,
-            },
-        )
-        content = candidate.get("content", {})
-        receipt_payload = content.get("payload") if isinstance(content, dict) else None
-        if not receipt_payload:
-            return _empty_draft_result()
-        questions = content.get("questions") if isinstance(content, dict) else None
-        if not questions:
-            questions = _receipt_clarifying_questions()
-        draft = splitik_tools.create_receipt_draft(
-            db,
-            actor_user_id=actor_user_id,
-            session_id=session_id,
-            event_id=event_id,
-            payload=receipt_payload,
-            source="image",
-            attachment_ids=attachment_ids,
-            questions=questions,
-        )
-        return {**_empty_draft_result(), "drafts": [draft], "intent": "draft"}
 
     amount_kopecks = splitik_tools.amount_kopecks_from_text(payload.message)
     latest_receipt_draft = splitik_tools.latest_pending_draft(
@@ -1173,6 +1196,8 @@ def send_splitik_message(
     payload: schemas.SplitikMessageRequest,
     actor_user_id: str,
     request_id: str | None = None,
+    s3: Any | None = None,
+    s3_provider: Callable[[], Any] | None = None,
 ) -> dict:
     started = time.monotonic()
     mode = payload.mode.strip().lower()
@@ -1277,6 +1302,8 @@ def send_splitik_message(
             actor_user_id,
             session["id"],
             session,
+            s3,
+            s3_provider,
         )
         drafts = draft_result["drafts"]
         questions = _draft_questions(drafts) + draft_result["questions"]

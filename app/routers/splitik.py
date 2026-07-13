@@ -48,7 +48,11 @@ def send_message(
         key=idempotency_key,
         request_payload=payload.model_dump(mode="json"),
         create=lambda: splitik.send_splitik_message(
-            db, payload, current_user_id, request_id=request_id
+            db,
+            payload,
+            current_user_id,
+            request_id=request_id,
+            s3_provider=lambda: get_s3(request),
         ),
     )
 

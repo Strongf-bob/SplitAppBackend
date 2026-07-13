@@ -43,6 +43,15 @@ def fake_s3():
         def put_object(self, **kwargs):
             self.objects[(kwargs["Bucket"], kwargs["Key"])] = kwargs
 
+        def get_object(self, **kwargs):
+            stored = self.objects[(kwargs["Bucket"], kwargs["Key"])]
+
+            class Body:
+                def read(self):
+                    return stored["Body"]
+
+            return {"Body": Body()}
+
         def delete_object(self, **kwargs):
             self.deleted.append((kwargs["Bucket"], kwargs["Key"]))
             self.objects.pop((kwargs["Bucket"], kwargs["Key"]), None)
