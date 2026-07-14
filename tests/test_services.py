@@ -598,6 +598,23 @@ def test_friend_request_reject_and_authorization(db):
     assert rejected["status"] == "rejected"
 
 
+def test_friend_invite_stores_only_token_hash_and_previews_sender(db):
+    from app.services import friend_invites
+    from tests.conftest import seed_users
+
+    seed_users(db)
+
+    created = friend_invites.create_friend_invite(db, USER_A)
+    stored = db.friend_invites.find_one({"id": created["id"]})
+    preview = friend_invites.preview_friend_invite(db, created["token"], USER_B)
+
+    assert created["invite_url"] == f"splitapp://friend-invite/{created['token']}"
+    assert "token" not in stored
+    assert stored["token_hash"] != created["token"]
+    assert preview["creator"]["id"] == USER_A
+    assert "token" not in preview
+
+
 def test_payment_phone_visibility_respects_friendship(db):
     from tests.conftest import seed_users
 

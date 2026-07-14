@@ -18,6 +18,25 @@ def create_friend_request(
     return services.create_friend_request(db, payload, current_user_id)
 
 
+@router.post(
+    "/api/friend-invites", response_model=schemas.FriendInvite, status_code=status.HTTP_201_CREATED
+)
+def create_friend_invite(
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.create_friend_invite(db, current_user_id)
+
+
+@router.get("/api/friend-invites/{token}/preview", response_model=schemas.FriendInvitePreview)
+def preview_friend_invite(
+    token: str,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.preview_friend_invite(db, token, current_user_id)
+
+
 @router.get("/api/friends", response_model=schemas.FriendshipPage)
 def list_friendships(
     status_filter: str | None = Query(default=None, alias="status"),

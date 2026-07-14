@@ -120,6 +120,22 @@ class FriendshipPage(BaseModel):
     total: int
 
 
+class FriendInvite(BaseModel):
+    id: UUID
+    creator: User
+    token: str
+    invite_url: str
+    status: str
+    expires_at: datetime
+    created_at: datetime
+
+
+class FriendInvitePreview(BaseModel):
+    id: UUID
+    creator: User
+    expires_at: datetime
+
+
 class UserUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=120)
     email: str | None = Field(default=None, max_length=254)

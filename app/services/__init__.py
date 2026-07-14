@@ -31,6 +31,7 @@ from app.services.friends import (
     reject_friend_request,
     remove_friendship,
 )
+from app.services.friend_invites import create_friend_invite, preview_friend_invite
 from app.services.indexes import ensure_indexes
 from app.services.home import get_home_summary
 from app.services.payments import (
@@ -108,6 +109,7 @@ __all__ = [
     "create_event_invite",
     "create_client_report",
     "create_friend_request",
+    "create_friend_invite",
     "create_settlement_plan",
     "delete_event",
     "decline_event_invite",
@@ -155,6 +157,7 @@ __all__ = [
     "request_payment_extension",
     "mark_allocation_session_ready",
     "preview_event_invite",
+    "preview_friend_invite",
     "reject_payment",
     "reject_settlement_plan",
     "reject_friend_request",
