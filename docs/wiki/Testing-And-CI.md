@@ -1,8 +1,3 @@
----
-title: "Тесты и CI"
-description: "Локальные проверки, GitHub Actions gates и регрессионные контракты SplitApp Backend."
----
-
 # Тесты и CI
 
 ## Пирамида проверок

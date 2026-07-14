@@ -1,8 +1,3 @@
----
-title: "Модель данных"
-description: "Фактические MongoDB-коллекции, ownership, состояния и индексы SplitApp Backend."
----
-
 # Модель данных
 
 ## Обзор

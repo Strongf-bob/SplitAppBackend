@@ -1,8 +1,3 @@
----
-title: "Интеграция SplitApp"
-description: "Граница ответственности между клиентом SplitApp и серверным контрактом SplitAppBackend."
----
-
 # Интеграция SplitApp и SplitAppBackend
 
 Эта страница описывает границу между нативным iOS-приложением

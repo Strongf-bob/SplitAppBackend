@@ -1,8 +1,3 @@
----
-title: "Поддержка Wiki"
-description: "Единый источник Wiki, правила изменения, локальная проверка и публикация в GitHub Wiki."
----
-
 # Поддержка Wiki
 
 `docs/wiki/` — единственный редактируемый источник документации SplitApp Backend. GitHub Wiki — опубликованное зеркало, а не место для независимых правок. Исходники доступны в [репозитории](https://github.com/Strongf-bob/SplitAppBackend/tree/main/docs/wiki), опубликованная Wiki — на [GitHub](https://github.com/Strongf-bob/SplitAppBackend/wiki).

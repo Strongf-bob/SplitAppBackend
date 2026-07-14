@@ -1,8 +1,3 @@
----
-title: "Операции и деплой"
-description: "Compose runtime, наблюдаемость, production deploy и восстановление SplitApp Backend."
----
-
 # Операции и деплой
 
 ## Runtime и наблюдаемость
