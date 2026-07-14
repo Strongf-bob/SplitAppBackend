@@ -129,3 +129,20 @@
 
 - Commit message: `fix(settlement): decouple snapshot validation from actor membership`
 - Final commit SHA is reported in the handoff after commit creation.
+
+## Wiki documentation follow-up
+
+### Scope
+
+- Added `docs/wiki/SplitApp-Integration.md` and `docs/wiki/API-Guide.md` in Russian.
+- Documented the backend/iOS responsibility boundary, iOS-to-FastAPI-to-service-to-storage request path, endpoint scenario map, API consumption rules and compatible contract rollout order.
+- Kept the work documentation-only: no backend behavior, `openapi.yaml`, credentials, user data or iOS repository files changed.
+
+### Source-link verification
+
+- Confirmed HTTP 200 on GitHub `main` before linking `Strongf-bob/SplitApp` and the cited iOS source files: `APIClient.swift`, `EventEndpoints.swift`, `ReceiptEndpoints.swift`, `PaymentEndpoints.swift`, `BalanceEndpoints.swift`, and `UserEndpoints.swift`.
+- Confirmed HTTP 200 for every cited backend dependency/router source link and checked the referenced local line anchors.
+
+### Validation
+
+- Verified all internal Related Pages targets and `git diff --check` before commit.
