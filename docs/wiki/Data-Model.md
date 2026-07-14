@@ -9,7 +9,7 @@ description: "Фактические MongoDB-коллекции, ownership, со
 
 MongoDB хранит нормализованные по ownership документы: event не содержит доверенный список участников, а доступ определяется активной записью `event_memberships`. Такой выбор позволяет отзывать участие мягко и проверять его в каждом защищённом service path. [app/services/access.py:21-49](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/access.py#L21-L49)
 
-| Группа | Коллекции | Ключ ownership / связи | Source |
+| Группа | Коллекции | Ключ владения / связи | Источник |
 |---|---|---|---|
 | Identity | `users`, `refresh_tokens`, `user_contacts` | `users.id`; refresh хранит только `token_hash`; contacts принадлежат `owner_user_id` | [app/services/indexes.py:5-19](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L5-L19) |
 | Social | `friends`, `event_invites`, `invite_decisions` | pair/event/invite + actor; unique pair и decision | [app/services/indexes.py:10-31](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L10-L31) |
@@ -31,7 +31,7 @@ erDiagram
 
 ## Коллекции и владение
 
-| Коллекция | Инвариант и статусы | Основные индексы | Source |
+| Коллекция | Инвариант и статусы | Основные индексы | Источник |
 |---|---|---|---|
 | `users` | Stable `id`; OAuth identity — optional `yandex_id`; профиль может иметь `avatar_key`, discovery fields | unique `id`, `phone_number`, sparse unique `yandex_id`/`public_handle` | [app/services/indexes.py:5-9](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L5-L9) |
 | `refresh_tokens` | сервер хранит SHA-256 hash, а не raw refresh token; `expires_at` удаляется TTL | unique `token_hash`, TTL `expires_at` | [app/core/tokens.py:64-69](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/tokens.py#L64-L69) |
@@ -62,9 +62,9 @@ stateDiagram-v2
 
 ## Связанные страницы
 
-| Page | Relationship |
+| Страница | Связь |
 |---|---|
-| [Архитектура](Architecture.md#доверительные-границы) | Объясняет, где ownership проверяется. |
-| [Аутентификация и безопасность](Authentication-And-Security.md#refresh-токены-и-секреты) | Описывает lifecycle refresh-token state. |
-| [Деньги и расчёты](Money-And-Settlement.md) | Объясняет business-meaning receipts, payments и plans. |
-| [Операции и деплой](Operations-And-Deployment.md#backup-и-восстановление) | Покрывает эксплуатацию MongoDB state. |
+| [Архитектура](Architecture#доверительные-границы) | Объясняет, где проверяется владение ресурсом. |
+| [Аутентификация и безопасность](Authentication-And-Security#refresh-токены-и-секреты) | Описывает жизненный цикл состояния refresh-токена. |
+| [Деньги и расчёты](Money-And-Settlement) | Объясняет предметный смысл чеков, платежей и планов. |
+| [Операции и деплой](Operations-And-Deployment#backup-и-восстановление) | Покрывает эксплуатацию состояния MongoDB. |

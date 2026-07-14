@@ -68,14 +68,15 @@ flowchart TB
 [ ] Compose/CI/deploy impact and rollback path are reviewed.
 ```
 
-CI запускает lint, tests и дополнительные push/main gates; точная последовательность и deploy boundary описаны в [Testing and CI](Testing-And-CI) и [Operations and deployment](Operations-And-Deployment#deploy).
+CI запускает проверку стиля, тесты и дополнительные проверки для push/main; точная последовательность и граница развёртывания описаны в [Тестах и CI](Testing-And-CI) и [Операциях и деплое](Operations-And-Deployment#развёртывание).
 
 ## Связанные страницы
 
-| Page | Relationship |
+| Страница | Связь |
 |---|---|
+| [Главная](Home) | Полный каталог Вики. |
 | [Архитектура](Architecture) | Доверительные границы и основные пути запроса. |
-| [Модель данных](Data-Model) | Collections, ownership, lifecycle и indexes. |
-| [Аутентификация и безопасность](Authentication-And-Security) | Identity, tokens, CORS и error boundaries. |
-| [Операции и деплой](Operations-And-Deployment) | Runtime, observability, backup и deploy. |
-| [Руководство contributor](Contributor-Guide) | Практика ограниченного изменения и проверок. |
+| [Модель данных](Data-Model) | Коллекции, владение, жизненный цикл и индексы. |
+| [Аутентификация и безопасность](Authentication-And-Security) | Идентификация, токены, CORS и границы ошибок. |
+| [Операции и деплой](Operations-And-Deployment) | Время выполнения, наблюдаемость, резервное копирование и развёртывание. |
+| [Руководство для разработчика](Contributor-Guide) | Практика ограниченного изменения и проверок. |

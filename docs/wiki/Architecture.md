@@ -9,13 +9,13 @@ description: "Слои SplitApp Backend, доверительные границ
 
 Backend — единственный источник истины для пользователей, событий и денежных операций: клиент передаёт намерение, а API устанавливает личность, проверяет право на ресурс и только затем изменяет MongoDB. Это отделяет недоверенный iOS/PWA-клиент от доменных правил и делает один и тот же контракт доступным обоим клиентам. Приложение собирает FastAPI, общую bearer-зависимость и все роутеры в `create_app`. [app/main.py:223-248](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L223-L248)
 
-| Слой | Ответственность | Source |
+| Слой | Ответственность | Источник |
 |---|---|---|
-| Edge/API | HTTP, CORS, request ID, router dispatch и статические PWA-маршруты | [app/main.py:43-71](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L43-L71) |
-| Identity | Yandex login, JWT access и refresh-token rotation | [app/routers/auth.py:13-31](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/auth.py#L13-L31) |
-| Domain services | Membership/creator checks, lifecycle, расчёты и storage workflows | [app/services/access.py:14-69](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/access.py#L14-L69) |
-| Persistence | MongoDB, startup indexes и TTL | [app/core/db.py:67-106](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/db.py#L67-L106) |
-| External systems | Yandex OAuth, S3-compatible storage, Sentry, LLM provider | [app/core/s3.py:13-47](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/s3.py#L13-L47) |
+| Край API | HTTP, CORS, идентификатор запроса, маршрутизация и статические PWA-маршруты | [app/main.py:43-71](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L43-L71) |
+| Идентификация | Вход через Яндекс, JWT доступа и ротация refresh-токена | [app/routers/auth.py:13-31](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/auth.py#L13-L31) |
+| Доменные сервисы | Проверки участия/создателя, жизненный цикл, расчёты и работа с хранилищем | [app/services/access.py:14-69](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/access.py#L14-L69) |
+| Постоянное хранение | MongoDB, стартовые индексы и TTL | [app/core/db.py:67-106](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/db.py#L67-L106) |
+| Внешние системы | Yandex OAuth, S3-совместимое хранилище, Sentry, провайдер LLM | [app/core/s3.py:13-47](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/s3.py#L13-L47) |
 
 ```mermaid
 graph TD
@@ -39,7 +39,7 @@ graph TD
 
 ## Доверительные границы
 
-| Граница | Что принимается | Контроль | Source |
+| Граница | Что принимается | Контроль | Источник |
 |---|---|---|---|
 | Интернет → API | HTTP payload, bearer token, request ID | Pydantic router schemas, global dependency, explicit CORS | [app/dependencies.py:86-137](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/dependencies.py#L86-L137) |
 | API → domain | `actor_user_id` и validated fields | service проверяет membership, creator и `is_closed` | [app/services/access.py:33-69](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/access.py#L33-L69) |
@@ -90,9 +90,10 @@ Lifespan намеренно не начинает обслуживание с н
 
 ## Связанные страницы
 
-| Page | Relationship |
+| Страница | Связь |
 |---|---|
-| [Модель данных](Data-Model.md#коллекции-и-владение) | Определяет persistent state доменных сервисов. |
-| [Аутентификация и безопасность](Authentication-And-Security.md#модель-аутентификации) | Детализирует границу клиента и API. |
-| [Операции и деплой](Operations-And-Deployment.md#runtime-и-наблюдаемость) | Описывает Compose и production-эксплуатацию. |
-| [Тесты и CI](Testing-And-CI.md#пирамида-проверок) | Фиксирует проверку архитектурных контрактов. |
+| [Главная](Home) | Полный каталог Вики. |
+| [Модель данных](Data-Model#коллекции-и-владение) | Определяет постоянное состояние доменных сервисов. |
+| [Аутентификация и безопасность](Authentication-And-Security#модель-аутентификации) | Детализирует границу клиента и API. |
+| [Операции и деплой](Operations-And-Deployment#runtime-и-наблюдаемость) | Описывает Compose и эксплуатацию в production. |
+| [Тесты и CI](Testing-And-CI#пирамида-проверок) | Фиксирует проверку архитектурных контрактов. |

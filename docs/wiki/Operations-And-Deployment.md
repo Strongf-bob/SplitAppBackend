@@ -9,7 +9,7 @@ description: "Compose runtime, наблюдаемость, production deploy и 
 
 Compose запускает API и MongoDB вместе с закрытым стеком Prometheus/Loki/Grafana. Из сервисов наружу публикуются API `${HOST_PORT:-8080}:8000` и Grafana, причём Grafana по умолчанию привязана к loopback. [compose.yaml:3-42](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml#L3-L42) [compose.yaml:139-159](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml#L139-L159)
 
-| Компонент | Назначение | Эксплуатационный факт | Source |
+| Компонент | Назначение | Эксплуатационный факт | Источник |
 |---|---|---|---|
 | `api` | FastAPI/uvicorn | ждёт health Mongo и имеет `/api/ping` healthcheck | [compose.yaml:4-27](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml#L4-L27) |
 | `mongo` | persistent data | volume `mongo-data`, private network, healthcheck `db.adminCommand('ping')` | [compose.yaml:29-42](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml#L29-L42) |
@@ -76,9 +76,9 @@ sequenceDiagram
 
 ## Связанные страницы
 
-| Page | Relationship |
+| Страница | Связь |
 |---|---|
-| [Архитектура](Architecture.md#наблюдаемость) | Объясняет instrumentation request path. |
-| [Аутентификация и безопасность](Authentication-And-Security.md#refresh-токены-и-секреты) | Runtime secret boundaries. |
-| [Модель данных](Data-Model.md#индексы-как-контракт) | MongoDB state, indexes и TTL. |
-| [Тесты и CI](Testing-And-CI.md#github-actions) | Полный CI gate перед deploy. |
+| [Архитектура](Architecture#наблюдаемость) | Объясняет путь инструментирования запроса. |
+| [Аутентификация и безопасность](Authentication-And-Security#refresh-токены-и-секреты) | Границы секретов времени выполнения. |
+| [Модель данных](Data-Model#индексы-как-контракт) | Состояние MongoDB, индексы и TTL. |
+| [Тесты и CI](Testing-And-CI#автоматические-проверки-github-actions) | Полный набор проверок CI перед развёртыванием. |

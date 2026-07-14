@@ -44,8 +44,8 @@ stateDiagram-v2
 | Действие | Кто делает | Защита | Источник |
 |---|---|---|---|
 | Создать заявку | Только кредитор, для двух разных участников события | Сумма положительна по схеме; стороны проверяются сервисом | [создание](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/payments.py#L304-L362) |
-| Отметить «оплачено» | Только должник | Создаётся ожидающий подтверждения платёж | [mark paid](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/payments.py#L514-L557) |
-| Подтвердить/отклонить | Стороны платежа | Перед действием выдаётся confirmation summary | [API подтверждения](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/payments.py#L118-L157), [summary](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/payments.py#L679-L710) |
+| Отметить «оплачено» | Только должник | Создаётся ожидающий подтверждения платёж | [отметка оплаты](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/payments.py#L514-L557) |
+| Подтвердить/отклонить | Только получатель платежа | Перед действием сервер выдаёт сводку подтверждения | [API подтверждения](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/payments.py#L118-L157), [сводка](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/payments.py#L679-L710) |
 | Оспорить заявку | Любая из двух сторон | Допустимо только для активных статусов | [спор заявки](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/payments.py#L654-L676) |
 | Вести отдельный спор | Участник события | Есть создание, список и разрешение | [disputes API](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/disputes.py#L12-L39) |
 
@@ -57,6 +57,7 @@ stateDiagram-v2
 
 | Страница | Связь |
 |---|---|
+| [Главная](Home) | Полный каталог Вики |
 | [Обзор продукта](Product-Overview) | Граница учёта и реального перевода |
 | [Путь пользователя](User-Journey) | Действия сторон платежа |
 | [Жизненный цикл чека](Receipt-Lifecycle) | Откуда возникают обязательства |
