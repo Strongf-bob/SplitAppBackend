@@ -104,7 +104,7 @@ git diff --check -- docs/wiki
 2. Проверьте run workflow и commit, созданный в зеркальном репозитории.
 3. Если зеркало не обновилось, исправляйте source/workflow credentials или GitHub Wiki settings; не делайте ручную смысловую правку только в `.wiki.git`.
 
-## Review checklist
+## Контрольный список review
 
 - [ ] Факт подтверждён кодом, `openapi.yaml`, Compose/CI config или явным product decision.
 - [ ] Техническое утверждение имеет точную source link; продуктовая страница не выдаёт план за реализованную возможность.
@@ -115,9 +115,9 @@ git diff --check -- docs/wiki
 
 ## Связанные страницы
 
-| Page | Relationship |
+| Страница | Связь |
 |---|---|
 | [Онбординг](Onboarding) | Маршрут авторов и читателей документации. |
-| [API guide](API-Guide) | Правило синхронного изменения API-контракта. |
+| [Руководство по API](API-Guide) | Правило синхронного изменения API-контракта. |
 | [Тесты и CI](Testing-And-CI) | Общие локальные и CI проверки. |
 | [Операции и деплой](Operations-And-Deployment) | Publication/deploy workflow и наблюдаемость. |

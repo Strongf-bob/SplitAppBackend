@@ -50,7 +50,7 @@ docker compose logs --tail=200 api
 
 Перед запуском production API задайте Mongo URI/credentials, object-storage keys при использовании receipt images, allowed CORS origins и runtime secrets в server-side `.env`; `.env` не включается в CI deploy archive. [app/core/db.py:32-94](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/db.py#L32-L94) [app/core/s3.py:19-43](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/s3.py#L19-L43) [ci.yml:219-229](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.github/workflows/ci.yml#L219-L229)
 
-## Deploy
+## Развёртывание
 
 Deploy job запускается только для push в `main` после test и LLM smoke. Он валидирует secrets, передаёт checkout по SSH, сохраняет server-side `.env`, делает port preflight, поднимает Compose и ждёт `/api/ping`. [ci.yml:158-217](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.github/workflows/ci.yml#L158-L217) [ci.yml:263-308](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.github/workflows/ci.yml#L263-L308)
 
@@ -74,7 +74,7 @@ sequenceDiagram
 
 `mongo-data`, Prometheus, Loki и Grafana — named volumes; критичные пользовательские данные находятся в MongoDB, поэтому backup должен быть отдельной регулярной процедурой (volume snapshot либо `mongodump`) и восстановление следует репетировать вне production. [compose.yaml:180-190](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml#L180-L190) Перед recovery сначала зафиксируйте request IDs, `docker compose ps` и последние API logs; unexpected exceptions уже содержат request context. [app/main.py:91-139](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L91-L139)
 
-## Related Pages
+## Связанные страницы
 
 | Page | Relationship |
 |---|---|

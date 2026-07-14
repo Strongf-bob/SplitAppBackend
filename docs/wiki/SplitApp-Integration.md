@@ -1,9 +1,15 @@
+---
+title: "Интеграция SplitApp"
+description: "Граница ответственности между клиентом SplitApp и серверным контрактом SplitAppBackend."
+---
+
 # Интеграция SplitApp и SplitAppBackend
 
 Эта страница описывает границу между нативным iOS-приложением
 [Strongf-bob/SplitApp](https://github.com/Strongf-bob/SplitApp) и этим backend-репозиторием.
-Она дополняет [iOS-интеграцию](iOS-Frontend-Integration): там приведено соответствие
-конкретных endpoint-структур, здесь — правила совместной поставки и источник правды.
+Она описывает правила для текущего iOS-клиента и других потребителей API: сервер определяет
+личность, права и финансовую истину, а клиент бережно отображает результат и повторяет только
+допустимые запросы.
 
 ## Граница ответственности
 
@@ -69,8 +75,8 @@ HTTP layer и auth dependency можно проследить в
 | Посмотреть долги и договориться о расчёте | `/api/events/{id}/balances*`, `/api/events/{id}/settlement-*` | Балансы и план вычисляет backend; plan не означает совершённый платёж. |
 | Зафиксировать перевод | `/api/events/{id}/payments`, `/api/events/{id}/payment-requests`, `/api/payments/*` | Только подтверждённый платёж влияет на финальное состояние; стороны операции проверяются сервером. |
 
-Полный набор путей и схем остаётся в [OpenAPI-контракте](../openapi.yaml) и
-[API reference](API-Reference).
+Полный набор путей и схем остаётся в [OpenAPI-контракте](https://github.com/Strongf-bob/SplitAppBackend/blob/main/openapi.yaml) и
+[Руководстве по API](API-Guide).
 
 ## Совместимая поставка изменения контракта
 
@@ -87,10 +93,9 @@ HTTP layer и auth dependency можно проследить в
 сохранять один `Idempotency-Key` на пользовательское намерение и повторять именно его при
 сетевом retry; подробности — в [API guide](API-Guide).
 
-## Related Pages
+## Связанные страницы
 
-- [API guide](API-Guide)
-- [iOS-интеграция](iOS-Frontend-Integration)
+- [Руководство по API](API-Guide)
 - [Аутентификация и безопасность](Authentication-And-Security)
 - [Деньги и взаиморасчёты](Money-And-Settlement)
-- [Обзор проекта](Project-Overview)
+- [Архитектура](Architecture)

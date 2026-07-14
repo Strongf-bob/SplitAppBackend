@@ -88,7 +88,7 @@ Lifespan намеренно не начинает обслуживание с н
 
 Каждый запрос получает входящий или новый UUID, возвращается с `X-Request-ID`, записывается структурированным JSON и наблюдается как count/duration с template path, а не с raw URL. [app/main.py:74-139](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L74-L139) Prometheus определяет отдельные HTTP, service, DB, domain и money метрики. [app/core/monitoring.py:13-75](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/monitoring.py#L13-L75)
 
-## Related Pages
+## Связанные страницы
 
 | Page | Relationship |
 |---|---|

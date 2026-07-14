@@ -40,7 +40,7 @@ flowchart TB
 
 ## Как исследовать перед реализацией
 
-1. Начните с бизнес-сценария в [User journey](User-Journey), [Money and settlement](Money-And-Settlement) или [Receipt lifecycle](Receipt-Lifecycle), затем проследите HTTP path в [API reference](API-Reference).
+1. Начните с бизнес-сценария в [Пути пользователя](User-Journey), [Деньгах и взаиморасчётах](Money-And-Settlement) или [Жизненном цикле чека](Receipt-Lifecycle), затем проследите HTTP path в [Руководстве по API](API-Guide).
 2. Постройте read/write graph: router → schema → service → collection/index → event/receipt/payment projection. Карта relations и индексов находится в [Data model](Data-Model).
 3. Определите consistency boundary. Для финансовой записи это event и подтверждённое состояние; для identity-операции это actor + scope + idempotency key. [Индексы idempotency](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L58-L67)
 4. Отделите server-owned факт от внешнего утверждения: перевод денег происходит вне продукта, поэтому приложение фиксирует только согласованную заявку и подтверждение, а не банковскую истину. [Обзор продукта](Product-Overview#граница-продукта)
@@ -57,7 +57,7 @@ flowchart TB
 | Новый AI write-path без confirm | Модель получает возможность менять чужие деньги или доступы. | Сохранить draft-first и server-side confirmation gate. |
 | Public observability endpoint | Метрики и логи становятся источником операционных/персональных деталей. | Сохранить отдельный metrics secret и закрытый сетевой контур. |
 
-## Design-review checklist
+## Контрольный список design-review
 
 ```text
 [ ] Actor and resource ownership are explicit.

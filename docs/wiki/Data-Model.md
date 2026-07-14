@@ -60,7 +60,7 @@ stateDiagram-v2
 
 Индексы создаются на startup до готовности приложения; это не миграция «по желанию». [app/main.py:192-202](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L192-L202) Unique indexes защищают идентичность и повторную обработку, TTL ограничивает refresh/idempotency state, а compound indexes соответствуют реальным выборкам: event timeline, active membership и inbox payment requests. [app/services/indexes.py:18-67](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L18-L67)
 
-## Related Pages
+## Связанные страницы
 
 | Page | Relationship |
 |---|---|

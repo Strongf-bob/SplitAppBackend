@@ -45,7 +45,7 @@ git diff --check
 
 Для изменений API также сверяйте generated `app.openapi()` с `openapi.yaml`, а для docs — существование файлов, relative links и Mermaid syntax. API router registration находится в одном месте, поэтому добавленный router должен быть включён в `create_app`. [app/main.py:223-248](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L223-L248)
 
-## GitHub Actions
+## Автоматические проверки GitHub Actions
 
 Workflow запускается на PR и push в `main`/`strongf/**`; `test` зависит от `lint`. [ci.yml:1-61](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.github/workflows/ci.yml#L1-L61) На push, LLM job требует provider credentials, делает три попытки для ролей primary/fast_chat/intent и исполняет smoke pytest. [ci.yml:63-156](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.github/workflows/ci.yml#L63-L156) Production deploy является gated только для `refs/heads/main`. [ci.yml:158-165](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.github/workflows/ci.yml#L158-L165)
 
@@ -73,11 +73,11 @@ sequenceDiagram
 | Persistence | unique and TTL indexes; soft-deleted resource invisible | [app/services/indexes.py:4-67](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L4-L67) |
 | Runtime/observability | `/api/ping`, request ID, generic 500, protected metrics | [app/main.py:91-139](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L91-L139) |
 
-## Related Pages
+## Связанные страницы
 
 | Page | Relationship |
 |---|---|
 | [Архитектура](Architecture.md#ключевые-пути) | Contract paths, которые покрывают tests. |
 | [Аутентификация и безопасность](Authentication-And-Security.md#авторизация-ресурсов) | Security cases для regression tests. |
 | [Операции и деплой](Operations-And-Deployment.md#deploy) | CI gates и production smoke. |
-| [API Reference](API-Reference.md) | API contract, который надо сохранять синхронным. |
+| [Руководство по API](API-Guide.md) | API-контракт, который надо сохранять синхронным. |

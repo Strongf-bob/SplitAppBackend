@@ -64,7 +64,7 @@ S3 credentials читаются из environment и не попадают в API
 
 CORS разрешает только список development/production origins либо явный `CORS_ALLOWED_ORIGINS`; credentials разрешены, поэтому wildcard здесь намеренно не применяется. [app/main.py:43-71](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L43-L71) Необработанная ошибка раскрывается клиенту только как `Internal server error.`, а диагностические type/message идут в server log вместе с request ID. [app/main.py:91-108](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L91-L108)
 
-## Related Pages
+## Связанные страницы
 
 | Page | Relationship |
 |---|---|
