@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 import json
 import logging
 import os
@@ -200,7 +201,21 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         raise RuntimeError("Could not connect to MongoDB with current settings.") from exc
 
-    yield
+    async def probe_splitik_model_pools() -> None:
+        while True:
+            try:
+                await asyncio.to_thread(splitik_llm.probe_model_pools)
+            except Exception:
+                logger.exception("splitik_model_pool_probe_failed")
+            await asyncio.sleep(600)
+
+    splitik_probe_task = asyncio.create_task(probe_splitik_model_pools())
+    try:
+        yield
+    finally:
+        splitik_probe_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await splitik_probe_task
 
     close_mongodb(app)
 

@@ -1443,6 +1443,7 @@ def test_splitik_prompt_requires_markdown_and_no_emoji(db, monkeypatch):
     system_prompt = calls[-1]["system_prompt"]
     assert calls[-1]["model_role"] == "fast_chat"
     assert "Markdown" in system_prompt
+    assert "только поддерживаемый в чате Markdown" in system_prompt
     assert "emoji" in system_prompt
     assert "без emoji" in system_prompt
     assert "короткие абзацы" in system_prompt

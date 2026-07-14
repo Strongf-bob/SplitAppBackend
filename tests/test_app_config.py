@@ -442,6 +442,11 @@ def test_deploy_syncs_splitik_llm_env_checked_by_smoke_gate():
     assert "secrets.SPLITIK_PRIMARY_MODEL || secrets.OCR_LLM_MODEL" in workflow
     assert "SPLITIK_FAST_CHAT_MODEL_VALUE" in workflow
     assert "deepseek-v4-flash" in workflow
+    assert "SPLITIK_TEXT_MODEL_POOL_VALUE" in workflow
+    assert "kimi-k2.6" in workflow
+    assert "SPLITIK_VISION_MODEL_POOL_VALUE" in workflow
+    assert "qwen3.7-plus" in workflow
+    assert "SPLITIK_VISION_SMOKE_IMAGE_URL_SECRET" in workflow
     assert "SPLITIK_INTENT_MODEL_VALUE" in workflow
     assert (
         "SPLITIK_INTENT_TIMEOUT_SECONDS: ${{ vars.SPLITIK_INTENT_TIMEOUT_SECONDS || '12' }}"
