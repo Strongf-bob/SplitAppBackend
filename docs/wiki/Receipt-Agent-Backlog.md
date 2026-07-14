@@ -9,7 +9,7 @@ integration намеренно не реализован, пока не выбр
 - Manual receipt creation, item allocation, confirmation, debt calculation и payment flows реализованы.
 - `POST /api/events/{id}/receipt-drafts/ai` вызывает configured LLM models и создает receipt draft из user-provided text.
 - AI drafts сохраняются в `receipt_ai_drafts`, требуют human review и не влияют на balances.
-- PWA может показывать editable review card, disagreement state и model metadata.
+- Нативный iOS-клиент может показывать editable review card, disagreement state и model metadata.
 
 ## Provider Contract Blockers
 

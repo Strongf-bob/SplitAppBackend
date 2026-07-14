@@ -12,7 +12,7 @@ from app.core import tokens
 from app.core.monitoring import metrics_response, monitor_db_operation, monitor_service_operation
 from app.core.monitoring import record_domain_event, refresh_database_metrics
 from app.dependencies import _is_internal_client, get_db, require_auth_token
-from app.main import configure_cors, configure_public_docs, configure_pwa, cors_allowed_origins
+from app.main import configure_cors, configure_public_docs, cors_allowed_origins
 from app.main import configure_exception_handlers, configure_request_logging
 from app.routers.client_reports import router as client_reports_router
 from app.routers.events import router as events_router
@@ -218,7 +218,7 @@ def test_metrics_endpoint_accepts_metrics_token(monkeypatch):
     assert "splitapp_http_requests_total" in response.text
 
 
-def test_non_api_paths_are_public_for_pwa_shell():
+def test_non_api_paths_are_public():
     api = FastAPI(dependencies=[Depends(require_auth_token)])
 
     @api.get("/app")
@@ -245,113 +245,6 @@ def test_api_paths_still_require_bearer_token():
     assert response.status_code == 401
 
 
-def test_pwa_static_routes_are_registered(monkeypatch, tmp_path):
-    web_root = tmp_path / "web"
-    out_root = web_root / "out"
-    assets_root = out_root / "assets"
-    next_static_root = out_root / "_next" / "static" / "chunks"
-    assets_root.mkdir(parents=True)
-    next_static_root.mkdir(parents=True)
-    (out_root / "index.html").write_text("<!doctype html><title>SplitApp</title>")
-    (out_root / "manifest.webmanifest").write_text(
-        json.dumps({"name": "SplitApp", "short_name": "SplitApp"})
-    )
-    (out_root / "sw.js").write_text('const CACHE_NAME = "splitapp-next-pwa-test";')
-    (assets_root / "icon.svg").write_text("<svg />")
-    (next_static_root / "main-app.js").write_text("console.log('next');")
-    monkeypatch.setattr(app_main, "WEB_ROOT", web_root)
-
-    api = FastAPI(dependencies=[Depends(require_auth_token)])
-    configure_pwa(api)
-
-    client = TestClient(api)
-
-    assert client.get("/").status_code == 200
-    assert client.get("/app").status_code == 200
-    assert client.get("/app/events/demo").status_code == 200
-    manifest = client.get("/manifest.webmanifest")
-    assert manifest.status_code == 200
-    assert manifest.json()["short_name"] == "SplitApp"
-    service_worker = client.get("/sw.js")
-    assert service_worker.status_code == 200
-    assert "CACHE_NAME" in service_worker.text
-    next_asset = client.get("/_next/static/chunks/main-app.js")
-    assert next_asset.status_code in {200, 404}
-
-
-def test_legacy_vanilla_pwa_shell_is_not_tracked():
-    legacy_paths = [
-        PROJECT_ROOT / "web" / "index.html",
-        PROJECT_ROOT / "web" / "sw.js",
-        PROJECT_ROOT / "web" / "manifest.webmanifest",
-        PROJECT_ROOT / "web" / "assets" / "app.js",
-        PROJECT_ROOT / "web" / "assets" / "app.css",
-    ]
-
-    assert [path for path in legacy_paths if path.exists()] == []
-
-
-def test_pwa_routes_are_not_registered_without_export(monkeypatch, tmp_path):
-    web_root = tmp_path / "web"
-    web_root.mkdir()
-    monkeypatch.setattr(app_main, "WEB_ROOT", web_root)
-
-    api = FastAPI(dependencies=[Depends(require_auth_token)])
-    configure_pwa(api)
-    client = TestClient(api)
-
-    assert client.get("/").status_code == 404
-    assert client.get("/app").status_code == 404
-    assert client.get("/manifest.webmanifest").status_code == 404
-
-
-def test_public_root_is_install_landing_page():
-    app_page = (PROJECT_ROOT / "web" / "src" / "app" / "page.tsx").read_text()
-    package_json = json.loads((PROJECT_ROOT / "web" / "package.json").read_text())
-    components_json = json.loads((PROJECT_ROOT / "web" / "components.json").read_text())
-
-    assert package_json["scripts"]["build"] == "next build"
-    assert package_json["dependencies"]["next"]
-    assert package_json["dependencies"]["react"]
-    assert package_json["dependencies"]["framer-motion"]
-    assert package_json["dependencies"]["lucide-react"]
-    assert "tailwindcss" in package_json["devDependencies"]
-    assert components_json["style"] == "new-york"
-    assert "Split." in app_page
-    assert "Делите счета поровну" in app_page
-    assert "Войти через Яндекс" in app_page
-    assert "motion" in app_page
-
-
-def test_pwa_static_routes_support_head_smoke_checks(monkeypatch, tmp_path):
-    web_root = tmp_path / "web"
-    out_root = web_root / "out"
-    assets_root = out_root / "assets"
-    next_static_root = out_root / "_next" / "static" / "chunks"
-    assets_root.mkdir(parents=True)
-    next_static_root.mkdir(parents=True)
-    (out_root / "index.html").write_text("<!doctype html><title>SplitApp</title>")
-    (out_root / "manifest.webmanifest").write_text(
-        json.dumps({"name": "SplitApp", "short_name": "SplitApp"})
-    )
-    (out_root / "sw.js").write_text('const CACHE_NAME = "splitapp-next-pwa-test";')
-    (assets_root / "icon.svg").write_text("<svg />")
-    (next_static_root / "main-app.js").write_text("console.log('next');")
-    monkeypatch.setattr(app_main, "WEB_ROOT", web_root)
-
-    api = FastAPI(dependencies=[Depends(require_auth_token)])
-    configure_pwa(api)
-
-    client = TestClient(api)
-
-    assert client.head("/").status_code == 200
-    assert client.head("/app").status_code == 200
-    assert client.head("/app/events/demo").status_code == 200
-    assert client.head("/manifest.webmanifest").status_code == 200
-    assert client.head("/sw.js").status_code == 200
-    assert client.head("/_next/static/chunks/main-app.js").status_code in {200, 404}
-
-
 def test_public_docs_are_served_without_auth():
     api = FastAPI(dependencies=[Depends(require_auth_token)])
     configure_public_docs(api)
@@ -367,12 +260,31 @@ def test_public_docs_are_served_without_auth():
     assert ":root" in stylesheet.text
 
 
-def test_docker_image_includes_pwa_assets():
+def test_docker_image_includes_static_landing_assets():
     dockerfile = (PROJECT_ROOT / "Dockerfile").read_text()
 
-    assert "COPY web ./web" in dockerfile
-    assert "npm run build" in dockerfile
+    assert "FROM node" not in dockerfile
+    assert "COPY app ./app" in dockerfile
+    assert "COPY web ./web" not in dockerfile
     assert "COPY docs ./docs" in dockerfile
+
+
+def test_static_landing_is_public_and_retired_routes_are_absent():
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+    app_main.configure_landing_site(api)
+    client = TestClient(api)
+
+    root = client.get("/")
+
+    assert root.status_code == 200
+    assert "SplitApp" in root.text
+    assert "Делите общие расходы" in root.text
+    assert client.head("/").status_code == 200
+    assert client.get("/assets/landing/landing.css").status_code == 200
+    assert client.get("/assets/landing/hero-phone.png").status_code == 200
+    assert client.get("/app").status_code == 404
+    assert client.get("/manifest.webmanifest").status_code == 404
+    assert client.get("/sw.js").status_code == 404
 
 
 def test_openapi_exposes_domain_enums_for_write_payloads():
@@ -468,31 +380,6 @@ def test_requirements_are_pinned_for_reproducible_installs():
 
     assert package_lines
     assert all("==" in line for line in package_lines)
-
-
-def test_pwa_uses_yandex_oauth_button_instead_of_manual_token_field():
-    app_page = (PROJECT_ROOT / "web" / "src" / "app" / "page.tsx").read_text()
-    splitapp_api = (PROJECT_ROOT / "web" / "src" / "lib" / "splitapp-api.ts").read_text()
-
-    assert "Войти через Яндекс" in app_page
-    assert "yandexTokenInput" not in app_page
-    assert "6c5725f5868c4604adaea1e4b892c14d" in splitapp_api
-    assert "https://split-app.ru/app" in splitapp_api
-    assert "https://oauth.yandex.ru/authorize" in splitapp_api
-    assert "access_token" in splitapp_api
-    assert "POST" in splitapp_api
-    assert "/api/login" in splitapp_api
-
-
-def test_pwa_contains_friendly_problem_report_surface():
-    app_page = (PROJECT_ROOT / "web" / "src" / "app" / "page.tsx").read_text()
-    splitapp_api = (PROJECT_ROOT / "web" / "src" / "lib" / "splitapp-api.ts").read_text()
-
-    assert "Сообщить о проблеме" in app_page
-    assert "Мы зафиксировали ошибку" in app_page
-    assert "Технические детали не показываются" not in app_page
-    assert "client_trace_id" in splitapp_api
-    assert "/api/client-reports" in splitapp_api
 
 
 def test_production_diagnostics_workflow_fetches_sanitized_reports():

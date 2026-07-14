@@ -62,7 +62,7 @@ def create_client_report(
         "metadata": _sanitize_metadata(payload.metadata),
         "actor_user_id": actor_user_id,
         "client_ip": client_ip,
-        "source": "pwa",
+        "source": "client",
         "status": "new",
         "created_at": utc_now(),
     }

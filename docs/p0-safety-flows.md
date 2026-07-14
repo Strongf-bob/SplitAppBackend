@@ -1,7 +1,7 @@
 # P0 Safety Flows
 
 Backend реализует P0 как API-first safety layer. Клиенты все еще должны
-построить PWA и iOS screens, которые показывают эти состояния пользователю.
+построить iOS screens, которые показывают эти состояния пользователю.
 
 ## Event Safety Defaults
 

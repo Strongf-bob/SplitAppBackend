@@ -37,7 +37,7 @@ from app.services import splitik_llm
 
 logger = logging.getLogger("splitapp")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-WEB_ROOT = PROJECT_ROOT / "web"
+LANDING_ROOT = PROJECT_ROOT / "app" / "static" / "landing"
 PUBLIC_DOCS_ROOT = PROJECT_ROOT / "docs" / "business-logic-site"
 
 DEFAULT_CORS_ALLOWED_ORIGINS = (
@@ -139,43 +139,15 @@ def configure_request_logging(api: FastAPI) -> None:
             )
 
 
-def configure_pwa(api: FastAPI) -> None:
-    pwa_root = WEB_ROOT / "out"
-    if not (pwa_root / "index.html").exists():
-        return
-
-    assets_root = pwa_root / "assets"
+def configure_landing_site(api: FastAPI) -> None:
+    assets_root = LANDING_ROOT / "assets"
     if assets_root.exists():
-        api.mount("/assets", StaticFiles(directory=assets_root), name="pwa-assets")
-
-    next_static_root = pwa_root / "_next" / "static"
-    if next_static_root.exists():
-        api.mount(
-            "/_next/static",
-            StaticFiles(directory=next_static_root),
-            name="next-static",
-        )
+        api.mount("/assets/landing", StaticFiles(directory=assets_root), name="landing-assets")
 
     @api.get("/", include_in_schema=False)
     @api.head("/", include_in_schema=False)
-    @api.get("/app", include_in_schema=False)
-    @api.head("/app", include_in_schema=False)
-    @api.get("/app/{path:path}", include_in_schema=False)
-    @api.head("/app/{path:path}", include_in_schema=False)
-    async def pwa_shell() -> FileResponse:
-        return FileResponse(pwa_root / "index.html")
-
-    @api.get("/manifest.webmanifest", include_in_schema=False)
-    @api.head("/manifest.webmanifest", include_in_schema=False)
-    async def pwa_manifest() -> FileResponse:
-        manifest_path = pwa_root / "manifest.webmanifest"
-        return FileResponse(manifest_path, media_type="application/manifest+json")
-
-    @api.get("/sw.js", include_in_schema=False)
-    @api.head("/sw.js", include_in_schema=False)
-    async def pwa_service_worker() -> FileResponse:
-        service_worker_path = pwa_root / "sw.js"
-        return FileResponse(service_worker_path, media_type="application/javascript")
+    async def landing_page() -> FileResponse:
+        return FileResponse(LANDING_ROOT / "index.html")
 
 
 def configure_public_docs(api: FastAPI) -> None:
@@ -244,7 +216,7 @@ def create_app() -> FastAPI:
     configure_request_logging(api)
     configure_cors(api)
     configure_public_docs(api)
-    configure_pwa(api)
+    configure_landing_site(api)
     return api
 
 

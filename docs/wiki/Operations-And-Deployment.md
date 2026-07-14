@@ -177,12 +177,11 @@ in `SPLITIK_VISION_SMOKE_IMAGE_URL` and its expected amount in kopecks in
 The probe accepts an equivalent ruble total in `payload.total` when a provider
 does not return `payload.total_amount_kopecks`.
 
-PWA:
+Public site:
 
-- `web/` содержит installable SplitApp web client.
-- `/`, `/app`, `/manifest.webmanifest`, `/sw.js` и `/assets/*` — public static routes, которые обслуживает FastAPI.
+- `/` отдает статичную страницу о нативном iOS-приложении SplitApp.
+- `/assets/landing/*` содержит ее статические assets.
 - `/api/*` остается bearer-token protected, кроме documented auth/health exceptions.
-- Service worker кеширует только app shell и static assets. Authenticated API responses он не кеширует.
 
 Grafana:
 

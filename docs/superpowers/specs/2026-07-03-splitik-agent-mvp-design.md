@@ -1,5 +1,7 @@
 # Splitik Agent MVP Design
 
+> Historical design. PWA references are retired as of 2026-07-14; the native iOS application is the only product client.
+
 ## Цель
 
 Сделать Сплитика базовым безопасным AI-агентом SplitApp, а не просто чатиком.

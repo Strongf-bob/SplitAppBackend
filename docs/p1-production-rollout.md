@@ -3,15 +3,14 @@
 Дата: 2026-07-01.
 
 P1 закрывает backend/API и production-readiness для домена `https://split-app.ru`.
-Полноценная PWA/UX-разработка в этот шаг не входит: backend только должен
-отдавать текущий web shell и защищенный API на актуальном production-домене.
+Полноценная iOS/UX-разработка в этот шаг не входит: backend должен отдавать
+статичную публичную страницу и защищенный API на актуальном production-домене.
 
 ## Scope
 
 - Production API base URL: `https://split-app.ru`.
 - Старый домен `splitapp.tech` не использовать в новых настройках.
-- Backend-owned static shell должен открываться через `/`, `/app`,
-  `/manifest.webmanifest`, `/sw.js` и `/assets/*`.
+- Статичная публичная страница должна открываться через `/`.
 - `/api/*` остается backend API; защищенные endpoints требуют bearer token.
 - P0 safety flows остаются API-first контрактом: receipt review, invite decline,
   confirmation summaries и home summary buckets.
@@ -62,10 +61,6 @@ Prometheus, Loki и `/api/metrics` нельзя публиковать как п
 curl -fsS https://split-app.ru/api/ping
 curl -fsS https://split-app.ru/api/health/db
 curl -I https://split-app.ru/
-curl -I https://split-app.ru/app
-curl -I https://split-app.ru/manifest.webmanifest
-curl -I https://split-app.ru/sw.js
-curl -I "https://split-app.ru$(find web/out/_next/static/chunks -name '*.js' | head -n 1 | sed 's#web/out##')"
 ```
 
 Expected result:

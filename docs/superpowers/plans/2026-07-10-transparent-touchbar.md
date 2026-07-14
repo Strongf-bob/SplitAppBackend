@@ -1,5 +1,7 @@
 # Transparent Touchbar Implementation Plan
 
+> Historical plan. The PWA surface was retired on 2026-07-14; do not implement this plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the PWA's Liquid Glass bottom navigation with the approved lightweight transparent rail while preserving navigation behavior and the Splitik artwork.

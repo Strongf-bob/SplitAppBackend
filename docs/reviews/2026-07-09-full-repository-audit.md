@@ -1,5 +1,7 @@
 # SplitAppBackend Full Repository Audit - 2026-07-09
 
+> Historical record. The PWA/Next runtime described below was removed on 2026-07-14 and replaced by a static public landing page plus the native iOS client.
+
 Scope: `/Users/strongf/Developer/SplitApp Yandex/SplitAppBackend` only.
 
 This is a practical single-agent repository audit covering code, dependencies, documentation, CI/deploy, PWA, and security-sensitive flows. It is not a formal exhaustive Codex Security scan: the Codex Security preflight reported incomplete/degraded coverage without delegated workers.

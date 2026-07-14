@@ -1,5 +1,7 @@
 # Full Repository Remediation - 2026-07-09
 
+> Historical record. The PWA/Next runtime described below was removed on 2026-07-14 and replaced by a static public landing page plus the native iOS client.
+
 ## Fixed
 
 - Updated PWA dependencies to a Next.js line that no longer bundles the vulnerable PostCSS version; `npm audit --omit=dev --audit-level=moderate` now reports zero vulnerabilities.

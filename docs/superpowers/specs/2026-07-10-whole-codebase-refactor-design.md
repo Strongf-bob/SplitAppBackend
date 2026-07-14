@@ -1,5 +1,7 @@
 # Whole Codebase Refactor Design
 
+> Historical design. The PWA runtime was removed on 2026-07-14; current client work belongs to the native iOS application.
+
 ## Goal
 
 Reduce the maintenance cost of the backend-served SplitApp PWA while preserving all existing HTTP contracts, authorization boundaries, and user-visible flows.

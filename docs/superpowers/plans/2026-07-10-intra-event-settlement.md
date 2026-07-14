@@ -1,5 +1,7 @@
 # Intra-Event Settlement Implementation Plan
 
+> Historical plan. Its PWA work is retired as of 2026-07-14; current client work belongs to the native iOS application.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans task-by-task. Every behavior change follows test-driven development.
 
 **Goal:** Safely simplify debts inside one event and let participants approve and pay the recommended transfers without changing receipt history or trusting client-calculated money.

@@ -34,14 +34,10 @@
       </section>
 
       <section class="section">
-        <h2>Runtime, PWA и health</h2>
+        <h2>Runtime, публичная страница и health</h2>
         <div class="grid three">
-          <article class="endpoint"><span class="method">GET</span><strong>/</strong><p class="muted">PWA shell, если папка <code>web/</code> присутствует.</p></article>
-          <article class="endpoint"><span class="method">GET</span><strong>/app</strong><p class="muted">PWA app shell для прямого открытия приложения.</p></article>
-          <article class="endpoint"><span class="method">GET</span><strong>/app/{path}</strong><p class="muted">Fallback для внутренних PWA routes.</p></article>
-          <article class="endpoint"><span class="method">GET</span><strong>/manifest.webmanifest</strong><p class="muted">Manifest установленного PWA.</p></article>
-          <article class="endpoint"><span class="method">GET</span><strong>/sw.js</strong><p class="muted">Service worker PWA.</p></article>
-          <article class="endpoint"><span class="method">GET</span><strong>/assets/*</strong><p class="muted">Статические assets PWA.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/</strong><p class="muted">Статичная публичная страница о нативном iOS-приложении.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/assets/landing/*</strong><p class="muted">Статические assets публичной страницы.</p></article>
           <article class="endpoint"><span class="method">GET</span><strong>/api/ping</strong><p class="muted">Легкий liveness check.</p></article>
           <article class="endpoint"><span class="method">GET</span><strong>/api/health/db</strong><p class="muted">Проверка MongoDB connection.</p></article>
           <article class="endpoint"><span class="method">GET</span><strong>/api/metrics</strong><p class="muted">Prometheus metrics; в production должен быть защищен токеном/прокси.</p></article>

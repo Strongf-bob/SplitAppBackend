@@ -55,31 +55,9 @@
 Login endpoint: `POST /api/login`.
 Проверка MongoDB: `GET /api/health/db`.
 
-PWA-клиент обслуживается тем же FastAPI-процессом:
-
-- `GET /` и `GET /app` возвращают web/PWA shell из `web/out/` после Next.js build.
-- `GET /manifest.webmanifest` и `GET /sw.js` нужны для installability.
-- Static assets лежат в `web/public/` на уровне исходников и попадают в `web/out/` при сборке.
-- Protected product data по-прежнему берется из `/api/*` с bearer auth.
-
-Frontend теперь живет в `web/` как Next.js/React PWA на Tailwind CSS, shadcn/ui-style
-компонентах и Framer Motion. Для локальной разработки используйте:
-
-```bash
-cd web
-npm install
-npm run dev
-```
-
-Для production/static export:
-
-```bash
-cd web
-npm run build
-```
-
-FastAPI обслуживает `web/out/`; перед production или локальной проверкой PWA
-нужно выполнить `npm run build` в `web/`.
+Публичный `GET /` отдает статичную страницу о нативном iOS-приложении SplitApp.
+Она не требует Node.js-сборки. Все продуктовые данные и действия доступны
+только через защищенный backend API `/api/*` с bearer auth.
 
 ## Запуск на сервере
 
