@@ -65,6 +65,35 @@ def test_splitik_llm_extracts_json_after_model_thinking_block():
     ) == {"payload": {}}
 
 
+def test_vision_probe_accepts_equivalent_ruble_total_after_thinking_block(monkeypatch):
+    _set_smoke_env(monkeypatch)
+    monkeypatch.setenv("SPLITIK_VISION_MODEL_POOL", "minimax-m3")
+    monkeypatch.setenv("SPLITIK_VISION_SMOKE_IMAGE_URL", "https://fixture.example/receipt.jpg")
+    monkeypatch.setenv("SPLITIK_VISION_SMOKE_EXPECTED_TOTAL_KOPECKS", "72713")
+
+    def fake_post(url, headers, json, timeout):
+        content = "ok"
+        if json["model"] == "minimax-m3":
+            content = '<think>Проверяю чек.</think>\n{"payload":{"total":"727.13"}}'
+        return _FakeSmokeResponse({"choices": [{"message": {"content": content}}]})
+
+    monkeypatch.setattr(splitik_llm.httpx, "post", fake_post)
+
+    assert splitik_llm.probe_model_pools()["vision:minimax-m3"] == "healthy"
+
+
+def test_vision_probe_rejects_invalid_expected_total_without_quarantining_models(monkeypatch):
+    _set_smoke_env(monkeypatch)
+    monkeypatch.setenv("SPLITIK_VISION_MODEL_POOL", "minimax-m3")
+    monkeypatch.setenv("SPLITIK_VISION_SMOKE_IMAGE_URL", "https://fixture.example/receipt.jpg")
+    monkeypatch.setenv("SPLITIK_VISION_SMOKE_EXPECTED_TOTAL_KOPECKS", "not-a-number")
+
+    with pytest.raises(ValueError, match="expected total"):
+        splitik_llm.probe_model_pools()
+
+    assert splitik_llm._MODEL_QUARANTINE_UNTIL == {}
+
+
 def test_splitik_llm_smoke_checks_each_configured_model_role(monkeypatch):
     _set_smoke_env(monkeypatch)
     calls = []

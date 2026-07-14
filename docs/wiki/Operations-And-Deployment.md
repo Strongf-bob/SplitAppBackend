@@ -171,9 +171,11 @@ Runtime failover uses `SPLITIK_TEXT_MODEL_POOL=deepseek-v4-flash,kimi-k2.6` and
 `SPLITIK_VISION_MODEL_POOL=minimax-m3,qwen3.7-plus`. A failed model is quarantined
 for `SPLITIK_MODEL_QUARANTINE_SECONDS` (default 600) and the next candidate is used.
 The API process also probes the configured pools every 10 minutes. To validate the
-vision pool against a real, anonymized receipt, store its private test URL in the
-`SPLITIK_VISION_SMOKE_IMAGE_URL` deployment secret and its expected amount in
+vision pool against a real receipt, store a stable public, anonymized fixture URL
+in `SPLITIK_VISION_SMOKE_IMAGE_URL` and its expected amount in kopecks in
 `SPLITIK_VISION_SMOKE_EXPECTED_TOTAL_KOPECKS`; do not use customer receipts.
+The probe accepts an equivalent ruble total in `payload.total` when a provider
+does not return `payload.total_amount_kopecks`.
 
 PWA:
 
