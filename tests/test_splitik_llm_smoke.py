@@ -4,6 +4,7 @@ from app.services import splitik_llm
 
 
 def _set_smoke_env(monkeypatch):
+    splitik_llm.reset_model_quarantines()
     monkeypatch.setenv("SPLITIK_LLM_BASE_URL", "https://ai.example/v1")
     monkeypatch.setenv("SPLITIK_LLM_API_KEY", "test-key")
     monkeypatch.setenv("SPLITIK_PRIMARY_MODEL", "primary-model")
@@ -137,6 +138,63 @@ def test_fast_chat_retries_the_same_provider_with_primary_model(monkeypatch):
         {"model": "deepseek-v4-flash", "timeout": 4.0},
         {"model": "primary-model", "timeout": 9.0},
     ]
+
+
+def test_text_model_pool_falls_back_to_kimi_after_deepseek_failure(monkeypatch):
+    _set_smoke_env(monkeypatch)
+    monkeypatch.setenv("SPLITIK_TEXT_MODEL_POOL", "deepseek-v4-flash,kimi-k2.6")
+    calls = []
+
+    def fake_post(url, headers, json, timeout):
+        calls.append(json["model"])
+        if json["model"] == "deepseek-v4-flash":
+            raise splitik_llm.httpx.ConnectError("provider unavailable")
+        return _FakeSmokeResponse({"choices": [{"message": {"content": "Готово."}}]})
+
+    monkeypatch.setattr(splitik_llm.httpx, "post", fake_post)
+
+    reply = splitik_llm.generate_splitik_reply(
+        system_prompt="system", user_message="привет", context={}, model_role="fast_chat"
+    )
+
+    assert reply == "Готово."
+    assert calls == ["deepseek-v4-flash", "kimi-k2.6"]
+
+
+def test_vision_model_pool_falls_back_to_qwen_after_minimax_failure(monkeypatch):
+    _set_smoke_env(monkeypatch)
+    monkeypatch.setenv("SPLITIK_VISION_MODEL_POOL", "minimax-m3,qwen3.7-plus")
+    calls = []
+
+    def fake_post(url, headers, json, timeout):
+        calls.append(json["model"])
+        if json["model"] == "minimax-m3":
+            raise splitik_llm.httpx.ReadTimeout("provider timed out")
+        return _FakeSmokeResponse({"choices": [{"message": {"content": '{"payload": {}}'}}]})
+
+    monkeypatch.setattr(splitik_llm.httpx, "post", fake_post)
+
+    candidate = splitik_llm.generate_receipt_image_candidate(
+        model_role="vision",
+        attachment_metadata=[],
+        image_urls=["https://fixture.example/receipt.jpg"],
+        user_message="чек",
+        context={},
+    )
+
+    assert candidate["model_id"] == "qwen3.7-plus"
+    assert calls == ["minimax-m3", "minimax-m3", "qwen3.7-plus"]
+
+    candidate = splitik_llm.generate_receipt_image_candidate(
+        model_role="vision",
+        attachment_metadata=[],
+        image_urls=["https://fixture.example/receipt.jpg"],
+        user_message="чек",
+        context={},
+    )
+
+    assert candidate["model_id"] == "qwen3.7-plus"
+    assert calls == ["minimax-m3", "minimax-m3", "qwen3.7-plus", "qwen3.7-plus"]
 
 
 def test_planner_retries_once_after_provider_read_timeout(monkeypatch):

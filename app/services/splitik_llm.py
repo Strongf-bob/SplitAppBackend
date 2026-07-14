@@ -8,6 +8,9 @@ import httpx
 from fastapi import HTTPException
 
 
+_MODEL_QUARANTINE_UNTIL: dict[str, float] = {}
+
+
 @dataclass(frozen=True)
 class SplitikLLMConfig:
     base_url: str
@@ -22,7 +25,7 @@ class SplitikLLMConfig:
 
     @property
     def model_ids(self) -> set[str]:
-        return {
+        configured_models = {
             model
             for model in {
                 self.primary_model,
@@ -34,6 +37,9 @@ class SplitikLLMConfig:
             }
             if model
         }
+        configured_models.update(_model_pool("SPLITIK_TEXT_MODEL_POOL", self.fast_chat_model))
+        configured_models.update(_model_pool("SPLITIK_VISION_MODEL_POOL", self.vision_model))
+        return configured_models
 
 
 @dataclass(frozen=True)
@@ -134,6 +140,64 @@ def _model_for_role(
     return model
 
 
+def _model_pool(name: str, default_model: str) -> list[str]:
+    configured = [value.strip() for value in _env(name).split(",") if value.strip()]
+    models = configured or [default_model]
+    return list(dict.fromkeys(models))
+
+
+def _fallback_model(config: SplitikLLMConfig, model_role: str, current_model: str) -> str | None:
+    if model_role in {"primary", "fast_chat", "intent"}:
+        candidates = _model_pool("SPLITIK_TEXT_MODEL_POOL", current_model)
+    elif model_role == "vision":
+        candidates = _model_pool("SPLITIK_VISION_MODEL_POOL", current_model)
+    else:
+        candidates = [current_model]
+    now = time.monotonic()
+    return next(
+        (
+            candidate
+            for candidate in candidates
+            if candidate != current_model and _MODEL_QUARANTINE_UNTIL.get(candidate, 0) <= now
+        ),
+        None,
+    )
+
+
+def _preferred_model(config: SplitikLLMConfig, model_role: str) -> str:
+    default_model = _model_for_role(config, model_role)  # type: ignore[arg-type]
+    if model_role in {"primary", "fast_chat", "intent"}:
+        candidates = _model_pool("SPLITIK_TEXT_MODEL_POOL", default_model)
+    elif model_role == "vision":
+        candidates = _model_pool("SPLITIK_VISION_MODEL_POOL", default_model)
+    else:
+        candidates = [default_model]
+    now = time.monotonic()
+    return next(
+        (candidate for candidate in candidates if _MODEL_QUARANTINE_UNTIL.get(candidate, 0) <= now),
+        default_model,
+    )
+
+
+def _quarantine_seconds() -> float:
+    try:
+        return float(_env("SPLITIK_MODEL_QUARANTINE_SECONDS") or "600")
+    except ValueError:
+        return 600.0
+
+
+def _quarantine_model(model: str) -> None:
+    _MODEL_QUARANTINE_UNTIL[model] = time.monotonic() + _quarantine_seconds()
+
+
+def _mark_model_healthy(model: str) -> None:
+    _MODEL_QUARANTINE_UNTIL.pop(model, None)
+
+
+def reset_model_quarantines() -> None:
+    _MODEL_QUARANTINE_UNTIL.clear()
+
+
 def _configured_model_roles(config: SplitikLLMConfig) -> list[str]:
     roles = ["primary", "fast_chat"]
     if config.intent_model:
@@ -227,6 +291,74 @@ def smoke_check_configured_models(
             )
         )
 
+    return results
+
+
+def probe_model_pools() -> dict[str, str]:
+    """Probe configured text and vision pools and quarantine failed candidates."""
+    config = load_config()
+    probes = [
+        ("text", model, None)
+        for model in _model_pool("SPLITIK_TEXT_MODEL_POOL", config.fast_chat_model)
+    ]
+    vision_fixture_url = _env("SPLITIK_VISION_SMOKE_IMAGE_URL")
+    expected_vision_total = _env("SPLITIK_VISION_SMOKE_EXPECTED_TOTAL_KOPECKS")
+    if vision_fixture_url:
+        probes.extend(
+            ("vision", model, vision_fixture_url)
+            for model in _model_pool("SPLITIK_VISION_MODEL_POOL", config.vision_model)
+        )
+
+    results: dict[str, str] = {}
+    for capability, model, fixture_url in probes:
+        user_content: str | list[dict] = "health check"
+        if fixture_url:
+            user_content = [
+                {
+                    "type": "text",
+                    "text": "Return only JSON with payload and questions for this receipt.",
+                },
+                {"type": "image_url", "image_url": {"url": fixture_url}},
+            ]
+        try:
+            response = httpx.post(
+                _chat_completions_url(config.base_url),
+                headers={
+                    "Authorization": f"Bearer {config.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "Return a short health-check response. No private data.",
+                        },
+                        {"role": "user", "content": user_content},
+                    ],
+                    "temperature": 0,
+                    **({"response_format": {"type": "json_object"}} if fixture_url else {}),
+                },
+                timeout=_role_timeout(config, "vision" if fixture_url else "fast_chat"),
+            )
+            if response.status_code >= 400:
+                raise RuntimeError(f"HTTP {response.status_code}")
+            content = _extract_chat_content(response.json())
+            if fixture_url:
+                parsed = _parse_json_object(content)
+                if not isinstance(parsed.get("payload"), dict):
+                    raise RuntimeError("vision fixture response lacks payload")
+                if (
+                    expected_vision_total
+                    and str(parsed["payload"].get("total_amount_kopecks")) != expected_vision_total
+                ):
+                    raise RuntimeError("vision fixture total does not match")
+        except (httpx.HTTPError, HTTPException, RuntimeError, ValueError):
+            _quarantine_model(model)
+            results[f"{capability}:{model}"] = "unhealthy"
+        else:
+            _mark_model_healthy(model)
+            results[f"{capability}:{model}"] = "healthy"
     return results
 
 
@@ -330,17 +462,34 @@ def generate_splitik_reply(
 ) -> str:
     config = load_config()
 
+    current_model = _preferred_model(config, model_role)
     try:
-        return _generate_splitik_reply_for_role(
+        reply = _generate_splitik_reply_for_role(
             config=config,
             system_prompt=system_prompt,
             user_message=user_message,
             context=context,
             model_role=model_role,
+            model_override=current_model,
         )
+        _mark_model_healthy(current_model)
+        return reply
     except HTTPException as exc:
+        _quarantine_model(current_model)
         if model_role != "fast_chat" or exc.status_code != 502:
             raise
+        fallback_model = _fallback_model(config, model_role, current_model)
+        if fallback_model:
+            reply = _generate_splitik_reply_for_role(
+                config=config,
+                system_prompt=system_prompt,
+                user_message=user_message,
+                context=context,
+                model_role=model_role,
+                model_override=fallback_model,
+            )
+            _mark_model_healthy(fallback_model)
+            return reply
         return _generate_splitik_reply_for_role(
             config=config,
             system_prompt=system_prompt,
@@ -357,8 +506,9 @@ def _generate_splitik_reply_for_role(
     user_message: str,
     context: dict,
     model_role: Literal["primary", "fast_chat"],
+    model_override: str | None = None,
 ) -> str:
-    model = _model_for_role(config, model_role)
+    model = model_override or _model_for_role(config, model_role)
 
     payload = {
         "model": model,
@@ -413,7 +563,8 @@ def _generate_json_candidate(
     config = load_config()
     if model_role not in {"primary", "intent", "verification", "escalation", "vision"}:
         raise HTTPException(status_code=400, detail="Invalid Splitik model role.")
-    model = _model_for_role(config, model_role)  # type: ignore[arg-type]
+    model = _preferred_model(config, model_role)
+    fallback_model = _fallback_model(config, model_role, model)
 
     payload = {
         "model": model,
@@ -449,38 +600,111 @@ def _generate_json_candidate(
         try:
             response = httpx.post(_chat_completions_url(config.base_url), **request_kwargs)
         except httpx.ReadTimeout as exc:
-            if model_role != "primary":
+            _quarantine_model(model)
+            if fallback_model:
+                model = fallback_model
+                fallback_request_kwargs = {
+                    **request_kwargs,
+                    "json": {**payload, "model": model},
+                }
+                try:
+                    response = httpx.post(
+                        _chat_completions_url(config.base_url), **fallback_request_kwargs
+                    )
+                    response_model_role = model_role
+                except httpx.HTTPError as fallback_exc:
+                    raise HTTPException(
+                        status_code=502, detail="Splitik LLM request failed."
+                    ) from fallback_exc
+            elif model_role != "primary":
                 raise HTTPException(status_code=502, detail="Splitik LLM request failed.") from exc
-            model = _model_for_role(config, "fast_chat")
-            fallback_request_kwargs = {
-                **request_kwargs,
-                "json": {**payload, "model": model},
-                "timeout": _role_timeout(config, "fast_chat"),
-            }
+            else:
+                model = _model_for_role(config, "fast_chat")
+                fallback_request_kwargs = {
+                    **request_kwargs,
+                    "json": {**payload, "model": model},
+                    "timeout": _role_timeout(config, "fast_chat"),
+                }
+                try:
+                    response = httpx.post(
+                        _chat_completions_url(config.base_url), **fallback_request_kwargs
+                    )
+                    response_model_role = "fast_chat"
+                except httpx.HTTPError as fallback_exc:
+                    raise HTTPException(
+                        status_code=502, detail="Splitik LLM request failed."
+                    ) from fallback_exc
+        except httpx.HTTPError as exc:
+            _quarantine_model(model)
+            if fallback_model:
+                model = fallback_model
+                fallback_request_kwargs = {
+                    **request_kwargs,
+                    "json": {**payload, "model": model},
+                }
+                try:
+                    response = httpx.post(
+                        _chat_completions_url(config.base_url), **fallback_request_kwargs
+                    )
+                    response_model_role = model_role
+                except httpx.HTTPError as fallback_exc:
+                    raise HTTPException(
+                        status_code=502, detail="Splitik LLM request failed."
+                    ) from fallback_exc
+            else:
+                raise HTTPException(status_code=502, detail="Splitik LLM request failed.") from exc
+    except httpx.HTTPError as exc:
+        _quarantine_model(model)
+        if fallback_model:
+            model = fallback_model
+            fallback_request_kwargs = {**request_kwargs, "json": {**payload, "model": model}}
             try:
                 response = httpx.post(
                     _chat_completions_url(config.base_url), **fallback_request_kwargs
                 )
-                response_model_role = "fast_chat"
+                response_model_role = model_role
             except httpx.HTTPError as fallback_exc:
                 raise HTTPException(
                     status_code=502, detail="Splitik LLM request failed."
                 ) from fallback_exc
-        except httpx.HTTPError as exc:
+        else:
             raise HTTPException(status_code=502, detail="Splitik LLM request failed.") from exc
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail="Splitik LLM request failed.") from exc
 
     if response.status_code in {401, 403}:
-        raise HTTPException(status_code=503, detail="Splitik LLM credentials were rejected.")
+        _quarantine_model(model)
+        if fallback_model and model != fallback_model:
+            model = fallback_model
+            fallback_request_kwargs = {**request_kwargs, "json": {**payload, "model": model}}
+            try:
+                response = httpx.post(
+                    _chat_completions_url(config.base_url), **fallback_request_kwargs
+                )
+                response_model_role = model_role
+            except httpx.HTTPError as exc:
+                raise HTTPException(status_code=502, detail="Splitik LLM request failed.") from exc
+        if response.status_code in {401, 403}:
+            raise HTTPException(status_code=503, detail="Splitik LLM credentials were rejected.")
     if response.status_code >= 400:
-        raise HTTPException(status_code=502, detail="Splitik LLM provider returned an error.")
+        _quarantine_model(model)
+        if fallback_model and model != fallback_model:
+            model = fallback_model
+            fallback_request_kwargs = {**request_kwargs, "json": {**payload, "model": model}}
+            try:
+                response = httpx.post(
+                    _chat_completions_url(config.base_url), **fallback_request_kwargs
+                )
+                response_model_role = model_role
+            except httpx.HTTPError as exc:
+                raise HTTPException(status_code=502, detail="Splitik LLM request failed.") from exc
+        if response.status_code >= 400:
+            raise HTTPException(status_code=502, detail="Splitik LLM provider returned an error.")
 
     try:
         body = response.json()
     except ValueError as exc:
         raise HTTPException(status_code=502, detail="Splitik LLM response was invalid.") from exc
 
+    _mark_model_healthy(model)
     return {
         "model_role": response_model_role,
         "model_id": model,
