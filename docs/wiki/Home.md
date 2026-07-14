@@ -1,54 +1,49 @@
-# SplitAppBackend Wiki
+# Wiki SplitAppBackend
 
-Это Wiki backend-репозитория SplitApp. Здесь собрана рабочая документация по API, запуску, доменной логике, безопасности, деплою, тестам и связи с iOS-приложением.
+Русскоязычная точка входа в документацию backend-а SplitApp. Выберите маршрут по своей задаче: понять продукт, подключить клиент, запустить и сопровождать сервис или поддержать саму Wiki.
 
-## Быстрые ссылки
+## Продукт и доменная логика
 
-- [Обзор проекта](Project-Overview) - структура репозитория, ответственность backend и основные зависимости.
-- [Локальный запуск](Local-Setup) - как поднять backend на машине разработчика.
-- [API](API-Reference) - карта endpoints и ссылка на OpenAPI-контракт.
-- [Доменные сценарии](Domain-Flows) - как связаны события, чеки, балансы и платежи.
-- [Data model](Data-Model) - внутренняя схема MongoDB collections, связей, lifecycle статусов и source-of-truth правил.
-- [Интеграция с iOS](iOS-Frontend-Integration) - контракт backend для frontend-репозитория SplitApp.
-- [Аутентификация и безопасность](Authentication-And-Security) - токены, права доступа, storage и базовые правила безопасности.
-- [Операции и деплой](Operations-And-Deployment) - production runtime, env-переменные, Docker Compose, логи и метрики.
-- [Тесты и CI](Testing-And-CI) - локальные проверки, GitHub Actions и правила для backend-изменений.
-- [Поддержка Wiki](Wiki-Maintenance) - как Wiki синхронизируется из репозитория.
-- [Сплитик](Splitik-Agent) - контекстный LLM-агент с backend capabilities и подтверждаемыми draft actions.
-- [Receipt Agent Backlog](Receipt-Agent-Backlog) - AI/OCR receipt draft boundary, currently blocked on provider contracts.
-- [AI Code Review](https://github.com/Strongf-bob/SplitAppBackend/blob/main/docs/ai-code-review.md) - настройка OpenCodeReview и правила блокировки PR.
+- [Обзор проекта](Project-Overview) — границы ответственности backend-а и состав системы.
+- [Доменные сценарии](Domain-Flows) — события, участники, чеки, долги, планы расчётов и платежи.
+- [Модель данных](Data-Model) — коллекции MongoDB, состояния и правила source of truth.
+- [Сплитик](Splitik-Agent) — контекстный помощник, сессии и подтверждаемые черновики действий.
+- [Бэклог AI-разбора чеков](Receipt-Agent-Backlog) — границы текущей реализации и зависимости от внешних провайдеров.
+
+### Карта реализованных способностей
+
+| Способность | HTTP-маршруты | Сервисная логика | Контракт |
+| --- | --- | --- | --- |
+| События, участники, приглашения, балансы и планы расчётов | [events router](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/events.py#L12-L246) | [events](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/events.py#L230-L480), [balances](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/balances.py#L152-L171), [settlements](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/settlements.py#L497-L538) | [OpenAPI: events](https://github.com/Strongf-bob/SplitAppBackend/blob/main/openapi.yaml#L502-L1649) |
+| Чеки, распределение позиций, подтверждение, аннулирование и изображение | [receipts router](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/receipts.py#L22-L304) | [receipts](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/receipts.py#L226-L970) | [OpenAPI: receipts](https://github.com/Strongf-bob/SplitAppBackend/blob/main/openapi.yaml#L2293-L3536) |
+| Платежи и платёжные запросы | [payments router](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/payments.py#L12-L175) | [payments](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/payments.py#L76-L697) | [OpenAPI: payments](https://github.com/Strongf-bob/SplitAppBackend/blob/main/openapi.yaml#L3539-L4379) |
+| Вход через Яндекс и обновление токенов | [auth router](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/auth.py#L13-L32) | [auth](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/auth.py#L142-L218) | [OpenAPI: auth](https://github.com/Strongf-bob/SplitAppBackend/blob/main/openapi.yaml#L189-L370) |
+| Пользователь, друзья и контакты | [users router](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/users.py#L10-L73), [friends router](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/friends.py#L12-L69) | [users](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/users.py#L202-L261), [contacts](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/contacts.py#L81-L141) | [OpenAPI: users and friends](https://github.com/Strongf-bob/SplitAppBackend/blob/main/openapi.yaml#L1652-L2290) |
+| Сплитик: сообщения, вложения, сессии и черновики | [Splitik router](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/splitik.py#L14-L103) | [draft commit](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/splitik_tools.py#L256-L291) | [OpenAPI: Splitik](https://github.com/Strongf-bob/SplitAppBackend/blob/main/openapi.yaml#L4428-L4738) |
+
+## Интеграция с backend-ом
+
+- [Справочник API](API-Reference) — ресурсы, методы, модели запросов и ответов.
+- [Аутентификация и безопасность](Authentication-And-Security) — Bearer-токены, права доступа, CORS и ограничения запросов.
+- [Интеграция с iOS](iOS-Frontend-Integration) — правила использования backend-контракта клиентом.
+
+Публичный контракт — [openapi.yaml](https://github.com/Strongf-bob/SplitAppBackend/blob/main/openapi.yaml); приложение собирает все router-группы в одном FastAPI-приложении с обязательной аутентификацией по умолчанию ([исходный код](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L223-L242)).
+
+## Техническая документация
+
+- [Локальный запуск](Local-Setup) — окружение разработчика и запуск API.
+- [Операции и деплой](Operations-And-Deployment) — Docker Compose, production-конфигурация, логи и метрики.
+- [Тесты и CI](Testing-And-CI) — проверки перед изменением и автоматизация.
+
+Для быстрой диагностики сервис предоставляет маршруты ping, проверки MongoDB и метрик ([router](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/health.py#L9-L28), [OpenAPI](https://github.com/Strongf-bob/SplitAppBackend/blob/main/openapi.yaml#L6-L89)).
+
+## Онбординг и поддержка Wiki
+
+Новый участник команды: начните с [Обзора проекта](Project-Overview), затем пройдите [Локальный запуск](Local-Setup), [Справочник API](API-Reference) и [Тесты и CI](Testing-And-CI).
+
+Для авторов документации: [Поддержка Wiki](Wiki-Maintenance) описывает хранение исходников в репозитории, синхронизацию и правила обновления. Исходные Markdown-файлы Wiki находятся в [`docs/wiki/`](https://github.com/Strongf-bob/SplitAppBackend/tree/main/docs/wiki) ([подтверждение в инструкции](https://github.com/Strongf-bob/SplitAppBackend/blob/main/docs/wiki/Wiki-Maintenance.md#L3-L25)).
 
 ## Репозитории
 
-- Backend: [Strongf-bob/SplitAppBackend](https://github.com/Strongf-bob/SplitAppBackend)
-- iOS frontend: [Strongf-bob/SplitApp](https://github.com/Strongf-bob/SplitApp)
-- OpenAPI-контракт backend: [openapi.yaml](https://github.com/Strongf-bob/SplitAppBackend/blob/main/openapi.yaml)
-- README backend: [README.md](https://github.com/Strongf-bob/SplitAppBackend/blob/main/README.md)
-- Базовые правила безопасности: [docs/security-baseline.md](https://github.com/Strongf-bob/SplitAppBackend/blob/main/docs/security-baseline.md)
-- Отчет по remediation: [docs/remediation-report.md](https://github.com/Strongf-bob/SplitAppBackend/blob/main/docs/remediation-report.md)
-
-## Что сейчас покрывает backend
-
-- Обмен Yandex OAuth token на app access/refresh tokens.
-- Ротация refresh token.
-- Обновление профиля текущего пользователя.
-- Список, opt-in поиск пользователей, friendship flow и профильная финансовая статистика.
-- Создание, чтение, обновление, закрытие и удаление событий.
-- Управление участниками события через memberships и invite links.
-- Versioned receipt lifecycle, позиции чека, доли участников, fiscal metadata и allocation sessions.
-- Загрузка, удаление и временный доступ к изображениям чеков.
-- Расчет долгов, объяснения балансов и CSV export внутри события.
-- Payment requests, mark-paid declarations, confirmation/rejection, disputes and activity feed.
-- Контекстный агент Сплитик для объяснения событий, расходов, участников и создания подтверждаемых draft actions.
-- Lightweight rate limiting for sensitive auth/search/invite flows.
-- Явный CORS, структурные request-логи, Prometheus-метрики и optional error reporting.
-- Production-деплой через Docker Compose с FastAPI, MongoDB, observability сервисами и optional CI/CD deploy over SSH.
-
-## Источник правды
-
-Главный контракт API - `openapi.yaml`. При изменении backend-поведения в одном изменении нужно синхронизировать:
-
-- Python route/service/schema код.
-- `openapi.yaml`.
-- Tests.
-- Wiki source pages в `docs/wiki/`, если изменение влияет на использование API или разработку.
+- [Backend: Strongf-bob/SplitAppBackend](https://github.com/Strongf-bob/SplitAppBackend)
+- [iOS-клиент: Strongf-bob/SplitApp](https://github.com/Strongf-bob/SplitApp)
