@@ -63,6 +63,10 @@ Payment phone visibility is conservative: `nobody`, `event_members`, or `friends
 | `POST` | `/api/friends/{id}/reject` | Отклонить friend request. | Только addressee. |
 | `DELETE` | `/api/friends/{id}` | Удалить friendship. | Любая сторона. |
 | `POST` | `/api/friends/{id}/block` | Заблокировать friendship. | Любая сторона. |
+| `POST` | `/api/friend-invites` | Создать одноразовое приглашение в друзья. | В ответе deep link; raw token не хранится. Действует 15 минут. |
+| `GET` | `/api/friend-invites/{token}/preview` | Предпросмотр приглашения. | Требует авторизацию; не создаёт friendship. |
+| `POST` | `/api/friend-invites/{token}/accept` | Явно принять приглашение. | Одноразово создаёт accepted friendship; self-invite и blocked pair запрещены. |
+| `DELETE` | `/api/friend-invites/{id}` | Отозвать активное приглашение. | Только creator. |
 
 ## Splitik
 

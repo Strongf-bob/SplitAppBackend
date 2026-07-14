@@ -24,6 +24,7 @@ erDiagram
     payment_requests ||--o| payments : creates
     events ||--o{ disputes : groups
     users ||--o{ friends : requester
+    users ||--o{ friend_invites : creates
     users ||--o{ user_contacts : owns
     users ||--o{ splitik_sessions : owns
     splitik_sessions ||--o{ splitik_drafts : creates
@@ -49,6 +50,7 @@ erDiagram
 Для Yandex-пользователя документ также содержит `yandex_id`, `yandex_profile_imported_at` и, при успешной загрузке изображения, `avatar_key`. Поля фиксируют разовый импорт профиля и backend-owned аватар; локальный iOS-кэш удаляется при logout или невалидной refresh-сессии.
 | `refresh_tokens` | Hash refresh token, срок жизни и факт использования. | `user_id -> users.id`. |
 | `friends` | Private friendship flow: request, accept, reject, block, remove. | `requester_id/addressee_id -> users.id`, `pair_key` уникален. |
+| `friend_invites` | Одноразовые приглашения в друзья для AirDrop/deep link. | `creator_id -> users.id`, уникальный `token_hash`, TTL по `expires_at`; raw token не сохраняется. |
 | `user_contacts` | Импортированные контакты текущего пользователя. | `owner_user_id -> users.id`, optional `matched_user_id -> users.id`. |
 | `events` | Пространство общих расходов и event-level настройки. | `creator_id -> users.id`. |
 | `event_memberships` | Источник правды для доступа к событию. | `event_id -> events.id`, `user_id -> users.id`. |
@@ -107,6 +109,7 @@ erDiagram
 - `event_memberships(event_id, user_id)` уникален: один membership record на
   пользователя в событии.
 - `friends.pair_key` уникален: одна friendship-связь на пару пользователей.
+- `friend_invites.token_hash` уникален, а TTL-индекс по `expires_at` удаляет истёкшие приглашения.
 - `user_contacts(owner_user_id, phone_hash)` уникален: один сохраненный контакт
   на нормализованный телефон владельца.
 - `idempotency_keys(actor_user_id, scope, key)` уникален: один результат на
