@@ -634,6 +634,35 @@ def test_friend_invite_accepts_once_and_is_idempotent_for_recipient(db):
     assert_status(second_recipient.value, 409)
 
 
+def test_friend_invite_claim_prevents_another_recipient_friendship(db):
+    from app.services import friend_invites
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    created = friend_invites.create_friend_invite(db, USER_A)
+    friendship_id = "claimed-friendship"
+    db.friend_invites.update_one(
+        {"id": created["id"]},
+        {
+            "$set": {
+                "status": "accepting",
+                "accepted_by": USER_B,
+                "friendship_id": friendship_id,
+            }
+        },
+    )
+
+    with pytest.raises(Exception) as other_recipient:
+        friend_invites.accept_friend_invite(db, created["token"], USER_C)
+    assert_status(other_recipient.value, 409)
+    assert db.friends.count_documents({"pair_key": ":".join(sorted([USER_A, USER_C]))}) == 0
+
+    accepted = friend_invites.accept_friend_invite(db, created["token"], USER_B)
+    stored_invite = db.friend_invites.find_one({"id": created["id"]})
+    assert accepted["id"] == friendship_id
+    assert stored_invite["status"] == "accepted"
+
+
 def test_friend_invite_rejects_expiry_self_accept_block_and_revocation(db):
     from app.services import friend_invites
     from tests.conftest import seed_users

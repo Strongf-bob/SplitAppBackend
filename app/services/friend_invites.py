@@ -3,6 +3,7 @@ import secrets
 from datetime import UTC, timedelta
 
 from fastapi import HTTPException
+from pymongo.errors import DuplicateKeyError
 from pymongo.database import Database
 
 from app.services.access import get_user_or_404
@@ -25,7 +26,14 @@ def _active_invite_or_error(db: Database, token: str) -> dict:
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=UTC)
     if expires_at <= utc_now():
-        db.friend_invites.update_one({"id": invite["id"]}, {"$set": {"status": "expired"}})
+        db.friend_invites.update_one(
+            {
+                "id": invite["id"],
+                "status": "active",
+                "expires_at": invite["expires_at"],
+            },
+            {"$set": {"status": "expired", "updated_at": utc_now()}},
+        )
         raise HTTPException(status_code=410, detail="Friend invite has expired.")
     return invite
 
@@ -67,7 +75,9 @@ def preview_friend_invite(db: Database, token: str, actor_user_id: str) -> dict:
     }
 
 
-def _accept_friendship(db: Database, creator_id: str, recipient_id: str) -> dict:
+def _accept_friendship(
+    db: Database, creator_id: str, recipient_id: str, friendship_id: str
+) -> dict:
     pair_key = ":".join(sorted([creator_id, recipient_id]))
     existing = db.friends.find_one({"pair_key": pair_key})
     if existing and existing.get("status") == "blocked":
@@ -91,7 +101,7 @@ def _accept_friendship(db: Database, creator_id: str, recipient_id: str) -> dict
         return db.friends.find_one({"id": existing["id"]})
 
     friendship = {
-        "id": new_uuid(),
+        "id": friendship_id,
         "pair_key": pair_key,
         "requester_id": creator_id,
         "addressee_id": recipient_id,
@@ -100,7 +110,45 @@ def _accept_friendship(db: Database, creator_id: str, recipient_id: str) -> dict
         "created_at": now,
         "updated_at": now,
     }
-    db.friends.insert_one(friendship)
+    try:
+        db.friends.insert_one(friendship)
+        return friendship
+    except DuplicateKeyError:
+        existing = db.friends.find_one({"id": friendship_id})
+        if existing:
+            return existing
+        raise
+
+
+def _ensure_pair_is_not_blocked(db: Database, creator_id: str, recipient_id: str) -> None:
+    pair_key = ":".join(sorted([creator_id, recipient_id]))
+    existing = db.friends.find_one({"pair_key": pair_key})
+    if existing and existing.get("status") == "blocked":
+        raise HTTPException(status_code=403, detail="Friendship is blocked.")
+
+
+def _complete_claimed_invite(db: Database, invite: dict, actor_user_id: str) -> dict:
+    friendship = _accept_friendship(
+        db,
+        invite["creator_id"],
+        actor_user_id,
+        invite["friendship_id"],
+    )
+    db.friend_invites.update_one(
+        {
+            "id": invite["id"],
+            "status": "accepting",
+            "accepted_by": actor_user_id,
+            "friendship_id": invite["friendship_id"],
+        },
+        {
+            "$set": {
+                "status": "accepted",
+                "accepted_at": utc_now(),
+                "updated_at": utc_now(),
+            }
+        },
+    )
     return friendship
 
 
@@ -111,26 +159,46 @@ def accept_friend_invite(db: Database, token: str, actor_user_id: str) -> dict:
         if invite.get("accepted_by") != actor_user_id:
             raise HTTPException(status_code=409, detail="Friend invite was used by another user.")
         return db.friends.find_one({"id": invite["friendship_id"]})
+    if invite and invite.get("status") == "accepting":
+        if invite.get("accepted_by") != actor_user_id:
+            raise HTTPException(status_code=409, detail="Friend invite was used by another user.")
+        return _complete_claimed_invite(db, invite, actor_user_id)
 
     invite = _active_invite_or_error(db, token)
     if invite["creator_id"] == actor_user_id:
         raise HTTPException(status_code=400, detail="Cannot accept your own friend invite.")
     get_user_or_404(db, actor_user_id)
-    friendship = _accept_friendship(db, invite["creator_id"], actor_user_id)
+    _ensure_pair_is_not_blocked(db, invite["creator_id"], actor_user_id)
+
+    friendship_id = new_uuid()
     result = db.friend_invites.update_one(
-        {"id": invite["id"], "status": "active"},
+        {
+            "id": invite["id"],
+            "status": "active",
+            "expires_at": invite["expires_at"],
+        },
         {
             "$set": {
-                "status": "accepted",
+                "status": "accepting",
                 "accepted_by": actor_user_id,
-                "friendship_id": friendship["id"],
-                "accepted_at": utc_now(),
+                "friendship_id": friendship_id,
+                "claim_started_at": utc_now(),
+                "updated_at": utc_now(),
             }
         },
     )
     if result.modified_count != 1:
+        claimed = db.friend_invites.find_one({"token_hash": token_hash})
+        if (
+            claimed
+            and claimed.get("status") == "accepted"
+            and claimed.get("accepted_by") == actor_user_id
+        ):
+            return db.friends.find_one({"id": claimed["friendship_id"]})
         raise HTTPException(status_code=409, detail="Friend invite is no longer active.")
-    return friendship
+
+    claimed = db.friend_invites.find_one({"id": invite["id"]})
+    return _complete_claimed_invite(db, claimed, actor_user_id)
 
 
 def revoke_friend_invite(db: Database, invite_id: str, actor_user_id: str) -> None:
