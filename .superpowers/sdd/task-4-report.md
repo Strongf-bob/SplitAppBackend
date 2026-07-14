@@ -124,3 +124,21 @@
 - The first-execute race now fails closed before materialization and preserves the intended retry behavior for already executing/partial plans.
 - Payment money-state mutations no longer depend on settlement metadata refresh availability.
 - Idempotency remains useful for duplicate execution requests but no longer bypasses current membership or open-event checks.
+
+
+## Task 4 wiki redocumentation (2026-07-14)
+
+### Delivered
+
+- Created `docs/wiki/Architecture.md`.
+- Rewrote data model, authentication/security, operations/deployment and testing/CI pages from the current backend sources.
+- Added VitePress frontmatter, source-anchored GitHub citations, Mermaid source comments and bidirectional Related Pages.
+
+### Documentation validation
+
+- `git diff --check -- docs/wiki/Architecture.md docs/wiki/Data-Model.md docs/wiki/Authentication-And-Security.md docs/wiki/Operations-And-Deployment.md docs/wiki/Testing-And-CI.md`
+- Verified every relative wiki link resolves to an existing page and each Mermaid block has a source comment.
+
+### Scope
+
+Only Task 4 wiki files were changed; backend code, OpenAPI, tests and frontend were not modified.

@@ -1,285 +1,84 @@
+---
+title: "Операции и деплой"
+description: "Compose runtime, наблюдаемость, production deploy и восстановление SplitApp Backend."
+---
+
 # Операции и деплой
 
-P1 production rollout для актуального домена `https://split-app.ru` описан в
-[P1 Production Rollout](../p1-production-rollout.md).
+## Runtime и наблюдаемость
 
-## Production Runtime
+Compose запускает API и MongoDB вместе с закрытым стеком Prometheus/Loki/Grafana. Из сервисов наружу публикуются API `${HOST_PORT:-8080}:8000` и Grafana, причём Grafana по умолчанию привязана к loopback. [compose.yaml:3-42](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml#L3-L42) [compose.yaml:139-159](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml#L139-L159)
 
-### Docker Compose
+| Компонент | Назначение | Эксплуатационный факт | Source |
+|---|---|---|---|
+| `api` | FastAPI/uvicorn | ждёт health Mongo и имеет `/api/ping` healthcheck | [compose.yaml:4-27](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml#L4-L27) |
+| `mongo` | persistent data | volume `mongo-data`, private network, healthcheck `db.adminCommand('ping')` | [compose.yaml:29-42](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml#L29-L42) |
+| Prometheus/Loki/Alloy | metrics и Docker logs | не имеют host ports; Prometheus требует metrics secret | [compose.yaml:44-70](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml#L44-L70) [compose.yaml:115-137](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml#L115-L137) |
+| Grafana | dashboard/query | sign-up выключен; password обязателен | [compose.yaml:139-159](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml#L139-L159) |
 
-Backend можно запускать как отдельный Docker Compose project:
+```mermaid
+graph LR
+  I["Internet / reverse proxy"] --> A["API : HOST_PORT"]
+  A --> M["MongoDB private network"]
+  A --> P["Prometheus private scrape"]
+  A --> L["Docker JSON logs -> Alloy -> Loki"]
+  P --> G["Grafana loopback or proxy"]
+  L --> G
+  style I fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
+  style A fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
+  style M fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
+  style P fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
+  style L fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
+  style G fill:#2d333b,stroke:#6d5dfc,color:#e6edf3
+```
+<!-- Sources: compose.yaml:3-178, app/main.py:111-139, app/core/monitoring.py:13-75 -->
 
-- [compose.yaml](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml)
-- [Dockerfile](https://github.com/Strongf-bob/SplitAppBackend/blob/main/Dockerfile)
-- [.env.docker.example](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.env.docker.example)
+В API request middleware публикует `X-Request-ID`, JSON log и HTTP count/duration; domain/service/DB метрики определены отдельно. [app/main.py:111-139](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L111-L139) [app/core/monitoring.py:13-75](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/monitoring.py#L13-L75) `/api/metrics` не следует проксировать публично: dependency требует отдельный bearer secret и намеренно отвечает 404 при отсутствии. [app/dependencies.py:69-101](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/dependencies.py#L69-L101)
 
-Compose поднимает:
+## Сборка и запуск
 
-- `api` — FastAPI/uvicorn container, опубликован как `${HOST_PORT:-8080}:8000`.
-- `mongo` — private MongoDB container во внутренней network `splitapp-backend`.
-- `mongo-data` — persistent Docker volume для database files.
-
-Deploy:
+Образ строит PWA с Node 22, затем запускает Python 3.12 как непривилегированный `splitapp` user; `web/out` и `docs` попадают в runtime image. [Dockerfile:1-34](https://github.com/Strongf-bob/SplitAppBackend/blob/main/Dockerfile#L1-L34)
 
 ```bash
 cp .env.docker.example .env
-export JWT_SECRET="$(python3 - <<'PY'
-import secrets
-print(secrets.token_urlsafe(48))
-PY
-)"
-python3 - <<'PY'
-from pathlib import Path
-import os
-
-path = Path(".env")
-value = path.read_text()
-value = value.replace(
-    "JWT_SECRET=change-me-generate-a-long-random-value",
-    f"JWT_SECRET={os.environ['JWT_SECRET']}",
-)
-path.write_text(value)
-PY
+# задать минимум JWT_SECRET, GRAFANA_ADMIN_PASSWORD и METRICS_ACCESS_TOKEN
 docker compose up -d --build
 docker compose ps
+curl -fsS http://127.0.0.1:${HOST_PORT:-8080}/api/ping
+docker compose logs --tail=200 api
 ```
 
-Operational checks:
+Перед запуском production API задайте Mongo URI/credentials, object-storage keys при использовании receipt images, allowed CORS origins и runtime secrets в server-side `.env`; `.env` не включается в CI deploy archive. [app/core/db.py:32-94](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/db.py#L32-L94) [app/core/s3.py:19-43](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/s3.py#L19-L43) [ci.yml:219-229](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.github/workflows/ci.yml#L219-L229)
 
-```bash
-curl http://127.0.0.1:${HOST_PORT:-8080}/api/ping
-docker compose logs -f api
+## Deploy
+
+Deploy job запускается только для push в `main` после test и LLM smoke. Он валидирует secrets, передаёт checkout по SSH, сохраняет server-side `.env`, делает port preflight, поднимает Compose и ждёт `/api/ping`. [ci.yml:158-217](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.github/workflows/ci.yml#L158-L217) [ci.yml:263-308](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.github/workflows/ci.yml#L263-L308)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant GH as GitHub Actions
+  participant S as Production host
+  participant C as Docker Compose
+  participant A as API
+  GH->>GH: lint, test, LLM smoke
+  GH->>S: SSH archive excluding .env
+  GH->>S: validate ports and preserve runtime env
+  S->>C: up -d --build
+  C->>A: start after Mongo health
+  GH->>A: GET /api/ping smoke
 ```
+<!-- Sources: .github/workflows/ci.yml:158-308, compose.yaml:3-42 -->
 
-Receipt image endpoints требуют S3 settings в `.env`. Без S3 settings только
-upload/delete/presign операции изображений возвращают configuration error.
+## Backup и восстановление
 
-### Systemd
+`mongo-data`, Prometheus, Loki и Grafana — named volumes; критичные пользовательские данные находятся в MongoDB, поэтому backup должен быть отдельной регулярной процедурой (volume snapshot либо `mongodump`) и восстановление следует репетировать вне production. [compose.yaml:180-190](https://github.com/Strongf-bob/SplitAppBackend/blob/main/compose.yaml#L180-L190) Перед recovery сначала зафиксируйте request IDs, `docker compose ps` и последние API logs; unexpected exceptions уже содержат request context. [app/main.py:91-139](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L91-L139)
 
-Для systemd deployment используется unit:
+## Related Pages
 
-- [deploy/splitapp-backend.service](https://github.com/Strongf-bob/SplitAppBackend/blob/main/deploy/splitapp-backend.service)
-
-Рекомендуемый install path:
-
-- `/opt/splitapp/backend`
-
-Рекомендуемый env file:
-
-- `/etc/splitapp/backend.env`
-
-## Deploy Steps
-
-```bash
-sudo cp deploy/splitapp-backend.service /etc/systemd/system/splitapp-backend.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now splitapp-backend
-sudo systemctl status splitapp-backend
-```
-
-Logs:
-
-```bash
-journalctl -u splitapp-backend -f
-```
-
-## GitHub Actions Deployment
-
-Основной CI/CD workflow:
-
-- [.github/workflows/ci.yml](https://github.com/Strongf-bob/SplitAppBackend/blob/main/.github/workflows/ci.yml)
-
-На push в `main` workflow запускает lint, tests и затем Docker Compose deploy
-over SSH, если настроены production secrets. Workflow отправляет checkout на
-сервер tar-архивом, сохраняет существующий server-side `.env`, запускает port
-preflight, выполняет `docker compose up -d --build` и проверяет `GET /api/ping`.
-
-Required deployment secrets:
-
-- `DEPLOY_HOST`
-- `DEPLOY_USER`
-- `DEPLOY_SSH_KEY`
-- `DEPLOY_PATH` — например `/home/strongf/splitapp/backend`.
-- Optional: `DEPLOY_PORT` — SSH port, default `22`.
-
-Server prerequisites:
-
-- Docker и Docker Compose доступны для `DEPLOY_USER`.
-- В `DEPLOY_PATH/.env` уже лежат runtime secrets: `JWT_SECRET`, Mongo/S3 config.
-- `HOST_PORT` в `.env` задает host port для smoke check; default `8080`.
-- `GRAFANA_ADMIN_PASSWORD` задан в server-side `.env`.
-- `GRAFANA_HOST_PORT` задает localhost port для Grafana; default `3001`.
-- Перед deploy workflow проверяет, что `HOST_PORT` и `GRAFANA_HOST_PORT` не заняты другим container или host process.
-
-## Runtime Environment Variables
-
-MongoDB:
-
-- `MONGODB_URI`
-- `MONGODB_DB_NAME`
-- или отдельные host/user/password/auth source values.
-- TLS и replica set variables для managed clusters.
-
-Object storage:
-
-- `S3_ENDPOINT_URL`
-- `S3_REGION`
-- `S3_BUCKET`
-- `YC_OBJECT_STORAGE_ACCESS_KEY_ID`
-- `YC_OBJECT_STORAGE_SECRET_ACCESS_KEY`
-
-Security и app behavior:
-
-- JWT/access token settings, которые используют token helpers.
-- `CORS_ALLOWED_ORIGINS`
-- Optional Sentry/error reporting configuration.
-- Splitik LLM:
-  - `SPLITIK_LLM_BASE_URL`
-  - `SPLITIK_LLM_API_KEY`
-  - `SPLITIK_PRIMARY_MODEL`
-  - `SPLITIK_FAST_CHAT_MODEL` - fast model for plain chat replies; default
-    `deepseek-v4-flash`.
-  - `SPLITIK_FAST_CHAT_TIMEOUT_SECONDS` - default `8`.
-  - `SPLITIK_INTENT_MODEL` — optional small routing model; use `deepseek-v4-flash`
-    for the pre-planner intent classifier.
-  - `SPLITIK_INTENT_TIMEOUT_SECONDS` - optional timeout for the intent router.
-  - `SPLITIK_VERIFICATION_MODEL`
-  - `SPLITIK_ESCALATION_MODEL`
-  - `SPLITIK_LLM_TIMEOUT_SECONDS` - default `12`.
-  - `SPLITIK_LLM_MODEL` — legacy fallback только для primary model.
-
-`SPLITIK_LLM_MODEL` или `SPLITIK_PRIMARY_MODEL` достаточно для primary Splitik
-replies. Plain chat replies use `SPLITIK_FAST_CHAT_MODEL`; if it is not set,
-backend uses `SPLITIK_INTENT_MODEL` or `deepseek-v4-flash`. `SPLITIK_INTENT_MODEL`
-можно не задавать, тогда pre-planner intent classifier использует primary
-model. AI receipt drafts дополнительно требуют `SPLITIK_VERIFICATION_MODEL` и
-`SPLITIK_ESCALATION_MODEL`; если они отсутствуют, configuration error возвращает
-только draft endpoint, а backend и обычный Splitik chat продолжают работать.
-Model IDs должны жить в environment variables, а не в коде, чтобы provider/model
-mix можно было менять без rebuild backend.
-
-CI runs an `LLM Smoke` job on every push before production deploy. The job sends
-short health-check requests to configured Splitik model roles and fails if a
-model does not answer within its role timeout. Required GitHub secrets are
-`SPLITIK_LLM_BASE_URL`, `SPLITIK_LLM_API_KEY`, and `SPLITIK_PRIMARY_MODEL`
-(`OCR_LLM_URL`, `OCR_LLM_AUTH_TOKEN`, and `OCR_LLM_MODEL` are accepted as
-legacy fallbacks). Optional secrets/vars configure `SPLITIK_FAST_CHAT_MODEL`,
-`SPLITIK_INTENT_MODEL`, `SPLITIK_VERIFICATION_MODEL`,
-`SPLITIK_ESCALATION_MODEL`, and per-role timeout vars.
-
-Runtime failover uses `SPLITIK_TEXT_MODEL_POOL=deepseek-v4-flash,kimi-k2.6` and
-`SPLITIK_VISION_MODEL_POOL=minimax-m3,qwen3.7-plus`. A failed model is quarantined
-for `SPLITIK_MODEL_QUARANTINE_SECONDS` (default 600) and the next candidate is used.
-The API process also probes the configured pools every 10 minutes. To validate the
-vision pool against a real receipt, store a stable public, anonymized fixture URL
-in `SPLITIK_VISION_SMOKE_IMAGE_URL` and its expected amount in kopecks in
-`SPLITIK_VISION_SMOKE_EXPECTED_TOTAL_KOPECKS`; do not use customer receipts.
-The probe accepts an equivalent ruble total in `payload.total` when a provider
-does not return `payload.total_amount_kopecks`.
-
-PWA:
-
-- `web/` содержит installable SplitApp web client.
-- `/`, `/app`, `/manifest.webmanifest`, `/sw.js` и `/assets/*` — public static routes, которые обслуживает FastAPI.
-- `/api/*` остается bearer-token protected, кроме documented auth/health exceptions.
-- Service worker кеширует только app shell и static assets. Authenticated API responses он не кеширует.
-
-Grafana:
-
-- `GRAFANA_BIND_ADDRESS` — default `127.0.0.1`.
-- `GRAFANA_HOST_PORT` — default `3001`.
-- `GRAFANA_ADMIN_USER`.
-- `GRAFANA_ADMIN_PASSWORD` — required на сервере.
-- `GRAFANA_PUBLIC_DOMAIN` — optional public HTTPS hostname for Grafana, for
-  example `grafana.split-app.ru`.
-- `GRAFANA_PUBLIC_PROXY_MODE` — `external` when the host already owns `443`, or
-  `caddy` when Compose should start the bundled Caddy proxy.
-- `GRAFANA_PUBLIC_HTTPS_PORT` — default `443` for the public Grafana proxy.
-
-## Metrics
-
-Prometheus metrics:
-
-- `GET /api/metrics`
-
-В Docker Compose Prometheus скрейпит endpoint внутри private network с
-`METRICS_ACCESS_TOKEN`. Prometheus и Loki не публикуются на host. Grafana
-публикуется только на `${GRAFANA_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_HOST_PORT:-3001}`.
-Если `GRAFANA_PUBLIC_DOMAIN` задан и `GRAFANA_PUBLIC_PROXY_MODE=caddy`,
-дополнительно стартует Compose profile `public-grafana` с Caddy proxy: наружу
-публикуется только `https://${GRAFANA_PUBLIC_DOMAIN}`, а Prometheus, Loki и
-`/api/metrics` остаются доступны только внутри private network. Если `443` уже
-занят host reverse proxy, используйте `GRAFANA_PUBLIC_PROXY_MODE=external` и
-проксируйте этот host proxy на `127.0.0.1:${GRAFANA_HOST_PORT:-3001}`.
-
-Перед ручной сменой портов проверьте listeners:
-
-```bash
-ss -ltnp | grep -E ':(${HOST_PORT:-8080}|${GRAFANA_HOST_PORT:-3001}|443)'
-```
-
-Если нужен публичный доступ к Grafana, используйте reverse proxy с auth/TLS или
-SSH tunnel. Встроенный public proxy использует Grafana login и TLS от Caddy, но
-его нельзя включать на host, где `443` уже занят другим reverse proxy. Не
-публикуйте `/api/metrics`, Prometheus или Loki напрямую наружу.
-
-Dashboard `SplitApp Backend` включает RPS, 5xx error ratio, p50/p95/p99 latency,
-slow endpoints, service/db operations и API logs через Loki.
-
-Дополнительные observability services работают только внутри Compose network:
-
-- `mongodb-exporter` — MongoDB health, connections и operation counters.
-- `cadvisor` — container CPU и memory metrics.
-- `node-exporter` — host CPU, memory и filesystem metrics.
-
-Backend экспортирует business metrics: domain actions для events, receipts,
-payments и users; money amount histograms для receipts/payments; event participant
-count histograms; current collection document counts.
-
-## Backup And Restore
-
-Минимальный production baseline:
-
-- MongoDB data volume или managed MongoDB cluster должен иметь регулярные backups.
-- Перед destructive deploy или migration нужно иметь свежий restore point.
-- Restore drill должен быть проверен отдельно от backup creation.
-- RPO/RTO должны быть явно зафиксированы для production; до этого считать систему pre-production.
-
-Для Docker Compose self-hosted MongoDB используйте volume-level snapshots или
-`mongodump`/`mongorestore` из trusted host. Backup artifacts должны храниться
-зашифрованно, с ограниченным доступом и без копирования в личные устройства.
-
-## Incident Response
-
-Для production incident нужен короткий runbook:
-
-- Зафиксировать время начала, affected endpoint/domain flow и request IDs.
-- Снять `docker compose ps`, `docker compose logs api --tail=200` и Grafana/Loki evidence.
-- При suspected credential exposure сразу rotate affected secrets: `JWT_SECRET`,
-  object storage keys, deploy key, Grafana password и LLM provider token.
-- После mitigation записать root cause, customer impact, fixed commit и regression test.
-
-## Data Retention And Privacy
-
-До real-user launch нужны публичная privacy policy и внутренняя retention policy.
-Минимальные решения, которые должны быть зафиксированы:
-
-- как долго хранятся users, contacts, events, receipts, receipt images, audit logs и Splitik interactions;
-- как пользователь запрашивает export/delete account;
-- какие данные уходят в Yandex OAuth, object storage, Sentry и LLM provider;
-- где физически хранятся MongoDB/object-storage данные и включено ли encryption at rest.
-
-## Logs
-
-Request middleware пишет structured JSON completion logs с level, request ID,
-method, route-template path, raw path, status и duration. Loki получает docker
-logs через Grafana Alloy; `request_id` остается JSON field для поиска, но не
-становится Loki label. Unexpected exceptions логируются внутри сервера и
-возвращаются клиентам как generic errors.
-
-## Operational Checks
-
-- `GET /api/health/db` должен подтверждать MongoDB connectivity.
-- `GET /api/metrics` должен возвращать Prometheus text exposition.
-- `systemctl status splitapp-backend` должен быть healthy после deploy.
-- `journalctl -u splitapp-backend -f` должен показывать request logs и startup failures.
+| Page | Relationship |
+|---|---|
+| [Архитектура](Architecture.md#наблюдаемость) | Объясняет instrumentation request path. |
+| [Аутентификация и безопасность](Authentication-And-Security.md#refresh-токены-и-секреты) | Runtime secret boundaries. |
+| [Модель данных](Data-Model.md#индексы-как-контракт) | MongoDB state, indexes и TTL. |
+| [Тесты и CI](Testing-And-CI.md#github-actions) | Полный CI gate перед deploy. |

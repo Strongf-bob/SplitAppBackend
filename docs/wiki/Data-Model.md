@@ -1,131 +1,70 @@
-# Data model
+---
+title: "Модель данных"
+description: "Фактические MongoDB-коллекции, ownership, состояния и индексы SplitApp Backend."
+---
 
-Этот документ описывает внутреннюю модель данных SplitAppBackend: основные
-MongoDB collections, связи между ними, lifecycle статусы и правила хранения.
-API-контракт остается в `openapi.yaml`, а эта страница нужна для разработки
-service-layer изменений и ревью backend-логики.
+# Модель данных
 
-## Короткая схема
+## Обзор
+
+MongoDB хранит нормализованные по ownership документы: event не содержит доверенный список участников, а доступ определяется активной записью `event_memberships`. Такой выбор позволяет отзывать участие мягко и проверять его в каждом защищённом service path. [app/services/access.py:21-49](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/access.py#L21-L49)
+
+| Группа | Коллекции | Ключ ownership / связи | Source |
+|---|---|---|---|
+| Identity | `users`, `refresh_tokens`, `user_contacts` | `users.id`; refresh хранит только `token_hash`; contacts принадлежат `owner_user_id` | [app/services/indexes.py:5-19](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L5-L19) |
+| Social | `friends`, `event_invites`, `invite_decisions` | pair/event/invite + actor; unique pair и decision | [app/services/indexes.py:10-31](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L10-L31) |
+| Event | `events`, `event_memberships` | `creator_id`, `(event_id,user_id)` | [app/services/indexes.py:20-23](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L20-L23) |
+| Money | `receipts`, reviews, allocations, claims, `payments`, requests, plans | `event_id`, receipt/session/settlement references | [app/services/indexes.py:32-57](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L32-L57) |
+| Support | `disputes`, `client_feedback_reports`, `idempotency_keys` | resource/event, actor/request | [app/services/indexes.py:58-67](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L58-L67) |
 
 ```mermaid
 erDiagram
-    users ||--o{ event_memberships : participates
-    events ||--o{ event_memberships : has
-    events ||--o{ event_invites : offers
-    event_invites ||--o{ invite_decisions : records
-    events ||--o{ receipts : contains
-    receipts ||--o{ receipt_share_reviews : requires
-    receipts ||--o{ receipt_allocation_sessions : starts
-    receipt_allocation_sessions ||--o{ receipt_item_claims : collects
-    events ||--o{ payments : records
-    events ||--o{ payment_requests : requests
-    events ||--o{ settlement_plans : snapshots
-    settlement_plans ||--o{ payment_requests : materializes
-    payment_requests ||--o| payments : creates
-    events ||--o{ disputes : groups
-    users ||--o{ friends : requester
-    users ||--o{ user_contacts : owns
-    users ||--o{ splitik_sessions : owns
-    splitik_sessions ||--o{ splitik_drafts : creates
-    users ||--o{ splitik_attachments : uploads
-    users ||--o{ splitik_interactions : triggers
+  USERS ||--o{ EVENT_MEMBERSHIPS : participates
+  EVENTS ||--o{ EVENT_MEMBERSHIPS : has
+  EVENTS ||--o{ RECEIPTS : contains
+  EVENTS ||--o{ PAYMENTS : records
+  RECEIPTS ||--o{ RECEIPT_SHARE_REVIEWS : reviewed_by
+  RECEIPTS ||--o{ RECEIPT_ALLOCATION_SESSIONS : allocates
+  EVENT_INVITES ||--o{ INVITE_DECISIONS : decided_by
 ```
+<!-- Sources: app/services/indexes.py:20-57, app/services/access.py:21-49 -->
 
-Главная бизнес-ось:
+## Коллекции и владение
 
-1. `users` входят в `events` через `event_memberships`.
-2. `receipts` и `payments` принадлежат событию.
-3. Balances не хранятся как отдельная collection: они рассчитываются из
-   confirmed receipts и confirmed payments.
-4. AI/Splitik не пишет confirmed деньги напрямую: он создает drafts, которые
-   применяются через backend commit flow.
+| Коллекция | Инвариант и статусы | Основные индексы | Source |
+|---|---|---|---|
+| `users` | Stable `id`; OAuth identity — optional `yandex_id`; профиль может иметь `avatar_key`, discovery fields | unique `id`, `phone_number`, sparse unique `yandex_id`/`public_handle` | [app/services/indexes.py:5-9](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L5-L9) |
+| `refresh_tokens` | сервер хранит SHA-256 hash, а не raw refresh token; `expires_at` удаляется TTL | unique `token_hash`, TTL `expires_at` | [app/core/tokens.py:64-69](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/core/tokens.py#L64-L69) |
+| `events` + memberships | event принадлежит `creator_id`; membership active только при `status=active` без `deleted_at`; event может быть `is_closed` | unique event ID, unique `(event_id,user_id)`, user/status | [app/services/access.py:21-69](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/access.py#L21-L69) |
+| `event_invites` + decisions | invite имеет token и lifecycle `active`/revoked/expired; решение уникально на invite+user+type | unique token; unique decision triple | [app/services/indexes.py:24-31](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L24-L31) |
+| `receipts` | расходы связаны с event, имеют lifecycle `status`; active reads отбрасывают soft-deleted records | unique id; `(event_id,created_at)`, `(event_id,status)` | [app/services/indexes.py:32-34](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L32-L34) |
+| allocations/reviews | reviews уникальны на receipt/user; claims индексируются по session/item и session/user | unique review pair; session-oriented indexes | [app/services/indexes.py:35-43](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L35-L43) |
+| payments/plans | платежи и планы привязаны к event; request может ссылаться на settlement edge | event/time; unique sparse plan-edge; sparse active key | [app/services/indexes.py:44-57](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L44-L57) |
+| `idempotency_keys` | identity операции — actor + scope + client key; мусор удаляется через 24h TTL | unique actor/scope/key, TTL created_at | [app/services/indexes.py:66-67](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L66-L67) |
 
-## Collections
+## Состояния и soft delete
 
-| Collection | Назначение | Ключевые связи |
-| --- | --- | --- |
-| `users` | Профиль пользователя после Yandex login, discovery и payment hints. | `id` используется во всех actor/member/payment связях. |
+```mermaid
+stateDiagram-v2
+  [*] --> Active: membership created
+  Active --> Removed: creator removes participant
+  Active --> Inactive: soft delete / status change
+  Removed --> [*]
+  Inactive --> [*]
+```
+<!-- Sources: app/services/access.py:21-49, app/services/events.py:456-476 -->
 
-Для Yandex-пользователя документ также содержит `yandex_id`, `yandex_profile_imported_at` и, при успешной загрузке изображения, `avatar_key`. Поля фиксируют разовый импорт профиля и backend-owned аватар; локальный iOS-кэш удаляется при logout или невалидной refresh-сессии.
-| `refresh_tokens` | Hash refresh token, срок жизни и факт использования. | `user_id -> users.id`. |
-| `friends` | Private friendship flow: request, accept, reject, block, remove. | `requester_id/addressee_id -> users.id`, `pair_key` уникален. |
-| `user_contacts` | Импортированные контакты текущего пользователя. | `owner_user_id -> users.id`, optional `matched_user_id -> users.id`. |
-| `events` | Пространство общих расходов и event-level настройки. | `creator_id -> users.id`. |
-| `event_memberships` | Источник правды для доступа к событию. | `event_id -> events.id`, `user_id -> users.id`. |
-| `event_invites` | Invite token/link для вступления в событие. | `event_id -> events.id`, `created_by -> users.id`. |
-| `invite_decisions` | Решение пользователя по invite: accept/decline. | `invite_id -> event_invites.id`, `user_id -> users.id`. |
-| `receipts` | Draft/confirmed/voided/corrected чек с embedded items и shares. | `event_id -> events.id`, `payer_id -> users.id`. |
-| `receipt_share_reviews` | Review долей участниками перед подтверждением. | `receipt_id -> receipts.id`, `user_id -> users.id`. |
-| `receipt_allocation_sessions` | Совместная сессия распределения позиций чека. | `receipt_id -> receipts.id`, `created_by -> users.id`. |
-| `receipt_item_claims` | Claims пользователей на позиции во время allocation session. | `session_id -> receipt_allocation_sessions.id`, `user_id -> users.id`. |
-| `receipt_ai_drafts` | AI draft чека из текста с результатами primary/verification/escalation моделей. | `event_id -> events.id`, `owner_user_id -> users.id`. |
-| `payments` | Заявление или подтвержденный платеж между участниками события. | `event_id -> events.id`, `sender_id/receiver_id -> users.id`. |
-| `payment_requests` | Просьба оплатить долг, deadline и dispute/cancel/paid lifecycle. | `event_id -> events.id`, `debtor_id/creditor_id -> users.id`, optional settlement provenance через `origin`, `settlement_plan_id`, `settlement_edge_id`. |
-| `settlement_plans` | Snapshot-backed план оптимизированных переводов внутри одного event. | `event_id -> events.id`, `created_by -> users.id`, `required_approver_ids` ссылаются на участников source graph. |
-| `disputes` | Спор по receipt/payment/payment_request внутри события. | `event_id -> events.id`, `resource_id` указывает на спорный ресурс. |
-| `audit_events` | Backend audit feed для важных действий. | `actor_user_id -> users.id`, resource fields describe target. |
-| `idempotency_keys` | Защита financial create endpoints от повторной отправки. | `actor_user_id + scope + key` уникальны. |
-| `splitik_sessions` | История Splitik-сессии текущего пользователя. | `owner_user_id -> users.id`. |
-| `splitik_drafts` | Подтверждаемые draft actions Сплитика. | `owner_user_id -> users.id`, optional `event_id -> events.id`. |
-| `splitik_attachments` | Private image attachments для Splitik message flow. | `owner_user_id -> users.id`. |
-| `splitik_interactions` | Sanitized logs Splitik-запросов, guardrails, stages and diagnostics. | `actor_user_id -> users.id`, optional `session_id`. |
+`get_event_or_404`, `get_receipt_or_404` и `get_payment_or_404` используют `active_filter`, поэтому deleted records не должны снова становиться API-ресурсами. [app/services/access.py:14-18](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/access.py#L14-L18) Денежные модификации обязаны дополнительно пройти `assert_event_open`. [app/services/access.py:56-61](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/access.py#L56-L61)
 
-## Source-of-truth правила
+## Индексы как контракт
 
-| Данные | Источник правды | Что не считается источником правды |
-| --- | --- | --- |
-| Доступ к событию | Active `event_memberships` | Client-supplied `user_id`, legacy participant arrays, friends list. |
-| Балансы | Runtime calculation from confirmed receipts and confirmed payments | Stored API response, client-side calculation, draft receipt. |
-| Settlement optimization | Server-built snapshot из `raw_debts`, `net_positions`, `recommended_transfers` и active memberships | Client-submitted graph, guesses about direct receipt ownership, cross-event edge payload. |
-| Деньги | Integer kopecks in API and MongoDB for new records | Float, double, decimal-string in new write contracts. |
-| Receipt items/shares | Embedded `items` and `share_items` inside `receipts` | Legacy standalone `receipt_items` / `share_items` lookups. |
-| Receipt image access | Private object storage plus presigned URL endpoint | Permanent public object URL. |
-| Splitik writes | `splitik_drafts` plus explicit commit endpoint | LLM text, tool suggestion, frontend-only confirmation. |
-| Repeated financial writes | `idempotency_keys` | Client retry assumptions. |
+Индексы создаются на startup до готовности приложения; это не миграция «по желанию». [app/main.py:192-202](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/main.py#L192-L202) Unique indexes защищают идентичность и повторную обработку, TTL ограничивает refresh/idempotency state, а compound indexes соответствуют реальным выборкам: event timeline, active membership и inbox payment requests. [app/services/indexes.py:18-67](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/indexes.py#L18-L67)
 
-## Lifecycle статусы
+## Related Pages
 
-| Объект | Основные статусы | Правило |
-| --- | --- | --- |
-| Event membership | `active`, removed/deleted state through soft-delete fields | Только active membership дает доступ к event data. |
-| Event invite | active/revoked/accepted/expired by fields and TTL | Revoked/expired token не может добавить участника. |
-| Receipt | `draft`, `collecting_shares`, `ready_for_review`, `pending_confirmation`, `confirmed`, `disputed`, `voided`, `corrected` | Только confirmed receipt влияет на balances; voided/corrected не должны создавать долг. |
-| Receipt share review | `pending`, `accepted`, `disputed` | Dispute переводит чек в спорное состояние. |
-| Allocation session | `collecting`, `ready`, `finalized` | Меняет shares только через controlled finalize flow. |
-| Payment | `pending`, `confirmed`, `rejected` | Только confirmed payment уменьшает balances. |
-| Payment request | `requested`, `paid`, `confirmed`, `rejected`, `cancelled`, `disputed` | `mark-paid` создает pending payment, confirmation делает его финансовым фактом. |
-| Settlement plan | `pending`, `approved`, `rejected`, `stale`, `expired`, `executing`, `partially_settled`, `completed` | Create/execute только для open event; `required_approver_ids` покрывает весь source graph, включая net-zero intermediaries; `completed` достигается только через confirmed linked payments. |
-| Dispute | `open`, `resolved` | Resolution не должна обходить authorization по event. |
-| Splitik draft | `pending`, `committed`, cancelled/deleted terminal states | Pending draft можно редактировать; committed draft повторно не применяется. |
-
-## Индексы и ограничения
-
-Индексы создаются в `app/services/indexes.py`. Самые важные ограничения:
-
-- `users.id`, `events.id`, `receipts.id`, `payments.id` и другие public ids
-  уникальны.
-- `event_memberships(event_id, user_id)` уникален: один membership record на
-  пользователя в событии.
-- `friends.pair_key` уникален: одна friendship-связь на пару пользователей.
-- `user_contacts(owner_user_id, phone_hash)` уникален: один сохраненный контакт
-  на нормализованный телефон владельца.
-- `idempotency_keys(actor_user_id, scope, key)` уникален: один результат на
-  idempotent financial request.
-- `payment_requests(settlement_plan_id, settlement_edge_id)` unique sparse:
-  не больше одного `payment_request` документа на каждую пару
-  `(settlement_plan_id, settlement_edge_id)` независимо от статуса; повторные execute/retry
-  должны переиспользовать уже существующий документ.
-- `settlement_plans.active_key` unique sparse: один active plan на конкретный
-  snapshot одного event.
-- TTL есть у `refresh_tokens.expires_at` и `idempotency_keys.created_at`.
-
-Pending settlement plan дополнительно живет 24 часа по полю `expires_at`; backend
-переводит его в `expired` при чтении или mutation action, если TTL истек.
-
-## Где смотреть детали
-
-- API shape: `openapi.yaml` и [API](API-Reference).
-- Бизнес-сценарии: [Доменные сценарии](Domain-Flows).
-- Архитектура слоев: [Обзор проекта](Project-Overview).
-- Splitik draft/commit модель: [Сплитик](Splitik-Agent).
-- Production storage/runtime: [Операции и деплой](Operations-And-Deployment).
+| Page | Relationship |
+|---|---|
+| [Архитектура](Architecture.md#доверительные-границы) | Объясняет, где ownership проверяется. |
+| [Аутентификация и безопасность](Authentication-And-Security.md#refresh-токены-и-секреты) | Описывает lifecycle refresh-token state. |
+| [Деньги и расчёты](Money-And-Settlement.md) | Объясняет business-meaning receipts, payments и plans. |
+| [Операции и деплой](Operations-And-Deployment.md#backup-и-восстановление) | Покрывает эксплуатацию MongoDB state. |
