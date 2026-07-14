@@ -15,7 +15,7 @@ sequenceDiagram
   U->>S: Добавить чек или выбрать позиции
   S-->>U: Балансы и план переводов
   U->>S: Отметить заявку оплаченной
-  C->>S: Подтвердить или отклонить платёж
+  U->>S: Получатель подтверждает или отклоняет платёж
 ```
 <!-- Sources: app/routers/events.py:96-134, app/routers/receipts.py:22-239, app/routers/payments.py:70-145 -->
 
@@ -26,7 +26,7 @@ sequenceDiagram
 | Добавить чек | Расход и доли записаны для события | Политика может разрешать всем или только создателю | [политика создания](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/receipts.py#L113-L117) |
 | Распределить позиции | Участники заявляют позиции чернового чека | Каждый участник только в своём событии | [сессия распределения](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/receipts.py#L792-L883) |
 | Подтвердить чек | Чек начинает влиять на баланс | По политике: плательщик или создатель | [правила подтверждения](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/receipts.py#L119-L131), [подтверждение](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/receipts.py#L572-L607) |
-| Рассчитаться | Заявка становится платежом, затем подтверждается | Должник отмечает оплату; стороны платежа подтверждают/отклоняют | [жизненный цикл заявки](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/payments.py#L514-L557), [маршруты](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/payments.py#L118-L157) |
+| Рассчитаться | Заявка становится ожидающим подтверждения платежом, затем подтверждается или отклоняется | Только должник отмечает оплату; только получатель платежа подтверждает или отклоняет её | [отметка оплаты](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/payments.py#L514-L557), [подтверждение](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/payments.py#L167-L210), [отклонение](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/payments.py#L213-L252) |
 
 ## Правила доступа и закрытие
 
@@ -35,7 +35,9 @@ sequenceDiagram
 | Доступ к балансу проверяется до расчёта | Нельзя получить долг чужого события | [balances.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/balances.py#L151-L172) |
 | Получатель заявки — текущий пользователь | Нельзя выставить заявку от имени другого участника | [payments.py](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/payments.py#L310-L325) |
 | Создатель/плательщик может аннулировать подтверждённый чек | История меняется явной операцией, а не удалением | [void](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/receipts.py#L646-L678) |
-| Перед закрытием доступна сводка подтверждения | Пользователь видит действие до его выполнения | [маршрут сводки закрытия](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/routers/events.py#L50-L68) |
+| Только создатель закрывает или вновь открывает событие | Статус `is_closed` меняется через обновление события и записывается в аудит | [update event](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/events.py#L362-L409) |
+| Закрытое событие блокирует финансовые изменения | Сервисы чеков и платежей вызывают общую проверку открытого события | [assert event open](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/access.py#L56-L61), [платёж](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/payments.py#L167-L174), [чек](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/receipts.py#L307-L315) |
+| Перед закрытием доступна сводка подтверждения | Только создатель видит сводку действия до его выполнения | [сводка закрытия](https://github.com/Strongf-bob/SplitAppBackend/blob/main/app/services/events.py#L412-L420) |
 
 ## Связанные страницы
 
