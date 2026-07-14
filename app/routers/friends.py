@@ -37,6 +37,25 @@ def preview_friend_invite(
     return services.preview_friend_invite(db, token, current_user_id)
 
 
+@router.post("/api/friend-invites/{token}/accept", response_model=schemas.Friendship)
+def accept_friend_invite(
+    token: str,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.accept_friend_invite(db, token, current_user_id)
+
+
+@router.delete("/api/friend-invites/{invite_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_friend_invite(
+    invite_id: UUID,
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> Response:
+    services.revoke_friend_invite(db, str(invite_id), current_user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/api/friends", response_model=schemas.FriendshipPage)
 def list_friendships(
     status_filter: str | None = Query(default=None, alias="status"),

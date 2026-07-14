@@ -615,6 +615,57 @@ def test_friend_invite_stores_only_token_hash_and_previews_sender(db):
     assert "token" not in preview
 
 
+def test_friend_invite_accepts_once_and_is_idempotent_for_recipient(db):
+    from app.services import friend_invites
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    created = friend_invites.create_friend_invite(db, USER_A)
+
+    accepted = friend_invites.accept_friend_invite(db, created["token"], USER_B)
+    repeated = friend_invites.accept_friend_invite(db, created["token"], USER_B)
+
+    assert accepted["status"] == "accepted"
+    assert repeated["id"] == accepted["id"]
+    assert db.friend_invites.find_one({"id": created["id"]})["accepted_by"] == USER_B
+
+    with pytest.raises(Exception) as second_recipient:
+        friend_invites.accept_friend_invite(db, created["token"], USER_C)
+    assert_status(second_recipient.value, 409)
+
+
+def test_friend_invite_rejects_expiry_self_accept_block_and_revocation(db):
+    from app.services import friend_invites
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    expired = friend_invites.create_friend_invite(db, USER_A)
+    db.friend_invites.update_one(
+        {"id": expired["id"]}, {"$set": {"expires_at": datetime(2020, 1, 1)}}
+    )
+    with pytest.raises(Exception) as expiry:
+        friend_invites.preview_friend_invite(db, expired["token"], USER_B)
+    assert_status(expiry.value, 410)
+
+    own = friend_invites.create_friend_invite(db, USER_A)
+    with pytest.raises(Exception) as self_accept:
+        friend_invites.accept_friend_invite(db, own["token"], USER_A)
+    assert_status(self_accept.value, 400)
+
+    blocked = friends.create_friend_request(db, schemas.FriendRequestCreate(user_id=USER_B), USER_A)
+    friends.block_friendship(db, blocked["id"], USER_B)
+    blocked_invite = friend_invites.create_friend_invite(db, USER_A)
+    with pytest.raises(Exception) as blocked_accept:
+        friend_invites.accept_friend_invite(db, blocked_invite["token"], USER_B)
+    assert_status(blocked_accept.value, 403)
+
+    revoked = friend_invites.create_friend_invite(db, USER_A)
+    friend_invites.revoke_friend_invite(db, revoked["id"], USER_A)
+    with pytest.raises(Exception) as revoked_preview:
+        friend_invites.preview_friend_invite(db, revoked["token"], USER_B)
+    assert_status(revoked_preview.value, 409)
+
+
 def test_payment_phone_visibility_respects_friendship(db):
     from tests.conftest import seed_users
 
