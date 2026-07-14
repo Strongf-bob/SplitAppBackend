@@ -1,5 +1,7 @@
 # Splitik unified creation plan
 
+> Historical design. PWA references are retired as of 2026-07-14; the native iOS application is the only product client.
+
 ## Goal
 
 Let one Splitik message describe an event, known users to add, and receipt drafts. Show the complete result only in the native iOS app and commit it only after one explicit confirmation.

@@ -1,5 +1,7 @@
 # Whole Codebase Refactor Implementation Plan
 
+> Historical plan. Its PWA work is retired as of 2026-07-14; current client work belongs to the native iOS application.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Separate Splitik presentation from page orchestration and remove duplicate session-history reads without changing contracts.

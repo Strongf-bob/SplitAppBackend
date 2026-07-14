@@ -20,7 +20,7 @@ What is in scope for this repository?
 
 ## Out Of Scope
 
-Frontend, iOS, PWA UX, infrastructure, or follow-up work that should stay separate.
+iOS UX, infrastructure, or follow-up work that should stay separate.
 
 ## Acceptance Criteria
 
