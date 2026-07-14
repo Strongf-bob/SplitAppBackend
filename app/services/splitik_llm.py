@@ -1,6 +1,7 @@
 import json
 import os
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 import time
 from typing import Literal
 
@@ -302,7 +303,9 @@ def probe_model_pools() -> dict[str, str]:
         for model in _model_pool("SPLITIK_TEXT_MODEL_POOL", config.fast_chat_model)
     ]
     vision_fixture_url = _env("SPLITIK_VISION_SMOKE_IMAGE_URL")
-    expected_vision_total = _env("SPLITIK_VISION_SMOKE_EXPECTED_TOTAL_KOPECKS")
+    expected_vision_total = _expected_vision_fixture_total_kopecks(
+        _env("SPLITIK_VISION_SMOKE_EXPECTED_TOTAL_KOPECKS")
+    )
     if vision_fixture_url:
         probes.extend(
             ("vision", model, vision_fixture_url)
@@ -348,9 +351,8 @@ def probe_model_pools() -> dict[str, str]:
                 parsed = _parse_json_object(content)
                 if not isinstance(parsed.get("payload"), dict):
                     raise RuntimeError("vision fixture response lacks payload")
-                if (
-                    expected_vision_total
-                    and str(parsed["payload"].get("total_amount_kopecks")) != expected_vision_total
+                if expected_vision_total and not _vision_fixture_total_matches(
+                    parsed["payload"], expected_vision_total
                 ):
                     raise RuntimeError("vision fixture total does not match")
         except (httpx.HTTPError, HTTPException, RuntimeError, ValueError):
@@ -376,6 +378,10 @@ def _extract_chat_content(response_body: object) -> str:
 
 def _parse_json_object(content: str) -> dict:
     cleaned = content.strip()
+    if cleaned.startswith("<think>"):
+        thinking_end = cleaned.find("</think>")
+        if thinking_end >= 0:
+            cleaned = cleaned[thinking_end + len("</think>") :].strip()
     fence_start = cleaned.find("```")
     if fence_start >= 0:
         fence_end = cleaned.find("```", fence_start + 3)
@@ -392,6 +398,39 @@ def _parse_json_object(content: str) -> dict:
     if not isinstance(parsed, dict):
         raise HTTPException(status_code=502, detail="Splitik LLM JSON response was invalid.")
     return parsed
+
+
+def _expected_vision_fixture_total_kopecks(value: str) -> int | None:
+    if not value:
+        return None
+    try:
+        expected = int(value)
+    except ValueError:
+        raise ValueError(
+            "Splitik vision fixture expected total must be a non-negative integer."
+        ) from None
+    if expected < 0:
+        raise ValueError("Splitik vision fixture expected total must be a non-negative integer.")
+    return expected
+
+
+def _vision_fixture_total_matches(payload: dict, expected_kopecks: int) -> bool:
+
+    value = payload.get("total_amount_kopecks")
+    if value is not None:
+        try:
+            return Decimal(str(value)) == Decimal(expected_kopecks)
+        except (InvalidOperation, ValueError):
+            return False
+
+    value = payload.get("total")
+    if value is None:
+        return False
+    try:
+        rubles = Decimal(str(value).replace(",", ".").replace(" ", ""))
+    except (InvalidOperation, ValueError):
+        return False
+    return rubles * 100 == Decimal(expected_kopecks)
 
 
 def _models_url(base_url: str) -> str:
