@@ -1796,29 +1796,23 @@
         ]
       }
     },
-    "/api/friend-invites/{token}/preview": {
-      "get": {
+    "/api/friend-invites/preview": {
+      "post": {
         "tags": [
           "Friends"
         ],
         "summary": "Preview Friend Invite",
-        "operationId": "preview_friend_invite_api_friend_invites__token__preview_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "token",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Token"
+        "operationId": "preview_friend_invite_api_friend_invites_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FriendInviteTokenRequest"
+              }
             }
-          }
-        ],
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1840,32 +1834,31 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
-    "/api/friend-invites/{token}/accept": {
+    "/api/friend-invites/accept": {
       "post": {
         "tags": [
           "Friends"
         ],
         "summary": "Accept Friend Invite",
-        "operationId": "accept_friend_invite_api_friend_invites__token__accept_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "token",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Token"
+        "operationId": "accept_friend_invite_api_friend_invites_accept_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FriendInviteTokenRequest"
+              }
             }
-          }
-        ],
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1887,7 +1880,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/friend-invites/{invite_id}": {
@@ -6706,6 +6704,22 @@
           "expires_at"
         ],
         "title": "FriendInvitePreview"
+      },
+      "FriendInviteTokenRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 43,
+            "minLength": 43,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "FriendInviteTokenRequest"
       },
       "FriendRequestCreate": {
         "properties": {

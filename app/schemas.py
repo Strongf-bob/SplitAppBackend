@@ -136,6 +136,10 @@ class FriendInvitePreview(BaseModel):
     expires_at: datetime
 
 
+class FriendInviteTokenRequest(BaseModel):
+    token: str = Field(min_length=43, max_length=43, pattern=r"^[A-Za-z0-9_-]+$")
+
+
 class UserUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=120)
     email: str | None = Field(default=None, max_length=254)

@@ -28,22 +28,22 @@ def create_friend_invite(
     return services.create_friend_invite(db, current_user_id)
 
 
-@router.get("/api/friend-invites/{token}/preview", response_model=schemas.FriendInvitePreview)
+@router.post("/api/friend-invites/preview", response_model=schemas.FriendInvitePreview)
 def preview_friend_invite(
-    token: str,
+    payload: schemas.FriendInviteTokenRequest,
     db: Database = Depends(get_db),
     current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
-    return services.preview_friend_invite(db, token, current_user_id)
+    return services.preview_friend_invite(db, payload.token, current_user_id)
 
 
-@router.post("/api/friend-invites/{token}/accept", response_model=schemas.Friendship)
+@router.post("/api/friend-invites/accept", response_model=schemas.Friendship)
 def accept_friend_invite(
-    token: str,
+    payload: schemas.FriendInviteTokenRequest,
     db: Database = Depends(get_db),
     current_user_id: str = Depends(get_actor_user_id),
 ) -> dict:
-    return services.accept_friend_invite(db, token, current_user_id)
+    return services.accept_friend_invite(db, payload.token, current_user_id)
 
 
 @router.delete("/api/friend-invites/{invite_id}", status_code=status.HTTP_204_NO_CONTENT)
