@@ -40,7 +40,7 @@
           "refId": "A"
         }
       ],
-      "title": "Backend Up",
+      "title": "Backend Metrics Target Up",
       "type": "stat",
       "fieldConfig": {
         "defaults": {
@@ -78,6 +78,7 @@
       "targets": [
         {
           "expr": "sum(rate(splitapp_http_requests_total{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])) or vector(0)",
+          "interval": "15s",
           "legendFormat": "all",
           "refId": "A"
         }
@@ -115,7 +116,8 @@
       "id": 3,
       "targets": [
         {
-          "expr": "(sum(rate(splitapp_http_requests_total{status_code=~\"5..\"}[5m])) / clamp_min(sum(rate(splitapp_http_requests_total[5m])), 0.001)) or vector(0)",
+          "expr": "(sum(rate(splitapp_http_requests_total{status_code=~\"5..\",path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])) / clamp_min(sum(rate(splitapp_http_requests_total{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])), 0.001)) or vector(0)",
+          "interval": "15s",
           "legendFormat": "5xx",
           "refId": "A"
         }
@@ -124,6 +126,8 @@
       "type": "timeseries",
       "fieldConfig": {
         "defaults": {
+          "max": 1,
+          "min": 0,
           "unit": "percentunit"
         },
         "overrides": []
@@ -154,16 +158,19 @@
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum(rate(splitapp_http_request_duration_seconds_bucket{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])) by (le))",
+          "interval": "15s",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
           "expr": "histogram_quantile(0.95, sum(rate(splitapp_http_request_duration_seconds_bucket{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])) by (le))",
+          "interval": "15s",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
           "expr": "histogram_quantile(0.99, sum(rate(splitapp_http_request_duration_seconds_bucket{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])) by (le))",
+          "interval": "15s",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -202,6 +209,7 @@
       "targets": [
         {
           "expr": "sum by (path) (rate(splitapp_http_requests_total{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m]))",
+          "interval": "15s",
           "legendFormat": "{{path}}",
           "refId": "A"
         }
@@ -240,11 +248,12 @@
       "targets": [
         {
           "expr": "sum by (status_code) (rate(splitapp_http_requests_total{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m]))",
+          "interval": "15s",
           "legendFormat": "{{status_code}}",
           "refId": "A"
         }
       ],
-      "title": "HTTP Status Families",
+      "title": "HTTP Status Codes",
       "type": "timeseries",
       "fieldConfig": {
         "defaults": {
@@ -277,7 +286,8 @@
       "id": 7,
       "targets": [
         {
-          "expr": "sort_desc(histogram_quantile(0.95, sum(rate(splitapp_http_request_duration_seconds_bucket{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])) by (le, path)))",
+          "expr": "sort_desc(histogram_quantile(0.95, sum(rate(splitapp_http_request_duration_seconds_bucket{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])) by (le, path)) and on (path) (sum by (path) (rate(splitapp_http_request_duration_seconds_count{path!=\"/api/ping\",path!=\"/api/metrics\"}[5m])) > 0))",
+          "interval": "15s",
           "legendFormat": "{{path}}",
           "refId": "A",
           "format": "table",
@@ -288,6 +298,7 @@
       "type": "table",
       "fieldConfig": {
         "defaults": {
+          "noValue": "No requests in the last 5m",
           "unit": "s"
         },
         "overrides": []
@@ -311,6 +322,7 @@
       "targets": [
         {
           "expr": "sum by (path, status_code) (rate(splitapp_http_requests_total{status_code=~\"4..|5..\"}[5m]))",
+          "interval": "15s",
           "legendFormat": "{{path}} {{status_code}}",
           "refId": "A"
         }
