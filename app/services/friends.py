@@ -4,7 +4,8 @@ from pymongo.database import Database
 from app import schemas
 from app.core.monitoring import record_domain_event, track_service_operation
 from app.services.access import get_user_or_404
-from app.services.common import active_filter, new_uuid, strip_mongo_id, user_to_api_dict, utc_now
+from app.services.common import active_filter, new_uuid, strip_mongo_id, utc_now
+from app.services.users import user_to_visible_api_dict
 
 
 def _pair_key(user_a: str, user_b: str) -> str:
@@ -20,7 +21,7 @@ def _friendship_to_api(db: Database, friendship: dict, actor_user_id: str | None
             else friendship["requester_id"]
         )
         peer = db.users.find_one({"id": peer_id})
-        cleaned["peer"] = user_to_api_dict(peer) if peer else None
+        cleaned["peer"] = user_to_visible_api_dict(db, peer, actor_user_id) if peer else None
     return cleaned
 
 

@@ -3,6 +3,7 @@ import logging
 
 import httpx
 from fastapi import HTTPException
+from pymongo import ReturnDocument
 from pymongo.database import Database
 
 from app.core import tokens
@@ -207,25 +208,21 @@ def rotate_refresh_token(db: Database, raw_refresh: str) -> dict:
         db.refresh_tokens.delete_one({"id": doc["id"]})
         raise HTTPException(status_code=401, detail="Refresh token expired.")
 
-    used_at = doc.get("used_at")
-    if used_at is not None:
-        if used_at.tzinfo is None:
-            used_at = used_at.replace(tzinfo=UTC)
-        if now - used_at > tokens.refresh_token_reuse_grace():
-            raise HTTPException(status_code=401, detail="Invalid refresh token.")
-
     user_id = doc["user_id"]
     user = db.users.find_one({"id": user_id})
     if not user:
         db.refresh_tokens.delete_many({"user_id": user_id})
         raise HTTPException(status_code=401, detail="User no longer exists.")
 
-    if used_at is None:
-        reuse_expires_at = min(expires_at, now + tokens.refresh_token_reuse_grace())
-        db.refresh_tokens.update_one(
-            {"id": doc["id"]},
-            {"$set": {"used_at": now, "expires_at": reuse_expires_at}},
-        )
+    used_token_expires_at = min(expires_at, now + tokens.used_refresh_token_retention())
+    claimed = db.refresh_tokens.find_one_and_update(
+        {"id": doc["id"], "used_at": {"$exists": False}},
+        {"$set": {"used_at": now, "expires_at": used_token_expires_at}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if claimed is None:
+        raise HTTPException(status_code=401, detail="Invalid refresh token.")
+
     access_token, expires_in = tokens.create_access_token(user_id)
     new_refresh = _issue_refresh_token(db, user_id)
     return {
