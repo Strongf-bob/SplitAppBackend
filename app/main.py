@@ -226,7 +226,7 @@ def configure_grafana_proxy(
             async with client_factory(timeout=30.0, follow_redirects=False) as client:
                 upstream = await client.request(
                     request.method,
-                    f"{base_url}/{path}",
+                    f"{base_url}{GRAFANA_PROXY_PATH}/{path}",
                     params=request.query_params.multi_items(),
                     content=await request.body(),
                     headers=headers,

@@ -270,7 +270,7 @@ def test_grafana_proxy_forwards_same_origin_subpath():
     assert response.status_code == 201
     assert response.headers["x-grafana-test"] == "proxied"
     assert response.json() == {
-        "path": "api/search",
+        "path": "grafana/api/search",
         "query": "query=latency",
         "prefix": "/grafana",
         "host": "testserver",
