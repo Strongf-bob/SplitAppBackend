@@ -28,16 +28,16 @@ Authorization: Bearer <access_token>
 | Method | Path | Назначение | iOS |
 | --- | --- | --- | --- |
 | `POST` | `/api/login` | Обмен Yandex OAuth token на app access/refresh tokens. | `AuthUserEndpoint` |
-| `POST` | `/api/refresh` | Ротация refresh token и выдача нового access token. | `RefreshTokenEndpoint` |
+| `POST` | `/api/refresh` | Однократная ротация refresh token и выдача новой access/refresh пары. | `RefreshTokenEndpoint`; повтор использованного token возвращает `401`. |
 
 ## Security
 
-Sensitive endpoints have lightweight per-actor/IP rate limiting and return `429` on excess traffic. Covered scopes include auth login/refresh, user search, and invite preview/accept/create.
+Sensitive endpoints have lightweight per-actor/IP rate limiting and return `429` on excess traffic. Covered scopes include auth login/refresh, user search, event-invite preview/accept/create, and friend-invite creation.
 
 Config:
 
 - `RATE_LIMIT_ENABLED`: default `true`.
-- `RATE_LIMIT_MAX_REQUESTS`: default `60`.
+- `RATE_LIMIT_MAX_REQUESTS`: default `30`.
 - `RATE_LIMIT_WINDOW_SECONDS`: default `60`.
 
 ## Users
@@ -58,13 +58,13 @@ Payment phone visibility is conservative: `nobody`, `event_members`, or `friends
 | Method | Path | Назначение | Notes |
 | --- | --- | --- | --- |
 | `POST` | `/api/friends` | Создать private friend request. | Friendship не равен event membership. |
-| `GET` | `/api/friends` | Список friendship records текущего user. | Paginated; optional `status` filter. |
+| `GET` | `/api/friends` | Список friendship records текущего user. | Paginated; optional `status` filter; peer payment phone следует `nobody` / `event_members` / `friends`. |
 | `POST` | `/api/friends/{id}/accept` | Принять friend request. | Только addressee. |
 | `POST` | `/api/friends/{id}/reject` | Отклонить friend request. | Только addressee. |
 | `DELETE` | `/api/friends/{id}` | Удалить friendship. | Любая сторона. |
 | `POST` | `/api/friends/{id}/block` | Заблокировать friendship. | Любая сторона. |
-| `POST` | `/api/friend-invites` | Создать одноразовое приглашение в друзья. | В ответе deep link; raw token не хранится. Действует 15 минут. |
-| `POST` | `/api/friend-invites/preview` | Предпросмотр приглашения. | Токен передаётся в JSON body, не в URL; требует авторизацию и не создаёт friendship. |
+| `POST` | `/api/friend-invites` | Создать одноразовое приглашение в друзья. | Rate-limited; в ответе deep link; raw token не хранится. Действует 15 минут. |
+| `POST` | `/api/friend-invites/preview` | Предпросмотр приглашения. | Токен передаётся в JSON body, не в URL; возвращает только публичные `id`, `name`, `avatar_url`, `public_handle` creator; не создаёт friendship. |
 | `POST` | `/api/friend-invites/accept` | Явно принять приглашение. | Токен передаётся в JSON body; одноразово создаёт accepted friendship; self-invite и blocked pair запрещены. |
 | `DELETE` | `/api/friend-invites/{id}` | Отозвать активное приглашение. | Только creator. |
 

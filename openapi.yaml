@@ -6689,7 +6689,7 @@
             "title": "Id"
           },
           "creator": {
-            "$ref": "#/components/schemas/User"
+            "$ref": "#/components/schemas/PublicUser"
           },
           "expires_at": {
             "type": "string",
@@ -7310,6 +7310,47 @@
           "confirmed"
         ],
         "title": "PaymentUpdate"
+      },
+      "PublicUser": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "public_handle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Handle"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "PublicUser"
       },
       "Receipt": {
         "properties": {

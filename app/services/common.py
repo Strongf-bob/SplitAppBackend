@@ -103,3 +103,14 @@ def user_to_api_dict(user: dict) -> dict:
         "phone_verified": bool(user.get("phone_verified", False)),
         "payment_phone_visibility": user.get("payment_phone_visibility", "nobody"),
     }
+
+
+def public_user_to_api_dict(user: dict) -> dict:
+    return {
+        "id": user["id"],
+        "name": user["name"],
+        "avatar_url": f"/avatars/{user['id']}"
+        if user.get("avatar_key")
+        else user.get("avatar_url"),
+        "public_handle": user.get("public_handle"),
+    }

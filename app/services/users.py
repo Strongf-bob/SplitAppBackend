@@ -69,7 +69,7 @@ def _accepted_friend_user_ids(db: Database, actor_user_id: str) -> set[str]:
     return friend_ids
 
 
-def _user_to_visible_api_dict(db: Database, user: dict, actor_user_id: str) -> dict:
+def user_to_visible_api_dict(db: Database, user: dict, actor_user_id: str) -> dict:
     data = user_to_api_dict(user)
     if user["id"] == actor_user_id:
         return data
@@ -112,7 +112,7 @@ def list_users(db: Database, actor_user_id: str, *, limit: int, offset: int) -> 
     total = db.users.count_documents(query)
     cursor = db.users.find(query).sort("name", 1).skip(offset).limit(limit)
     return {
-        "items": [_user_to_visible_api_dict(db, user, actor_user_id) for user in cursor],
+        "items": [user_to_visible_api_dict(db, user, actor_user_id) for user in cursor],
         "limit": limit,
         "offset": offset,
         "total": total,
@@ -121,7 +121,7 @@ def list_users(db: Database, actor_user_id: str, *, limit: int, offset: int) -> 
 
 @track_service_operation("users.get_current")
 def get_current_user(db: Database, actor_user_id: str) -> dict:
-    return _user_to_visible_api_dict(db, get_user_or_404(db, actor_user_id), actor_user_id)
+    return user_to_visible_api_dict(db, get_user_or_404(db, actor_user_id), actor_user_id)
 
 
 @track_service_operation("users.financial_stats")
@@ -230,7 +230,7 @@ def update_current_user(db: Database, actor_user_id: str, payload: schemas.UserU
         resource_id=actor_user_id,
         actor_user_id=actor_user_id,
     )
-    return _user_to_visible_api_dict(db, get_user_or_404(db, actor_user_id), actor_user_id)
+    return user_to_visible_api_dict(db, get_user_or_404(db, actor_user_id), actor_user_id)
 
 
 @track_service_operation("users.search")
@@ -253,7 +253,7 @@ def search_users(db: Database, actor_user_id: str, query: str, *, limit: int, of
     total = db.users.count_documents(mongo_query)
     cursor = db.users.find(mongo_query).sort("name", 1).skip(offset).limit(limit)
     return {
-        "items": [_user_to_visible_api_dict(db, user, actor_user_id) for user in cursor],
+        "items": [user_to_visible_api_dict(db, user, actor_user_id) for user in cursor],
         "limit": limit,
         "offset": offset,
         "total": total,

@@ -74,6 +74,13 @@ class User(BaseModel):
     payment_phone_visibility: PaymentPhoneVisibility = "nobody"
 
 
+class PublicUser(BaseModel):
+    id: UUID
+    name: str
+    avatar_url: str | None = None
+    public_handle: str | None = None
+
+
 class UserPage(BaseModel):
     items: list[User]
     limit: int
@@ -132,7 +139,7 @@ class FriendInvite(BaseModel):
 
 class FriendInvitePreview(BaseModel):
     id: UUID
-    creator: User
+    creator: PublicUser
     expires_at: datetime
 
 

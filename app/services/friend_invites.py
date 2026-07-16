@@ -6,8 +6,9 @@ from fastapi import HTTPException
 from pymongo.errors import DuplicateKeyError
 from pymongo.database import Database
 
+from app.core.rate_limit import check_rate_limit
 from app.services.access import get_user_or_404
-from app.services.common import new_uuid, utc_now, user_to_api_dict
+from app.services.common import new_uuid, public_user_to_api_dict, utc_now, user_to_api_dict
 
 _INVITE_TTL = timedelta(minutes=15)
 
@@ -39,6 +40,7 @@ def _active_invite_or_error(db: Database, token: str) -> dict:
 
 
 def create_friend_invite(db: Database, actor_user_id: str) -> dict:
+    check_rate_limit("friend_invites.create", actor_user_id)
     creator = get_user_or_404(db, actor_user_id)
     token = secrets.token_urlsafe(32)
     now = utc_now()
@@ -70,7 +72,7 @@ def preview_friend_invite(db: Database, token: str, actor_user_id: str) -> dict:
     creator = get_user_or_404(db, invite["creator_id"])
     return {
         "id": invite["id"],
-        "creator": user_to_api_dict(creator),
+        "creator": public_user_to_api_dict(creator),
         "expires_at": invite["expires_at"],
     }
 
@@ -114,10 +116,25 @@ def _accept_friendship(
         db.friends.insert_one(friendship)
         return friendship
     except DuplicateKeyError:
-        existing = db.friends.find_one({"id": friendship_id})
-        if existing:
-            return existing
-        raise
+        existing = db.friends.find_one({"pair_key": pair_key})
+        if not existing:
+            raise
+        if existing.get("status") == "blocked":
+            raise HTTPException(status_code=403, detail="Friendship is blocked.")
+        db.friends.update_one(
+            {"id": existing["id"]},
+            {
+                "$set": {
+                    "requester_id": creator_id,
+                    "addressee_id": recipient_id,
+                    "status": "accepted",
+                    "accepted_at": now,
+                    "updated_at": now,
+                },
+                "$unset": {"deleted_at": "", "blocked_by": "", "blocked_at": ""},
+            },
+        )
+        return db.friends.find_one({"id": existing["id"]})
 
 
 def _ensure_pair_is_not_blocked(db: Database, creator_id: str, recipient_id: str) -> None:

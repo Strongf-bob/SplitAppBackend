@@ -11,7 +11,7 @@ Backend использует Yandex OAuth как внешний identity provide
 При первом успешном входе backend сохраняет полученные профильные поля и копирует аватар в object storage. Повторный OAuth-вход по-прежнему валидирует credential, но возвращает сохранённый профиль без повторного импорта данных Яндекса. Аватар хранится как `avatar_key` и загружается клиентом через публичный `GET /avatars/{user_id}`.
 4. Backend возвращает app access token и refresh token.
 5. Protected API calls используют `Authorization: Bearer <access_token>`.
-6. `POST /api/refresh` ротирует refresh token и возвращает новый access token.
+6. `POST /api/refresh` однократно ротирует refresh token и возвращает новую пару access/refresh tokens. Уже использованный token, включая конкурентный повтор, получает `401` и не может выпустить дополнительный successor; клиент должен атомарно заменить сохранённый refresh token значением из успешного ответа.
 
 ## Authorization baseline
 
@@ -26,6 +26,7 @@ Backend services должны проверять authenticated actor рядом 
 - Payment confirmation требует, чтобы authenticated actor был receiver.
 - Closed events отклоняют financial mutations.
 - User listing visibility-limited, а не full user table dump.
+- Friendship responses применяют `payment_phone_visibility`; invite preview возвращает только публичные поля creator и не раскрывает телефон, email, birthday или payment hints.
 
 ## Storage rules
 

@@ -598,6 +598,31 @@ def test_friend_request_reject_and_authorization(db):
     assert rejected["status"] == "rejected"
 
 
+def test_friendship_peer_hides_payment_phone_when_visibility_is_nobody(db):
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    users.update_current_user(
+        db,
+        USER_B,
+        schemas.UserUpdate(
+            payment_phone="+79990000002",
+            payment_phone_visibility="nobody",
+        ),
+    )
+
+    requested = friends.create_friend_request(
+        db, schemas.FriendRequestCreate(user_id=USER_B), USER_A
+    )
+    friends.accept_friend_request(db, requested["id"], USER_B)
+    accepted = friends.list_friendships(db, USER_A, status_filter="accepted", limit=50, offset=0)[
+        "items"
+    ][0]
+
+    assert requested["peer"]["payment_phone"] is None
+    assert accepted["peer"]["payment_phone"] is None
+
+
 def test_friend_invite_stores_only_token_hash_and_previews_sender(db):
     from app.services import friend_invites
     from tests.conftest import seed_users
@@ -613,6 +638,36 @@ def test_friend_invite_stores_only_token_hash_and_previews_sender(db):
     assert stored["token_hash"] != created["token"]
     assert preview["creator"]["id"] == USER_A
     assert "token" not in preview
+
+
+def test_friend_invite_preview_only_exposes_public_creator_profile(db):
+    from app.services import friend_invites
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    users.update_current_user(
+        db,
+        USER_A,
+        schemas.UserUpdate(
+            public_handle="alice_public",
+            payment_phone="+79990000001",
+            payment_phone_visibility="nobody",
+        ),
+    )
+    db.users.update_one(
+        {"id": USER_A},
+        {"$set": {"birthday": "1990-01-01", "sex": "female"}},
+    )
+    created = friend_invites.create_friend_invite(db, USER_A)
+
+    preview = friend_invites.preview_friend_invite(db, created["token"], USER_B)
+
+    assert preview["creator"] == {
+        "id": USER_A,
+        "name": "Alice",
+        "avatar_url": None,
+        "public_handle": "alice_public",
+    }
 
 
 def test_friend_invite_accepts_once_and_is_idempotent_for_recipient(db):
@@ -661,6 +716,64 @@ def test_friend_invite_claim_prevents_another_recipient_friendship(db):
     stored_invite = db.friend_invites.find_one({"id": created["id"]})
     assert accepted["id"] == friendship_id
     assert stored_invite["status"] == "accepted"
+
+
+def test_friend_invite_accept_recovers_from_concurrent_pair_insert(db, monkeypatch):
+    from app.services import friend_invites
+    from tests.conftest import seed_users
+
+    seed_users(db)
+    db.friends.create_index("id", unique=True)
+    db.friends.create_index("pair_key", unique=True)
+    original_insert = db.friends.insert_one
+    inserted_concurrent_pair = False
+
+    def racing_insert(friendship):
+        nonlocal inserted_concurrent_pair
+        if not inserted_concurrent_pair:
+            inserted_concurrent_pair = True
+            original_insert(
+                {
+                    "id": "44444444-4444-4444-4444-444444444444",
+                    "pair_key": ":".join(sorted([USER_A, USER_B])),
+                    "requester_id": USER_B,
+                    "addressee_id": USER_A,
+                    "status": "requested",
+                    "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+                    "updated_at": datetime(2026, 1, 1, tzinfo=UTC),
+                }
+            )
+        return original_insert(friendship)
+
+    monkeypatch.setattr(db.friends, "insert_one", racing_insert)
+
+    accepted = friend_invites._accept_friendship(
+        db,
+        USER_A,
+        USER_B,
+        "55555555-5555-5555-5555-555555555555",
+    )
+
+    assert accepted["id"] == "44444444-4444-4444-4444-444444444444"
+    assert accepted["status"] == "accepted"
+    assert db.friends.count_documents({"pair_key": accepted["pair_key"]}) == 1
+
+
+def test_friend_invite_creation_is_rate_limited(db, monkeypatch):
+    from app.services import friend_invites
+    from tests.conftest import seed_users
+
+    monkeypatch.setenv("RATE_LIMIT_MAX_REQUESTS", "1")
+    monkeypatch.setenv("RATE_LIMIT_WINDOW_SECONDS", "60")
+    seed_users(db)
+
+    friend_invites.create_friend_invite(db, USER_A)
+
+    with pytest.raises(Exception) as limited:
+        friend_invites.create_friend_invite(db, USER_A)
+
+    assert_status(limited.value, 429)
+    assert db.friend_invites.count_documents({"creator_id": USER_A}) == 1
 
 
 def test_friend_invite_rejects_expiry_self_accept_block_and_revocation(db):
@@ -3896,22 +4009,23 @@ def test_refresh_token_rotation_issues_new_pair(db):
     assert db.refresh_tokens.find_one({"token_hash": tokens.hash_refresh_token(raw)})["used_at"]
 
 
-def test_refresh_token_can_retry_within_grace(db):
+def test_refresh_token_cannot_issue_multiple_successors(db):
     from tests.conftest import seed_users
 
     seed_users(db)
     raw = auth._issue_refresh_token(db, USER_A)
 
-    first = auth.rotate_refresh_token(db, raw)
-    second = auth.rotate_refresh_token(db, raw)
+    auth.rotate_refresh_token(db, raw)
+    token_count = db.refresh_tokens.count_documents({"user_id": USER_A})
 
-    assert (
-        first["access_token"] != second["access_token"]
-        or first["refresh_token"] != second["refresh_token"]
-    )
+    with pytest.raises(Exception) as reused:
+        auth.rotate_refresh_token(db, raw)
+
+    assert_status(reused.value, 401)
+    assert db.refresh_tokens.count_documents({"user_id": USER_A}) == token_count
 
 
-def test_refresh_token_retry_after_grace_fails(db):
+def test_used_refresh_token_is_rejected_regardless_of_age(db):
     from datetime import timedelta
     from tests.conftest import seed_users
 
@@ -3928,4 +4042,4 @@ def test_refresh_token_retry_after_grace_fails(db):
     except Exception as exc:
         assert_status(exc, 401)
     else:
-        raise AssertionError("Expected refresh reuse after grace to fail")
+        raise AssertionError("Expected used refresh token to fail")
