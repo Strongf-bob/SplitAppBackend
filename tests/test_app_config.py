@@ -3,8 +3,10 @@ import json
 import logging
 from pathlib import Path
 
+import httpx
 import pytest
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from app import main as app_main, schemas
@@ -230,6 +232,64 @@ def test_non_api_paths_are_public():
 
     assert response.status_code == 200
     assert response.json() == {"app": "splitapp"}
+
+
+def test_grafana_proxy_forwards_same_origin_subpath():
+    configure_grafana_proxy = getattr(app_main, "configure_grafana_proxy", None)
+    assert callable(configure_grafana_proxy), "Grafana proxy is not configured"
+
+    upstream = FastAPI()
+
+    @upstream.api_route("/{path:path}", methods=["GET", "POST"])
+    async def grafana_upstream(request: Request, path: str) -> JSONResponse:
+        return JSONResponse(
+            status_code=201,
+            content={
+                "path": path,
+                "query": request.url.query,
+                "prefix": request.headers.get("x-forwarded-prefix"),
+                "host": request.headers.get("x-forwarded-host"),
+                "body": (await request.body()).decode(),
+            },
+            headers={"X-Grafana-Test": "proxied"},
+        )
+
+    def client_factory(**kwargs) -> httpx.AsyncClient:
+        return httpx.AsyncClient(transport=httpx.ASGITransport(app=upstream), **kwargs)
+
+    api = FastAPI(dependencies=[Depends(require_auth_token)])
+    configure_grafana_proxy(
+        api,
+        grafana_base_url="http://grafana:3000",
+        client_factory=client_factory,
+    )
+    client = TestClient(api)
+
+    response = client.post("/grafana/api/search?query=latency", content="dashboard")
+
+    assert response.status_code == 201
+    assert response.headers["x-grafana-test"] == "proxied"
+    assert response.json() == {
+        "path": "api/search",
+        "query": "query=latency",
+        "prefix": "/grafana",
+        "host": "testserver",
+        "body": "dashboard",
+    }
+
+
+def test_grafana_proxy_redirects_bare_path():
+    configure_grafana_proxy = getattr(app_main, "configure_grafana_proxy", None)
+    assert callable(configure_grafana_proxy), "Grafana proxy is not configured"
+
+    api = FastAPI()
+    configure_grafana_proxy(api)
+    client = TestClient(api, follow_redirects=False)
+
+    response = client.get("/grafana")
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "/grafana/"
 
 
 def test_api_paths_still_require_bearer_token():
