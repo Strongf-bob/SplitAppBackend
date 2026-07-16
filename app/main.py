@@ -5,11 +5,13 @@ import logging
 import os
 from pathlib import Path
 import time
+from typing import Callable
 from uuid import uuid4
 
+import httpx
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.core.db import close_mongodb, connect_mongodb, load_env_file
@@ -47,6 +49,25 @@ DEFAULT_CORS_ALLOWED_ORIGINS = (
     "http://127.0.0.1:5173",
     "https://split-app.ru",
 )
+GRAFANA_PROXY_PATH = "/grafana"
+GRAFANA_INTERNAL_URL = "http://grafana:3000"
+PROXY_REQUEST_EXCLUDED_HEADERS = frozenset(
+    {
+        "connection",
+        "content-length",
+        "host",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+    }
+)
+PROXY_RESPONSE_EXCLUDED_HEADERS = PROXY_REQUEST_EXCLUDED_HEADERS | {
+    "content-encoding",
+}
 
 
 def cors_allowed_origins() -> list[str]:
@@ -161,6 +182,66 @@ def configure_public_docs(api: FastAPI) -> None:
     )
 
 
+def configure_grafana_proxy(
+    api: FastAPI,
+    *,
+    grafana_base_url: str | None = None,
+    client_factory: Callable[..., httpx.AsyncClient] = httpx.AsyncClient,
+) -> None:
+    base_url = (
+        grafana_base_url or os.getenv("GRAFANA_INTERNAL_URL") or GRAFANA_INTERNAL_URL
+    ).rstrip("/")
+
+    @api.get(GRAFANA_PROXY_PATH, include_in_schema=False)
+    @api.head(GRAFANA_PROXY_PATH, include_in_schema=False)
+    async def grafana_redirect() -> RedirectResponse:
+        return RedirectResponse(f"{GRAFANA_PROXY_PATH}/")
+
+    @api.api_route(
+        f"{GRAFANA_PROXY_PATH}/{{path:path}}",
+        methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        include_in_schema=False,
+    )
+    async def grafana_proxy(request: Request, path: str) -> Response:
+        headers = {
+            name: value
+            for name, value in request.headers.items()
+            if name.lower() not in PROXY_REQUEST_EXCLUDED_HEADERS
+        }
+        headers["accept-encoding"] = "identity"
+        headers["x-forwarded-host"] = request.headers.get(
+            "x-forwarded-host"
+        ) or request.headers.get("host", "")
+        headers["x-forwarded-proto"] = (
+            request.headers.get("x-forwarded-proto") or request.url.scheme
+        )
+        headers["x-forwarded-prefix"] = GRAFANA_PROXY_PATH
+        if request.client:
+            forwarded_for = request.headers.get("x-forwarded-for")
+            headers["x-forwarded-for"] = (
+                f"{forwarded_for}, {request.client.host}" if forwarded_for else request.client.host
+            )
+
+        try:
+            async with client_factory(timeout=30.0, follow_redirects=False) as client:
+                upstream = await client.request(
+                    request.method,
+                    f"{base_url}/{path}",
+                    params=request.query_params.multi_items(),
+                    content=await request.body(),
+                    headers=headers,
+                )
+        except httpx.HTTPError:
+            logger.exception("grafana_proxy_request_failed", extra={"path": path})
+            return JSONResponse(status_code=502, content={"detail": "Grafana is unavailable."})
+
+        response = Response(content=upstream.content, status_code=upstream.status_code)
+        for name, value in upstream.headers.multi_items():
+            if name.lower() not in PROXY_RESPONSE_EXCLUDED_HEADERS:
+                response.headers.append(name, value)
+        return response
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -215,6 +296,7 @@ def create_app() -> FastAPI:
     configure_exception_handlers(api)
     configure_request_logging(api)
     configure_cors(api)
+    configure_grafana_proxy(api)
     configure_public_docs(api)
     configure_landing_site(api)
     return api

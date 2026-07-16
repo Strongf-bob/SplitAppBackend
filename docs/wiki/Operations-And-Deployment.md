@@ -181,6 +181,8 @@ Public site:
 
 - `/` отдает статичную страницу о нативном iOS-приложении SplitApp.
 - `/assets/landing/*` содержит ее статические assets.
+- `/grafana/` проксирует только Grafana UI через основной HTTPS-домен и сохраняет
+  Grafana login; Prometheus и Loki не публикуются.
 - `/api/*` остается bearer-token protected, кроме documented auth/health exceptions.
 
 Grafana:
@@ -189,6 +191,8 @@ Grafana:
 - `GRAFANA_HOST_PORT` — default `3001`.
 - `GRAFANA_ADMIN_USER`.
 - `GRAFANA_ADMIN_PASSWORD` — required на сервере.
+- `GRAFANA_PUBLIC_ROOT_URL` — public same-origin URL; default
+  `https://split-app.ru/grafana/`.
 - `GRAFANA_PUBLIC_DOMAIN` — optional public HTTPS hostname for Grafana, for
   example `grafana.split-app.ru`.
 - `GRAFANA_PUBLIC_PROXY_MODE` — `external` when the host already owns `443`, or
@@ -204,6 +208,10 @@ Prometheus metrics:
 В Docker Compose Prometheus скрейпит endpoint внутри private network с
 `METRICS_ACCESS_TOKEN`. Prometheus и Loki не публикуются на host. Grafana
 публикуется только на `${GRAFANA_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_HOST_PORT:-3001}`.
+Основной безопасный внешний путь — `https://split-app.ru/grafana/`: backend
+проксирует Grafana внутри Compose network, а Grafana настроена на subpath через
+`GF_SERVER_ROOT_URL` и `GF_SERVER_SERVE_FROM_SUB_PATH`. Grafana login остается
+обязательным.
 Если `GRAFANA_PUBLIC_DOMAIN` задан и `GRAFANA_PUBLIC_PROXY_MODE=caddy`,
 дополнительно стартует Compose profile `public-grafana` с Caddy proxy: наружу
 публикуется только `https://${GRAFANA_PUBLIC_DOMAIN}`, а Prometheus, Loki и

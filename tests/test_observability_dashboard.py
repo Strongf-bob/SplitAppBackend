@@ -12,6 +12,7 @@ DASHBOARD_PATH = (
     / "dashboards"
     / "splitapp-backend.json"
 )
+PROJECT_ROOT = Path(__file__).parents[1]
 
 
 @pytest.fixture(scope="module")
@@ -49,3 +50,12 @@ def test_slow_endpoint_table_filters_zero_observation_histograms(panels_by_id):
 def test_panel_titles_describe_the_values_they_show(panels_by_id):
     assert panels_by_id[1]["title"] == "Backend Metrics Target Up"
     assert panels_by_id[6]["title"] == "HTTP Status Codes"
+
+
+def test_grafana_is_configured_for_same_origin_subpath():
+    compose = (PROJECT_ROOT / "compose.yaml").read_text(encoding="utf-8")
+
+    assert (
+        'GF_SERVER_ROOT_URL: "${GRAFANA_PUBLIC_ROOT_URL:-https://split-app.ru/grafana/}"' in compose
+    )
+    assert 'GF_SERVER_SERVE_FROM_SUB_PATH: "true"' in compose
