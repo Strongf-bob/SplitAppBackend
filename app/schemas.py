@@ -780,8 +780,8 @@ class SplitikEntryPoint(BaseModel):
 
 
 class SplitikAttachmentProcessing(BaseModel):
-    status: str
-    selected_variant: str
+    status: Literal["ready", "failed", "storage_failed"]
+    selected_variant: Literal["original", "normalized", "enhanced"]
     source_width: int | None = None
     source_height: int | None = None
     width: int | None = None

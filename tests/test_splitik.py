@@ -1838,6 +1838,47 @@ def test_splitik_attachment_delete_removes_original_and_derivative(db, fake_s3, 
     }
 
 
+def test_splitik_attachment_partial_delete_falls_back_to_original(db, fake_s3, monkeypatch):
+    monkeypatch.setenv("S3_BUCKET", "test-bucket")
+    attachment = splitik_attachments.create_attachment(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        filename="receipt.jpg",
+        content_type="image/jpeg",
+        content=_valid_jpeg(low_contrast=True),
+    )
+    stored = db.splitik_attachments.find_one({"id": attachment["id"]})
+    original_delete = fake_s3.delete_object
+
+    def fail_original_delete(**kwargs):
+        if kwargs["Key"] == stored["key"]:
+            raise RuntimeError("temporary S3 failure")
+        original_delete(**kwargs)
+
+    monkeypatch.setattr(fake_s3, "delete_object", fail_original_delete)
+
+    with pytest.raises(HTTPException) as exc:
+        splitik_attachments.delete_attachment(
+            db,
+            fake_s3,
+            actor_user_id=USER_A,
+            attachment_id=attachment["id"],
+        )
+
+    assert exc.value.status_code == 503
+    remaining = db.splitik_attachments.find_one({"id": attachment["id"]})
+    assert "derivative" not in remaining
+    assert ("test-bucket", stored["key"]) in fake_s3.objects
+    urls = splitik_attachments.image_urls_for_actor(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        attachment_ids=[attachment["id"]],
+    )
+    assert stored["key"] in urls[0][1]
+
+
 def test_splitik_attachment_delete_endpoint_is_owner_scoped(db, fake_s3, monkeypatch):
     monkeypatch.setenv("S3_BUCKET", "test-bucket")
     attachment = splitik_attachments.create_attachment(
@@ -1912,6 +1953,69 @@ def test_splitik_attachment_mongo_fallback_keeps_derivative_private(db, fake_s3,
     assert "content" not in attachment
     assert "derivative" not in attachment
     assert attachment["processing"]["selected_variant"] == "enhanced"
+
+
+def test_splitik_attachment_mongo_fallback_discards_derivative_over_bson_budget(
+    db, fake_s3, monkeypatch
+):
+    from app.services.receipt_image_preprocessing import ReceiptImagePreprocessingResult
+
+    monkeypatch.delenv("S3_BUCKET", raising=False)
+    original = b"\xff\xd8\xff" + b"o" * (10 * 1024 * 1024 - 3)
+    derivative = b"d" * (6 * 1024 * 1024)
+    monkeypatch.setattr(
+        splitik_attachments,
+        "preprocess_receipt_image",
+        lambda *_args: ReceiptImagePreprocessingResult(
+            derivative_content=derivative,
+            derivative_content_type="image/jpeg",
+            metadata={
+                "status": "ready",
+                "selected_variant": "enhanced",
+                "quality_flags": ["low_contrast"],
+                "operations": ["autocontrast"],
+                "duration_ms": 1,
+            },
+        ),
+    )
+
+    attachment = splitik_attachments.create_attachment(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        filename="receipt.jpg",
+        content_type="image/jpeg",
+        content=original,
+    )
+
+    stored = db.splitik_attachments.find_one({"id": attachment["id"]})
+    assert stored["content"] == original
+    assert "derivative" not in stored
+    assert attachment["processing"]["status"] == "storage_failed"
+    assert attachment["processing"]["selected_variant"] == "original"
+
+
+def test_splitik_attachment_cleans_up_s3_when_mongo_insert_fails(db, fake_s3, monkeypatch):
+    monkeypatch.setenv("S3_BUCKET", "test-bucket")
+
+    def fail_insert(_document):
+        raise RuntimeError("Mongo unavailable")
+
+    monkeypatch.setattr(db.splitik_attachments, "insert_one", fail_insert)
+
+    with pytest.raises(HTTPException) as exc:
+        splitik_attachments.create_attachment(
+            db,
+            fake_s3,
+            actor_user_id=USER_A,
+            filename="receipt.jpg",
+            content_type="image/jpeg",
+            content=_valid_jpeg(low_contrast=True),
+        )
+
+    assert exc.value.status_code == 503
+    assert fake_s3.objects == {}
+    assert len(fake_s3.deleted) == 2
 
 
 def test_splitik_attachment_rejects_mismatched_image_bytes(db, fake_s3, monkeypatch):

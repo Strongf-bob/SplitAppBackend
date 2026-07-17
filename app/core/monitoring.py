@@ -61,6 +61,17 @@ COLLECTION_DOCUMENT_COUNT = Gauge(
     "Current MongoDB document counts for key SplitApp collections.",
     ["collection", "state"],
 )
+RECEIPT_IMAGE_PREPROCESSING_COUNT = Counter(
+    "splitapp_receipt_image_preprocessing_total",
+    "Receipt image preprocessing outcomes before Splitik vision requests.",
+    ["outcome", "selected_variant"],
+)
+RECEIPT_IMAGE_PREPROCESSING_DURATION = Histogram(
+    "splitapp_receipt_image_preprocessing_duration_seconds",
+    "CPU time spent preprocessing receipt images.",
+    ["selected_variant"],
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, float("inf")),
+)
 
 
 def init_sentry() -> None:
@@ -79,6 +90,18 @@ def record_request_metrics(
 
 def record_domain_event(domain: str, action: str) -> None:
     DOMAIN_EVENT_COUNT.labels(domain=domain, action=action).inc()
+
+
+def record_receipt_image_preprocessing(
+    *, outcome: str, selected_variant: str, duration_seconds: float
+) -> None:
+    RECEIPT_IMAGE_PREPROCESSING_COUNT.labels(
+        outcome=outcome,
+        selected_variant=selected_variant,
+    ).inc()
+    RECEIPT_IMAGE_PREPROCESSING_DURATION.labels(selected_variant=selected_variant).observe(
+        max(0, duration_seconds)
+    )
 
 
 def observe_money_amount(kind: str, amount: object) -> None:
