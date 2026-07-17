@@ -28,6 +28,7 @@ def ensure_indexes(db: Database) -> None:
     db.event_invites.create_index("id", unique=True)
     db.event_invites.create_index("token", unique=True)
     db.event_invites.create_index([("event_id", 1), ("status", 1)])
+    db.event_invites.create_index([("addressee_id", 1), ("status", 1), ("expires_at", 1)])
     db.invite_decisions.create_index("id", unique=True)
     db.invite_decisions.create_index(
         [("invite_type", 1), ("invite_id", 1), ("user_id", 1)], unique=True

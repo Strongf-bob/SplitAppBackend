@@ -288,6 +288,7 @@ class AddParticipantsRequest(BaseModel):
 
 class CreateEventInviteRequest(BaseModel):
     expires_in_seconds: int = Field(default=60 * 60 * 24 * 7, ge=60, le=60 * 60 * 24 * 30)
+    addressee_id: UUID | None = None
 
 
 class EventInvite(BaseModel):
@@ -311,6 +312,24 @@ class EventInvitePreview(BaseModel):
     expires_at: datetime
     participant_count: int
     actor_decision: str | None = None
+
+
+class EventInvitationInboxItem(BaseModel):
+    id: UUID
+    token: str
+    event_id: UUID
+    event_name: str
+    created_by: UUID
+    creator_name: str
+    expires_at: datetime
+    created_at: datetime
+
+
+class EventInvitationInboxPage(BaseModel):
+    items: list[EventInvitationInboxItem]
+    limit: int
+    offset: int
+    total: int
 
 
 class CreateShareItemRequest(BaseModel):

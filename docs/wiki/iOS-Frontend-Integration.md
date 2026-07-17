@@ -28,6 +28,12 @@ iOS app использует:
 | `AuthUserEndpoint` | `POST /api/login` | Реализовано. |
 | `RefreshTokenEndpoint` | `POST /api/refresh` | Реализовано. |
 | `ListUsersEndpoint` | `GET /api/users` | Реализовано, visibility-limited, paginated. |
+| `SearchUsersEndpoint` | `GET /api/users/search` | Реализовано, visibility-limited, paginated. |
+| `CreateFriendRequestEndpoint` | `POST /api/friends` | Реализовано для зарегистрированного пользователя. |
+| `CreateEventInviteEndpoint` | `POST /api/events/{id}/invites` | Реализовано для link invite и адресного приглашения через `addressee_id`. |
+| `ListInvitationsEndpoint` | `GET /api/invites` | Реализовано, actor-scoped, только ожидающие адресные приглашения, paginated. |
+| `AcceptInvitationEndpoint` | `POST /api/invites/{token}/accept` | Реализовано; адресное приглашение принимает только addressee. |
+| `DeclineInvitationEndpoint` | `POST /api/invites/{token}/decline` | Реализовано; адресное приглашение отклоняет только addressee. |
 | `CreateEventEndpoint` | `POST /api/events` | Реализовано. |
 | `ListEventsEndpoint` | `GET /api/events` | Реализовано, paginated. |
 | `GetEventEndpoint` | `GET /api/events/{id}` | Реализовано. |
@@ -66,6 +72,8 @@ iOS app использует:
 - Receipt image upload делать multipart form-data с JPEG.
 - Для чтения изображений чеков использовать presigned URLs от backend.
 - Не доверять local cached membership для authorization; backend остается authoritative.
+- Для inbox показывать только `GET /api/invites`: link invite без `addressee_id` не является входящим уведомлением.
+- `409` при создании адресного приглашения означает, что пользователь уже участник или приглашение уже ожидает решения.
 
 ## Известные frontend follow-ups
 

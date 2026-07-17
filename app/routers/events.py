@@ -107,6 +107,21 @@ def create_event_invite(
     return services.create_event_invite(db, str(id), payload, current_user_id)
 
 
+@router.get("/api/invites", response_model=schemas.EventInvitationInboxPage)
+def list_event_invitation_inbox(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Database = Depends(get_db),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> dict:
+    return services.list_event_invitation_inbox(
+        db,
+        current_user_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @router.get("/api/invites/{token}/preview", response_model=schemas.EventInvitePreview)
 def preview_event_invite(
     token: str,

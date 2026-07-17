@@ -226,6 +226,12 @@ def _get_active_invite_or_error(db: Database, token: str) -> dict:
     return invite
 
 
+def _assert_invite_addressee(invite: dict, actor_user_id: str) -> None:
+    addressee_id = invite.get("addressee_id")
+    if addressee_id is not None and addressee_id != actor_user_id:
+        raise HTTPException(status_code=403, detail="Invitation is addressed to another user.")
+
+
 @track_service_operation("events.create")
 def create_event(db: Database, payload: schemas.EventCreate, actor_user_id: str) -> dict:
     check_rate_limit(
@@ -489,12 +495,39 @@ def create_event_invite(
     assert_event_open(event)
 
     now = utc_now()
+    addressee_id = str(payload.addressee_id) if payload.addressee_id else None
+    if addressee_id is not None:
+        get_user_or_404(db, addressee_id)
+        if addressee_id == actor_user_id:
+            raise HTTPException(status_code=400, detail="Cannot invite yourself.")
+        if db.event_memberships.find_one(
+            {"event_id": event_id, "user_id": addressee_id, "status": "active"}
+        ):
+            raise HTTPException(status_code=409, detail="User is already an event participant.")
+        for existing in db.event_invites.find(
+            {
+                "event_id": event_id,
+                "addressee_id": addressee_id,
+                "status": "active",
+                "expires_at": {"$gt": now},
+                "deleted_at": {"$exists": False},
+            }
+        ):
+            if _invite_decision(
+                db,
+                invite_type="link",
+                invite_id=existing["id"],
+                actor_user_id=addressee_id,
+            ) is None:
+                raise HTTPException(status_code=409, detail="Invitation is already pending.")
+
     invite = {
         "id": new_uuid(),
         "event_id": event_id,
         "token": secrets.token_urlsafe(24),
         "status": "active",
         "created_by": actor_user_id,
+        "addressee_id": addressee_id,
         "expires_at": now + timedelta(seconds=payload.expires_in_seconds),
         "created_at": now,
         "updated_at": now,
@@ -507,11 +540,63 @@ def create_event_invite(
     return _invite_to_api(invite)
 
 
+@track_service_operation("events.invites.inbox")
+def list_event_invitation_inbox(
+    db: Database,
+    actor_user_id: str,
+    *,
+    limit: int,
+    offset: int,
+) -> dict:
+    get_user_or_404(db, actor_user_id)
+    now = utc_now()
+    pending_invites = list(
+        db.event_invites.find(
+            {
+                "addressee_id": actor_user_id,
+                "status": "active",
+                "expires_at": {"$gt": now},
+                "deleted_at": {"$exists": False},
+            }
+        ).sort("created_at", -1)
+    )
+    decided_ids = {
+        decision["invite_id"]
+        for decision in db.invite_decisions.find(
+            {
+                "invite_type": "link",
+                "user_id": actor_user_id,
+                "deleted_at": {"$exists": False},
+            }
+        )
+    }
+    visible_invites = [invite for invite in pending_invites if invite["id"] not in decided_ids]
+    page = visible_invites[offset : offset + limit]
+    items = []
+    for invite in page:
+        event = get_event_or_404(db, invite["event_id"])
+        creator = get_user_or_404(db, invite["created_by"])
+        items.append(
+            {
+                "id": invite["id"],
+                "token": invite["token"],
+                "event_id": event["id"],
+                "event_name": event["name"],
+                "created_by": invite["created_by"],
+                "creator_name": creator["name"],
+                "expires_at": invite["expires_at"],
+                "created_at": invite["created_at"],
+            }
+        )
+    return {"items": items, "limit": limit, "offset": offset, "total": len(visible_invites)}
+
+
 @track_service_operation("events.invites.preview")
 def preview_event_invite(db: Database, token: str, actor_user_id: str) -> dict:
     check_rate_limit("events.invites.preview", actor_user_id)
     get_user_or_404(db, actor_user_id)
     invite = _get_active_invite_or_error(db, token)
+    _assert_invite_addressee(invite, actor_user_id)
     event = get_event_or_404(db, invite["event_id"])
     return {
         "event_id": event["id"],
@@ -530,6 +615,7 @@ def accept_event_invite(db: Database, token: str, actor_user_id: str) -> dict:
     check_rate_limit("events.invites.accept", actor_user_id)
     get_user_or_404(db, actor_user_id)
     invite = _get_active_invite_or_error(db, token)
+    _assert_invite_addressee(invite, actor_user_id)
     event = get_event_or_404(db, invite["event_id"])
     assert_event_open(event)
 
@@ -577,6 +663,7 @@ def decline_event_invite(db: Database, token: str, actor_user_id: str) -> dict:
     check_rate_limit("events.invites.decline", actor_user_id)
     get_user_or_404(db, actor_user_id)
     invite = _get_active_invite_or_error(db, token)
+    _assert_invite_addressee(invite, actor_user_id)
     event = get_event_or_404(db, invite["event_id"])
     _record_invite_decision(
         db,
