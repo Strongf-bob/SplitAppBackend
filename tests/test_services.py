@@ -406,7 +406,7 @@ def test_update_current_user_discovery_and_payment_hints(db):
     assert stored["search_name"] == "alice"
 
 
-def test_user_search_is_opt_in_and_does_not_search_phone(db):
+def test_user_search_is_opt_in_and_matches_exact_normalized_phone(db):
     from tests.conftest import seed_users
 
     seed_users(db)
@@ -421,10 +421,10 @@ def test_user_search_is_opt_in_and_does_not_search_phone(db):
     )
 
     by_handle = users.search_users(db, USER_A, "bob", limit=20, offset=0)
-    by_phone = users.search_users(db, USER_A, "79990000002", limit=20, offset=0)
+    by_phone = users.search_users(db, USER_A, "+1 (000) 000-0002", limit=20, offset=0)
 
     assert [user["id"] for user in by_handle["items"]] == [USER_B]
-    assert by_phone["items"] == []
+    assert [user["id"] for user in by_phone["items"]] == [USER_B]
 
 
 def test_import_contacts_upserts_and_matches_by_normalized_phone(db):
