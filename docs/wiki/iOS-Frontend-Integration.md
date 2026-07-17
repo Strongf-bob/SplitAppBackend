@@ -28,7 +28,7 @@ iOS app использует:
 | `AuthUserEndpoint` | `POST /api/login` | Реализовано. |
 | `RefreshTokenEndpoint` | `POST /api/refresh` | Реализовано. |
 | `ListUsersEndpoint` | `GET /api/users` | Реализовано, visibility-limited, paginated. |
-| `SearchUsersEndpoint` | `GET /api/users/search` | Реализовано, visibility-limited, paginated. |
+| `SearchUsersEndpoint` | `GET /api/users/search` | Реализовано, opt-in discovery, paginated; телефон ищется только по точному нормализованному совпадению. |
 | `CreateFriendRequestEndpoint` | `POST /api/friends` | Реализовано для зарегистрированного пользователя. |
 | `CreateEventInviteEndpoint` | `POST /api/events/{id}/invites` | Реализовано для link invite и адресного приглашения через `addressee_id`. |
 | `ListInvitationsEndpoint` | `GET /api/invites` | Реализовано, actor-scoped, только ожидающие адресные приглашения, paginated. |
