@@ -779,11 +779,27 @@ class SplitikEntryPoint(BaseModel):
     target_user_id: UUID | None = None
 
 
+class SplitikAttachmentProcessing(BaseModel):
+    status: str
+    selected_variant: str
+    source_width: int | None = None
+    source_height: int | None = None
+    width: int | None = None
+    height: int | None = None
+    quality_flags: list[str] = []
+    operations: list[str] = []
+    brightness: float | None = None
+    contrast: float | None = None
+    sharpness: float | None = None
+    duration_ms: float | None = None
+
+
 class SplitikAttachment(BaseModel):
     id: UUID
     filename: str
     content_type: str
     size_bytes: int
+    processing: SplitikAttachmentProcessing | None = None
     created_at: datetime
 
 

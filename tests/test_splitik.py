@@ -1,5 +1,6 @@
 import importlib.util
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,20 @@ from app.services import (
     splitik_tools,
 )
 from tests.conftest import EVENT_ID, USER_A, USER_B, USER_C, seed_event, seed_users
+
+
+def _valid_jpeg(*, low_contrast: bool = False) -> bytes:
+    from PIL import Image, ImageDraw
+
+    background = 130 if low_contrast else 240
+    foreground = 122 if low_contrast else 20
+    image = Image.new("RGB", (320, 480), (background,) * 3)
+    draw = ImageDraw.Draw(image)
+    for y in range(20, 460, 36):
+        draw.rectangle((20, y, 300, y + 10), fill=(foreground,) * 3)
+    output = BytesIO()
+    image.save(output, format="JPEG", quality=92)
+    return output.getvalue()
 
 
 def _mock_llm(monkeypatch):
@@ -1738,6 +1753,119 @@ def test_splitik_attachment_upload_endpoint_returns_private_metadata(db, fake_s3
     assert db.splitik_attachments.count_documents({"owner_user_id": USER_A}) == 1
 
 
+def test_splitik_attachment_preserves_original_and_uses_one_private_derivative(
+    db, fake_s3, monkeypatch
+):
+    monkeypatch.setenv("S3_BUCKET", "test-bucket")
+    original = _valid_jpeg(low_contrast=True)
+
+    attachment = splitik_attachments.create_attachment(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        filename="receipt.jpg",
+        content_type="image/jpeg",
+        content=original,
+    )
+
+    stored = db.splitik_attachments.find_one({"id": attachment["id"]})
+    assert fake_s3.objects[("test-bucket", stored["key"])]["Body"] == original
+    assert stored["derivative"]["key"] != stored["key"]
+    assert attachment["processing"]["selected_variant"] == "enhanced"
+    assert "derivative" not in attachment
+    assert "key" not in str(attachment)
+
+    urls = splitik_attachments.image_urls_for_actor(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        attachment_ids=[attachment["id"]],
+    )
+
+    assert len(urls) == 1
+    assert stored["derivative"]["key"] in urls[0][1]
+    assert stored["key"] not in urls[0][1]
+
+
+def test_splitik_attachment_normal_photo_keeps_single_original_object(db, fake_s3, monkeypatch):
+    monkeypatch.setenv("S3_BUCKET", "test-bucket")
+
+    attachment = splitik_attachments.create_attachment(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        filename="receipt.jpg",
+        content_type="image/jpeg",
+        content=_valid_jpeg(),
+    )
+
+    stored = db.splitik_attachments.find_one({"id": attachment["id"]})
+    assert "derivative" not in stored
+    assert len(fake_s3.objects) == 1
+    assert attachment["processing"]["selected_variant"] == "original"
+    urls = splitik_attachments.image_urls_for_actor(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        attachment_ids=[attachment["id"]],
+    )
+    assert stored["key"] in urls[0][1]
+
+
+def test_splitik_attachment_delete_removes_original_and_derivative(db, fake_s3, monkeypatch):
+    monkeypatch.setenv("S3_BUCKET", "test-bucket")
+    attachment = splitik_attachments.create_attachment(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        filename="receipt.jpg",
+        content_type="image/jpeg",
+        content=_valid_jpeg(low_contrast=True),
+    )
+    stored = db.splitik_attachments.find_one({"id": attachment["id"]})
+
+    splitik_attachments.delete_attachment(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        attachment_id=attachment["id"],
+    )
+
+    assert db.splitik_attachments.find_one({"id": attachment["id"]}) is None
+    assert set(fake_s3.deleted) == {
+        ("test-bucket", stored["key"]),
+        ("test-bucket", stored["derivative"]["key"]),
+    }
+
+
+def test_splitik_attachment_delete_endpoint_is_owner_scoped(db, fake_s3, monkeypatch):
+    monkeypatch.setenv("S3_BUCKET", "test-bucket")
+    attachment = splitik_attachments.create_attachment(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        filename="receipt.jpg",
+        content_type="image/jpeg",
+        content=_valid_jpeg(),
+    )
+    api = FastAPI()
+    api.dependency_overrides[get_db] = lambda: db
+    api.dependency_overrides[get_s3] = lambda: fake_s3
+    api.dependency_overrides[get_actor_user_id] = lambda: USER_B
+    api.include_router(splitik_router.router)
+    client = TestClient(api)
+
+    forbidden = client.delete(f"/api/splitik/attachments/{attachment['id']}")
+
+    assert forbidden.status_code == 404
+    assert db.splitik_attachments.find_one({"id": attachment["id"]}) is not None
+
+    api.dependency_overrides[get_actor_user_id] = lambda: USER_A
+    deleted = client.delete(f"/api/splitik/attachments/{attachment['id']}")
+    assert deleted.status_code == 204
+    assert db.splitik_attachments.find_one({"id": attachment["id"]}) is None
+
+
 def test_splitik_attachment_upload_works_without_object_storage(db, fake_s3, monkeypatch):
     monkeypatch.delenv("S3_BUCKET", raising=False)
     api = FastAPI()
@@ -1763,6 +1891,27 @@ def test_splitik_attachment_upload_works_without_object_storage(db, fake_s3, mon
     assert stored["storage"] == "mongo"
     assert stored["content"] == b"\xff\xd8\xfffake-jpeg"
     assert fake_s3.objects == {}
+
+
+def test_splitik_attachment_mongo_fallback_keeps_derivative_private(db, fake_s3, monkeypatch):
+    monkeypatch.delenv("S3_BUCKET", raising=False)
+    original = _valid_jpeg(low_contrast=True)
+
+    attachment = splitik_attachments.create_attachment(
+        db,
+        fake_s3,
+        actor_user_id=USER_A,
+        filename="receipt.jpg",
+        content_type="image/jpeg",
+        content=original,
+    )
+
+    stored = db.splitik_attachments.find_one({"id": attachment["id"]})
+    assert stored["content"] == original
+    assert stored["derivative"]["content"] != original
+    assert "content" not in attachment
+    assert "derivative" not in attachment
+    assert attachment["processing"]["selected_variant"] == "enhanced"
 
 
 def test_splitik_attachment_rejects_mismatched_image_bytes(db, fake_s3, monkeypatch):
