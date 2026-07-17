@@ -25,6 +25,9 @@
 - `SPLITIK_ATTACHMENT_DAILY_LIMIT` - default `10` uploaded Splitik attachments per user per day.
 - `SPLITIK_MAX_DRAFTS_PER_REQUEST` - default `3` newly created drafts from one planner response.
 - `SPLITIK_PENDING_DRAFT_LIMIT` - default `10` pending Splitik drafts per user.
+- `SPLITIK_IMAGE_MAX_SIDE` - default `2200`; longest side of a model-ready receipt image.
+- `SPLITIK_IMAGE_MAX_PIXELS` - default `40000000`; decoded-pixel safety ceiling.
+- `SPLITIK_IMAGE_PREPROCESSING_CONCURRENT_LIMIT` - default `2`; process-wide CPU/memory guard.
 - `EVENT_CREATE_DAILY_LIMIT` - default `5` created events per user per day.
 - `RECEIPT_CREATE_DAILY_LIMIT` - default `20` created receipts per user per day.
 
@@ -94,8 +97,19 @@ URL или presigned URL. Vision/OCR provider получает sanitized attachm
 metadata и event context, после чего backend валидирует результат как
 `CreateReceiptRequest`.
 
+Перед сохранением backend выполняет быстрый CPU-only анализ через Pillow. Оригинал
+всегда сохраняется без изменений. Для EXIF-поворота, слишком большого, темного или
+малоконтрастного изображения создается приватная model-ready копия; нормальное фото
+остается без копии. В vision request передается ровно один URL: копия, если она
+нужна, иначе оригинал. Этот preprocessing не добавляет второй LLM-вызов и не требует
+GPU. Если preprocessing не смог декодировать файл, upload сохраняет оригинал и
+помечает безопасный fallback в metadata; чрезмерное decoded pixel count отклоняется.
+
 Клиент загружает фото через `POST /api/splitik/attachments`, затем передает
 полученный `attachment_id` в `POST /api/splitik/messages`.
+Неиспользуемое вложение удаляется через `DELETE /api/splitik/attachments/{id}`;
+backend проверяет owner и физически удаляет оригинал и производную копию, чтобы не
+оставлять приватные image bytes в storage.
 
 ## Guardrails and logs
 

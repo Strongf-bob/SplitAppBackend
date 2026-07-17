@@ -17,7 +17,7 @@ Improve difficult receipt photos before Splitik sends them to the configured vis
 
 Add a focused `receipt_image_preprocessing` service called during Splitik attachment upload. It validates decoded pixel dimensions, applies EXIF orientation, computes inexpensive luminance/contrast/sharpness signals, and decides whether a model-ready derivative is useful.
 
-Every oversized or EXIF-rotated image receives a normalized derivative. Dark or low-contrast images additionally receive a conservative contrast/brightness enhancement and light denoising. Normal images remain unchanged, so their original URL is used by the vision model.
+Every oversized or EXIF-rotated image receives a normalized derivative. Dark or low-contrast images additionally receive a conservative contrast/brightness enhancement. Normal images remain unchanged, so their original URL is used by the vision model.
 
 The attachment document stores only safe processing metadata plus a private derivative location. Public serialization removes both original and derivative storage details. `image_urls_for_actor` produces one URL per attachment: the derivative when present, otherwise the original. Splitik therefore keeps the existing single vision request.
 

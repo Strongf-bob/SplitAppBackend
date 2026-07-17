@@ -10,7 +10,11 @@ from fastapi.testclient import TestClient
 from app import main as app_main, schemas
 from app.core import tokens
 from app.core.monitoring import metrics_response, monitor_db_operation, monitor_service_operation
-from app.core.monitoring import record_domain_event, refresh_database_metrics
+from app.core.monitoring import (
+    record_domain_event,
+    record_receipt_image_preprocessing,
+    refresh_database_metrics,
+)
 from app.dependencies import _is_internal_client, get_db, require_auth_token
 from app.main import configure_cors, configure_public_docs, cors_allowed_origins
 from app.main import configure_exception_handlers, configure_request_logging
@@ -193,6 +197,25 @@ def test_metrics_endpoint_exposes_prometheus_payload():
 
     assert response.status_code == 200
     assert "splitapp_http_requests_total" in response.text
+
+
+def test_receipt_image_preprocessing_metrics_are_low_cardinality():
+    record_receipt_image_preprocessing(
+        outcome="ready",
+        selected_variant="enhanced",
+        duration_seconds=0.012,
+    )
+
+    body, _ = metrics_response()
+    metrics = body.decode()
+    assert (
+        'splitapp_receipt_image_preprocessing_total{outcome="ready",selected_variant="enhanced"}'
+        in metrics
+    )
+    assert (
+        'splitapp_receipt_image_preprocessing_duration_seconds_count{selected_variant="enhanced"}'
+        in metrics
+    )
 
 
 def test_metrics_endpoint_requires_metrics_token(monkeypatch):
@@ -727,6 +750,27 @@ def test_openapi_exposes_targeted_invitation_inbox_contract():
         "creator_name",
         "expires_at",
         "created_at",
+    }
+
+
+def test_openapi_exposes_splitik_attachment_preprocessing_and_delete_contract():
+    schema = app_main.app.openapi()
+
+    assert "delete" in schema["paths"]["/api/splitik/attachments/{id}"]
+    attachment_schema = schema["components"]["schemas"]["SplitikAttachment"]
+    processing_ref = attachment_schema["properties"]["processing"]["anyOf"][0]["$ref"]
+    assert processing_ref.endswith("/SplitikAttachmentProcessing")
+    processing_schema = schema["components"]["schemas"]["SplitikAttachmentProcessing"]
+    assert {"status", "selected_variant"}.issubset(processing_schema["required"])
+    assert set(processing_schema["properties"]["status"]["enum"]) == {
+        "ready",
+        "failed",
+        "storage_failed",
+    }
+    assert set(processing_schema["properties"]["selected_variant"]["enum"]) == {
+        "original",
+        "normalized",
+        "enhanced",
     }
 
 

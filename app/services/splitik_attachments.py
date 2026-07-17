@@ -1,10 +1,12 @@
 import os
+from threading import BoundedSemaphore
 from typing import Any
 
 from fastapi import HTTPException
 from pymongo.database import Database
 
 from app.core.rate_limit import check_rate_limit
+from app.core.monitoring import record_receipt_image_preprocessing
 from app.services.common import new_uuid, strip_mongo_id, utc_now
 from app.services.receipt_image_preprocessing import (
     ReceiptImagePixelLimitError,
@@ -12,6 +14,7 @@ from app.services.receipt_image_preprocessing import (
 )
 
 _MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+_MAX_MONGO_ATTACHMENT_DOCUMENT_BYTES = 15 * 1024 * 1024
 _IMAGE_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
 _IMAGE_MAGIC_PREFIXES = {
     "image/jpeg": (b"\xff\xd8\xff",),
@@ -31,6 +34,11 @@ def _env_int(name: str, default: int) -> int:
         return int(os.getenv(name, str(default)))
     except ValueError:
         return default
+
+
+_PREPROCESSING_SLOTS = BoundedSemaphore(
+    max(1, _env_int("SPLITIK_IMAGE_PREPROCESSING_CONCURRENT_LIMIT", 2))
+)
 
 
 def _public_metadata(attachment: dict) -> dict:
@@ -73,8 +81,14 @@ def create_attachment(
     if not _content_matches_type(normalized_content_type, content):
         raise HTTPException(status_code=400, detail="Attachment content does not match image type.")
     try:
-        preprocessing = preprocess_receipt_image(content, normalized_content_type)
+        with _PREPROCESSING_SLOTS:
+            preprocessing = preprocess_receipt_image(content, normalized_content_type)
     except ReceiptImagePixelLimitError as exc:
+        record_receipt_image_preprocessing(
+            outcome="rejected",
+            selected_variant="original",
+            duration_seconds=0,
+        )
         raise HTTPException(status_code=413, detail="Attachment dimensions are too large.") from exc
     attachment_id = new_uuid()
     extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
@@ -89,9 +103,11 @@ def create_attachment(
         "created_at": now,
     }
     bucket = _bucket_name()
+    uploaded_objects: list[tuple[str, str]] = []
     if bucket:
         key = f"attachments/splitik/{actor_user_id}/{attachment_id}.{extension}"
         s3.put_object(Bucket=bucket, Key=key, Body=content, ContentType=normalized_content_type)
+        uploaded_objects.append((bucket, key))
         attachment.update({"storage": "s3", "bucket": bucket, "key": key})
         if preprocessing.derivative_content is not None:
             derivative_content_type = preprocessing.derivative_content_type or "image/jpeg"
@@ -106,6 +122,7 @@ def create_attachment(
                     Body=preprocessing.derivative_content,
                     ContentType=derivative_content_type,
                 )
+                uploaded_objects.append((bucket, derivative_key))
                 attachment["derivative"] = {
                     "storage": "s3",
                     "bucket": bucket,
@@ -122,13 +139,43 @@ def create_attachment(
     else:
         attachment.update({"storage": "mongo", "content": content})
         if preprocessing.derivative_content is not None:
-            attachment["derivative"] = {
-                "storage": "mongo",
-                "content": preprocessing.derivative_content,
-                "content_type": preprocessing.derivative_content_type or "image/jpeg",
-                "size_bytes": len(preprocessing.derivative_content),
-            }
-    db.splitik_attachments.insert_one(attachment)
+            combined_size = len(content) + len(preprocessing.derivative_content)
+            if combined_size <= _MAX_MONGO_ATTACHMENT_DOCUMENT_BYTES:
+                attachment["derivative"] = {
+                    "storage": "mongo",
+                    "content": preprocessing.derivative_content,
+                    "content_type": preprocessing.derivative_content_type or "image/jpeg",
+                    "size_bytes": len(preprocessing.derivative_content),
+                }
+            else:
+                attachment["processing"] = {
+                    **preprocessing.metadata,
+                    "status": "storage_failed",
+                    "selected_variant": "original",
+                }
+    processing_metadata = attachment["processing"]
+    try:
+        db.splitik_attachments.insert_one(attachment)
+    except Exception as exc:
+        for uploaded_bucket, uploaded_key in reversed(uploaded_objects):
+            try:
+                s3.delete_object(Bucket=uploaded_bucket, Key=uploaded_key)
+            except Exception:
+                pass
+        record_receipt_image_preprocessing(
+            outcome="persistence_failed",
+            selected_variant=str(processing_metadata["selected_variant"]),
+            duration_seconds=float(processing_metadata.get("duration_ms") or 0) / 1000,
+        )
+        raise HTTPException(
+            status_code=503, detail="Splitik attachment could not be stored."
+        ) from exc
+    else:
+        record_receipt_image_preprocessing(
+            outcome=str(processing_metadata["status"]),
+            selected_variant=str(processing_metadata["selected_variant"]),
+            duration_seconds=float(processing_metadata.get("duration_ms") or 0) / 1000,
+        )
     return _public_metadata(attachment)
 
 
@@ -207,12 +254,7 @@ def delete_attachment(
     if not attachment:
         raise HTTPException(status_code=404, detail="Splitik attachment not found.")
 
-    stored_variants = [attachment]
-    if isinstance(attachment.get("derivative"), dict):
-        stored_variants.append(attachment["derivative"])
-    for variant in stored_variants:
-        if variant.get("storage") != "s3":
-            continue
+    def delete_s3_variant(variant: dict) -> None:
         if s3 is None:
             raise HTTPException(
                 status_code=503, detail="Splitik attachment storage is unavailable."
@@ -224,4 +266,14 @@ def delete_attachment(
                 status_code=503, detail="Splitik attachment storage is unavailable."
             ) from exc
 
+    derivative = attachment.get("derivative")
+    if isinstance(derivative, dict) and derivative.get("storage") == "s3":
+        delete_s3_variant(derivative)
+        db.splitik_attachments.update_one(
+            {"id": attachment_id, "owner_user_id": actor_user_id},
+            {"$unset": {"derivative": ""}},
+        )
+
+    if attachment.get("storage") == "s3":
+        delete_s3_variant(attachment)
     db.splitik_attachments.delete_one({"id": attachment_id, "owner_user_id": actor_user_id})

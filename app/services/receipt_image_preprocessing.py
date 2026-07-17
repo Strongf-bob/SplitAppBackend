@@ -51,10 +51,9 @@ def _encode_derivative(image: Image.Image, content_type: str) -> tuple[bytes, st
     return output.getvalue(), "image/jpeg"
 
 
-def preprocess_receipt_image(
-    content: bytes, content_type: str
-) -> ReceiptImagePreprocessingResult:
+def preprocess_receipt_image(content: bytes, content_type: str) -> ReceiptImagePreprocessingResult:
     started = time.monotonic()
+    max_side = _env_int("SPLITIK_IMAGE_MAX_SIDE", 2200)
     try:
         with Image.open(BytesIO(content)) as source:
             source_width, source_height = source.size
@@ -62,6 +61,9 @@ def preprocess_receipt_image(
                 raise ReceiptImagePixelLimitError("Receipt image pixel limit exceeded.")
 
             exif_orientation = source.getexif().get(274)
+            needs_resize = max(source.size) > max_side
+            if needs_resize and source.format == "JPEG":
+                source.draft("RGB", (max_side, max_side))
             source.load()
             image = ImageOps.exif_transpose(source)
 
@@ -69,9 +71,9 @@ def preprocess_receipt_image(
         if exif_orientation not in {None, 1}:
             operations.append("orientation_corrected")
 
-        max_side = _env_int("SPLITIK_IMAGE_MAX_SIDE", 2200)
-        if max(image.size) > max_side:
-            image.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+        if needs_resize:
+            if max(image.size) > max_side:
+                image.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
             operations.append("resized")
 
         brightness, contrast, sharpness = _quality_signals(image)
@@ -97,7 +99,9 @@ def preprocess_receipt_image(
         if operations:
             derivative_content, derivative_content_type = _encode_derivative(image, content_type)
 
-        selected_variant = "enhanced" if should_enhance else "normalized" if operations else "original"
+        selected_variant = (
+            "enhanced" if should_enhance else "normalized" if operations else "original"
+        )
         return ReceiptImagePreprocessingResult(
             derivative_content=derivative_content,
             derivative_content_type=derivative_content_type,
@@ -118,6 +122,8 @@ def preprocess_receipt_image(
         )
     except ReceiptImagePixelLimitError:
         raise
+    except Image.DecompressionBombError as exc:
+        raise ReceiptImagePixelLimitError("Receipt image pixel limit exceeded.") from exc
     except (OSError, UnidentifiedImageError, ValueError):
         return ReceiptImagePreprocessingResult(
             derivative_content=None,

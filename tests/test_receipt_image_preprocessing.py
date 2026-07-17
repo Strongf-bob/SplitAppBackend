@@ -82,6 +82,18 @@ def test_pixel_limit_rejects_decompression_bomb(monkeypatch):
         preprocess_receipt_image(_jpeg((50, 50)), "image/jpeg")
 
 
+def test_pillow_decompression_bomb_is_reported_as_pixel_limit(monkeypatch):
+    from PIL import Image
+
+    def reject_image(_stream):
+        raise Image.DecompressionBombError("too many pixels")
+
+    monkeypatch.setattr(Image, "open", reject_image)
+
+    with pytest.raises(ReceiptImagePixelLimitError):
+        preprocess_receipt_image(_jpeg(), "image/jpeg")
+
+
 def test_malformed_image_falls_back_without_private_details():
     result = preprocess_receipt_image(b"not-an-image", "image/jpeg")
 
