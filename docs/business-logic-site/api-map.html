@@ -51,7 +51,7 @@
           <article class="endpoint"><span class="method write">POST</span><strong>/api/refresh</strong><p class="muted">Ротация refresh token и выдача нового access token.</p></article>
           <article class="endpoint"><span class="method">GET</span><strong>/api/home/summary</strong><p class="muted">Confirmed, pending и disputed money buckets для текущего пользователя.</p></article>
           <article class="endpoint"><span class="method">GET</span><strong>/api/users</strong><p class="muted">Пагинированные visible users: actor и участники общих событий.</p></article>
-          <article class="endpoint"><span class="method">GET</span><strong>/api/users/search</strong><p class="muted">Opt-in поиск по handle/name для <code>discovery_enabled=true</code>.</p></article>
+          <article class="endpoint"><span class="method">GET</span><strong>/api/users/search</strong><p class="muted">Opt-in поиск по handle/name; зарегистрированный телефон ищется только по полному совпадению.</p></article>
           <article class="endpoint"><span class="method">GET</span><strong>/api/users/me/financial-stats</strong><p class="muted">Счетчики open/closed events и outstanding money buckets.</p></article>
           <article class="endpoint"><span class="method write">PATCH</span><strong>/api/users/me</strong><p class="muted">Имя, email, avatar, public handle, discovery и visibility payment phone.</p></article>
           <article class="endpoint"><span class="method write">POST</span><strong>/api/users/me/contacts/import</strong><p class="muted">Owner-scoped import контактов после явного выбора пользователем.</p></article>

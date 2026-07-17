@@ -406,7 +406,7 @@ def test_update_current_user_discovery_and_payment_hints(db):
     assert stored["search_name"] == "alice"
 
 
-def test_user_search_is_opt_in_and_matches_exact_normalized_phone(db):
+def test_user_search_keeps_names_opt_in_but_matches_exact_registered_phone(db):
     from tests.conftest import seed_users
 
     seed_users(db)
@@ -414,17 +414,19 @@ def test_user_search_is_opt_in_and_matches_exact_normalized_phone(db):
         db,
         USER_B,
         schemas.UserUpdate(
-            public_handle="bob_split",
+            public_handle="bob1234567",
             discovery_enabled=True,
             payment_phone="+79990000002",
         ),
     )
 
-    by_handle = users.search_users(db, USER_A, "bob", limit=20, offset=0)
-    by_phone = users.search_users(db, USER_A, "+1 (000) 000-0002", limit=20, offset=0)
+    by_handle = users.search_users(db, USER_A, "bob1234567", limit=20, offset=0)
+    hidden_by_name = users.search_users(db, USER_A, "cara", limit=20, offset=0)
+    by_phone = users.search_users(db, USER_A, "+1 (000) 000-0003", limit=20, offset=0)
 
     assert [user["id"] for user in by_handle["items"]] == [USER_B]
-    assert [user["id"] for user in by_phone["items"]] == [USER_B]
+    assert hidden_by_name["items"] == []
+    assert [user["id"] for user in by_phone["items"]] == [USER_C]
 
 
 def test_import_contacts_upserts_and_matches_by_normalized_phone(db):

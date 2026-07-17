@@ -13,6 +13,7 @@ from app.services.contacts import normalize_phone_number
 
 
 _HANDLE_RE = re.compile(r"^[a-z0-9_]{3,32}$")
+_PHONE_SEARCH_RE = re.compile(r"^\s*\+?[\d\s().-]+\s*$")
 _PHONE_VISIBILITIES = {"nobody", "event_members", "friends"}
 
 
@@ -242,23 +243,27 @@ def search_users(db: Database, actor_user_id: str, query: str, *, limit: int, of
     if len(term) < 2:
         raise HTTPException(status_code=400, detail="query must contain at least 2 characters.")
 
-    search_conditions: list[dict] = [
-        {"public_handle": {"$regex": f"^{re.escape(term)}", "$options": "i"}},
-        {"search_name": {"$regex": re.escape(term), "$options": "i"}},
-        {"name": {"$regex": re.escape(term), "$options": "i"}},
-    ]
-    try:
-        normalized_phone = normalize_phone_number(query)
-    except ValueError:
-        normalized_phone = None
+    normalized_phone = None
+    if _PHONE_SEARCH_RE.fullmatch(query):
+        try:
+            normalized_phone = normalize_phone_number(query)
+        except ValueError:
+            pass
     if normalized_phone is not None:
-        search_conditions.append({"phone_number": normalized_phone})
-
-    mongo_query = {
-        "id": {"$ne": actor_user_id},
-        "discovery_enabled": True,
-        "$or": search_conditions,
-    }
+        mongo_query = {
+            "id": {"$ne": actor_user_id},
+            "phone_number": normalized_phone,
+        }
+    else:
+        mongo_query = {
+            "id": {"$ne": actor_user_id},
+            "discovery_enabled": True,
+            "$or": [
+                {"public_handle": {"$regex": f"^{re.escape(term)}", "$options": "i"}},
+                {"search_name": {"$regex": re.escape(term), "$options": "i"}},
+                {"name": {"$regex": re.escape(term), "$options": "i"}},
+            ],
+        }
     total = db.users.count_documents(mongo_query)
     cursor = db.users.find(mongo_query).sort("name", 1).skip(offset).limit(limit)
     return {
