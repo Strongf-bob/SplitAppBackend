@@ -3606,6 +3606,157 @@ def test_event_invite_expiry_blocks_preview(db):
         raise AssertionError("Expected expired invite preview to fail")
 
 
+def test_targeted_event_invitation_inbox_is_actor_scoped(db):
+    seed_event(db)
+    invite = events.create_event_invite(
+        db,
+        EVENT_ID,
+        schemas.CreateEventInviteRequest(
+            expires_in_seconds=3600,
+            addressee_id=UUID(USER_C),
+        ),
+        USER_A,
+    )
+
+    addressee_page = events.list_event_invitation_inbox(
+        db,
+        USER_C,
+        limit=50,
+        offset=0,
+    )
+    unrelated_page = events.list_event_invitation_inbox(
+        db,
+        USER_B,
+        limit=50,
+        offset=0,
+    )
+
+    assert [item["id"] for item in addressee_page["items"]] == [invite["id"]]
+    assert addressee_page["total"] == 1
+    assert addressee_page["limit"] == 50
+    assert addressee_page["offset"] == 0
+    assert unrelated_page["items"] == []
+    assert unrelated_page["total"] == 0
+
+
+def test_targeted_event_invitation_only_addressee_can_decide(db):
+    seed_event(db)
+    invite = events.create_event_invite(
+        db,
+        EVENT_ID,
+        schemas.CreateEventInviteRequest(
+            expires_in_seconds=3600,
+            addressee_id=UUID(USER_C),
+        ),
+        USER_A,
+    )
+
+    for decide in (events.accept_event_invite, events.decline_event_invite):
+        with pytest.raises(Exception) as exc:
+            decide(db, invite["token"], USER_B)
+        assert_status(exc.value, 403)
+
+
+@pytest.mark.parametrize("decision", ["accept", "decline"])
+def test_targeted_event_invitation_leaves_inbox_after_decision(db, decision):
+    seed_event(db)
+    invite = events.create_event_invite(
+        db,
+        EVENT_ID,
+        schemas.CreateEventInviteRequest(expires_in_seconds=3600, addressee_id=UUID(USER_C)),
+        USER_A,
+    )
+
+    if decision == "accept":
+        events.accept_event_invite(db, invite["token"], USER_C)
+    else:
+        events.decline_event_invite(db, invite["token"], USER_C)
+
+    page = events.list_event_invitation_inbox(db, USER_C, limit=50, offset=0)
+    assert page["items"] == []
+    assert page["total"] == 0
+
+
+def test_targeted_event_invitation_inbox_is_paginated(db):
+    seed_event(db)
+    event_ids = [EVENT_ID]
+    for suffix in ("bbbbbbbbbbbb", "cccccccccccc"):
+        event_id = f"aaaaaaaa-aaaa-aaaa-aaaa-{suffix}"
+        now = datetime(2026, 1, 1, tzinfo=UTC)
+        db.events.insert_one(
+            {
+                "id": event_id,
+                "creator_id": USER_A,
+                "name": f"Trip {suffix[0]}",
+                "is_closed": False,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        db.event_memberships.insert_one(
+            {
+                "id": f"aaaaaaaa-0000-0000-0000-{suffix}",
+                "event_id": event_id,
+                "user_id": USER_A,
+                "role": "creator",
+                "status": "active",
+                "joined_at": now,
+                "removed_at": None,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        event_ids.append(event_id)
+
+    for event_id in event_ids:
+        events.create_event_invite(
+            db,
+            event_id,
+            schemas.CreateEventInviteRequest(expires_in_seconds=3600, addressee_id=UUID(USER_C)),
+            USER_A,
+        )
+
+    first_page = events.list_event_invitation_inbox(db, USER_C, limit=2, offset=0)
+    second_page = events.list_event_invitation_inbox(db, USER_C, limit=2, offset=2)
+
+    assert len(first_page["items"]) == 2
+    assert len(second_page["items"]) == 1
+    assert first_page["total"] == 3
+    assert second_page["total"] == 3
+
+
+def test_targeted_event_invitation_rejects_self_member_and_duplicate(db):
+    seed_event(db)
+
+    for addressee_id, expected_status in ((USER_A, 400), (USER_B, 409)):
+        with pytest.raises(Exception) as exc:
+            events.create_event_invite(
+                db,
+                EVENT_ID,
+                schemas.CreateEventInviteRequest(
+                    expires_in_seconds=3600,
+                    addressee_id=UUID(addressee_id),
+                ),
+                USER_A,
+            )
+        assert_status(exc.value, expected_status)
+
+    events.create_event_invite(
+        db,
+        EVENT_ID,
+        schemas.CreateEventInviteRequest(expires_in_seconds=3600, addressee_id=UUID(USER_C)),
+        USER_A,
+    )
+    with pytest.raises(Exception) as duplicate_exc:
+        events.create_event_invite(
+            db,
+            EVENT_ID,
+            schemas.CreateEventInviteRequest(expires_in_seconds=3600, addressee_id=UUID(USER_C)),
+            USER_A,
+        )
+    assert_status(duplicate_exc.value, 409)
+
+
 def test_only_event_creator_can_create_or_revoke_invites(db):
     seed_event(db)
 

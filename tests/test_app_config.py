@@ -708,6 +708,28 @@ def test_openapi_exposes_settlement_plan_contract():
     assert reject["properties"]["reason"]["maxLength"] == 500
 
 
+def test_openapi_exposes_targeted_invitation_inbox_contract():
+    schema = app_main.app.openapi()
+
+    list_operation = schema["paths"]["/api/invites"]["get"]
+    response_schema = list_operation["responses"]["200"]["content"]["application/json"]["schema"]
+    create_schema = schema["components"]["schemas"]["CreateEventInviteRequest"]
+    inbox_item = schema["components"]["schemas"]["EventInvitationInboxItem"]
+
+    assert response_schema["$ref"].endswith("/EventInvitationInboxPage")
+    assert "addressee_id" in create_schema["properties"]
+    assert set(inbox_item["required"]) == {
+        "id",
+        "token",
+        "event_id",
+        "event_name",
+        "created_by",
+        "creator_name",
+        "expires_at",
+        "created_at",
+    }
+
+
 def test_payment_requests_have_unique_sparse_settlement_edge_index(db):
     indexes.ensure_indexes(db)
 
