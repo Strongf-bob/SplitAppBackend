@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Header, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, Request, Response, UploadFile, status
 from pymongo.database import Database
 
 from app import schemas
@@ -30,6 +30,22 @@ async def upload_attachment(
         content_type=file.content_type or "application/octet-stream",
         content=await file.read(),
     )
+
+
+@router.delete("/api/splitik/attachments/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_attachment(
+    id: UUID,
+    db: Database = Depends(get_db),
+    s3=Depends(get_s3),
+    current_user_id: str = Depends(get_actor_user_id),
+) -> Response:
+    splitik_attachments.delete_attachment(
+        db,
+        s3,
+        actor_user_id=current_user_id,
+        attachment_id=str(id),
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/api/splitik/messages", response_model=schemas.SplitikMessageResponse)
