@@ -33,7 +33,9 @@
 - `app/static/landing/assets/agent-flow.webp`: optimized agent scheme derived from the presentation.
 - `app/static/landing/assets/team.webp`: optimized team artwork derived from the supplied design.
 - `app/static/landing/assets/fonts/montserrat-cyrillic.woff2`: local Montserrat subset for body text.
+- `app/static/landing/assets/fonts/montserrat-latin.woff2`: local Montserrat subset for Latin text.
 - `app/static/landing/assets/fonts/press-start-2p-cyrillic.woff2`: local pixel display font.
+- `app/static/landing/assets/fonts/press-start-2p-latin.woff2`: local pixel display font for Latin titles.
 - `app/static/landing/assets/fonts/OFL.txt`: Open Font License for both bundled families.
 - `tests/test_app_config.py`: server/static asset and landing-content regression contracts.
 
@@ -75,7 +77,9 @@ for asset in (
     "agent-flow.webp",
     "team.webp",
     "fonts/montserrat-cyrillic.woff2",
+    "fonts/montserrat-latin.woff2",
     "fonts/press-start-2p-cyrillic.woff2",
+    "fonts/press-start-2p-latin.woff2",
     "fonts/OFL.txt",
 ):
     assert client.get(f"/assets/landing/{asset}").status_code == 200
@@ -108,7 +112,9 @@ git commit -m "test(landing): define interactive page contract"
 - Create: `app/static/landing/assets/agent-flow.webp`
 - Create: `app/static/landing/assets/team.webp`
 - Create: `app/static/landing/assets/fonts/montserrat-cyrillic.woff2`
+- Create: `app/static/landing/assets/fonts/montserrat-latin.woff2`
 - Create: `app/static/landing/assets/fonts/press-start-2p-cyrillic.woff2`
+- Create: `app/static/landing/assets/fonts/press-start-2p-latin.woff2`
 - Create: `app/static/landing/assets/fonts/OFL.txt`
 
 **Interfaces:**

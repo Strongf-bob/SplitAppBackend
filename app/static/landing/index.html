@@ -3,72 +3,423 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="SplitApp — iOS-приложение для общих событий, чеков и расчётов." />
-    <title>SplitApp — общие расходы без путаницы</title>
+    <meta
+      name="description"
+      content="SplitApp — iOS-приложение для совместных расходов, чеков, долгов и прозрачных расчётов."
+    />
+    <meta name="theme-color" content="#7bacde" />
+    <title>SplitApp — делите расходы без лишних проблем</title>
+    <link
+      rel="preload"
+      href="/assets/landing/fonts/montserrat-cyrillic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/assets/landing/fonts/press-start-2p-cyrillic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <link rel="stylesheet" href="/assets/landing/landing.css" />
+    <script src="/assets/landing/landing.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Перейти к содержанию</a>
-    <header class="site-header">
-      <a class="brand" href="/" aria-label="SplitApp, главная">
-        <svg aria-hidden="true" viewBox="0 0 48 40"><path d="M5 10c0-5 7-8 16-8 11 0 21 4 21 10 0 5-7 8-17 8C13 20 5 16 5 10Zm0 20c0-5 8-8 18-8 10 0 20 4 20 9 0 5-8 8-18 8C14 39 5 35 5 30Z" /></svg>
-        <span>SplitApp</span>
-      </a>
-      <nav aria-label="Основная навигация">
-        <a href="#features">Возможности</a>
-        <a href="#how-it-works">Как это работает</a>
-      </nav>
+
+    <header class="site-header" data-header>
+      <div class="header-inner">
+        <a class="brand" href="#about" aria-label="SplitApp — к началу страницы">
+          <svg class="brand-mark" aria-hidden="true" viewBox="0 0 32 32">
+            <path
+              d="M13 2h6v3h3v3h3v3h3v10h-3v3h-3v3h-3v3h-6v-3h-3v-3H7v-3H4V11h3V8h3V5h3V2Zm0 7h-3v3H7v8h3v3h12v-3h3v-8h-3V9h-3V6h-6v3Zm-2 4h3v5h-3v-5Zm7 0h3v5h-3v-5Z"
+            />
+            <circle cx="16" cy="21.5" r="3.5" />
+          </svg>
+          <span>SplitApp</span>
+        </a>
+
+        <button
+          class="menu-toggle"
+          type="button"
+          aria-expanded="false"
+          aria-controls="site-navigation"
+          aria-label="Открыть меню"
+          data-menu-toggle
+        >
+          <span></span><span></span><span></span>
+        </button>
+
+        <nav id="site-navigation" class="site-nav" aria-label="Основная навигация" data-menu>
+          <a href="#about">О нас</a>
+          <a href="#splitik">Splitik</a>
+          <a href="#stack">Стек</a>
+          <a href="#docs">Документация</a>
+          <a href="#team">Команда</a>
+        </nav>
+      </div>
     </header>
 
-    <main id="main">
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <h1 id="hero-title">Делите общие расходы<br />без путаницы</h1>
-          <p>SplitApp помогает вести события, собирать чеки и понимать, кто кому должен — спокойно и прозрачно.</p>
-          <a class="primary-link" href="#how-it-works">Узнать о приложении <span aria-hidden="true">→</span></a>
+    <main id="main" class="desktop">
+      <section id="about" class="desktop-window hero-window" aria-labelledby="about-title" data-reveal>
+        <div class="window-titlebar">
+          <span>ABOUT.EXE</span>
+          <span class="window-controls" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
         </div>
-        <div class="hero-art" aria-hidden="true">
-          <div class="hero-orb"></div>
-          <img src="/assets/landing/hero-phone.png" width="1122" height="1402" alt="" />
+        <div class="window-body hero-layout">
+          <div class="hero-copy">
+            <h1 id="about-title">SplitApp</h1>
+            <p class="hero-lead">Делите расходы<br />без лишних проблем</p>
+            <p class="hero-description">
+              Собирайте поездки, ужины и совместные покупки в одном событии.
+              Добавляйте чеки, распределяйте расходы и держите платежи под контролем.
+            </p>
+            <div class="hero-actions">
+              <a class="pixel-button pixel-button--primary" href="#demo">
+                Посмотреть, как работает
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M5 11h10l-4-4 1.5-1.5L19 12l-6.5 6.5L11 17l4-4H5v-2Z" />
+                </svg>
+              </a>
+              <a
+                class="pixel-button pixel-button--secondary"
+                href="https://github.com/Strongf-bob/SplitApp"
+                target="_blank"
+                rel="noreferrer"
+              >
+                GitHub приложения
+              </a>
+            </div>
+          </div>
+          <figure class="hero-art">
+            <img
+              src="/assets/landing/splitapp-bot.webp"
+              width="440"
+              height="510"
+              alt="Пиксельный робот — символ SplitApp"
+            />
+          </figure>
         </div>
       </section>
 
-      <section id="features" class="features" aria-label="Возможности SplitApp">
-        <article>
-          <span class="feature-icon" aria-hidden="true">◎</span>
-          <h2>Общие события</h2>
-          <p>Соберите поездку, ужин или любой общий повод в одном месте.</p>
-        </article>
-        <article>
-          <span class="feature-icon" aria-hidden="true">▤</span>
-          <h2>Чеки и расходы</h2>
-          <p>Добавляйте покупки и сохраняйте понятную историю расходов.</p>
-        </article>
-        <article>
-          <span class="feature-icon" aria-hidden="true">↻</span>
-          <h2>Расчёты без споров</h2>
-          <p>Приложение показывает итоговые балансы для каждого участника.</p>
-        </article>
+      <section id="demo" class="desktop-window demo-window" aria-labelledby="demo-title" data-reveal>
+        <div class="window-titlebar">
+          <span>DEMO.MOV</span>
+          <span class="window-controls" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
+        </div>
+        <div class="window-body demo-body">
+          <div class="section-heading section-heading--light">
+            <h2 id="demo-title">Приложение, а не ещё одна таблица</h2>
+            <p>События, балансы и помощник Splitik живут в одном понятном сценарии.</p>
+          </div>
+
+          <div class="demo-stage">
+            <figure id="demo-overview" class="demo-panel" data-demo-panel>
+              <img
+                src="/assets/landing/app-showcase.webp"
+                width="1660"
+                height="940"
+                alt="Три экрана SplitApp: вход, главный экран и чат Splitik"
+              />
+              <figcaption>Весь основной путь — от входа до понятного ответа Splitik.</figcaption>
+            </figure>
+            <figure id="demo-balance" class="demo-panel demo-panel--phone" data-demo-panel hidden>
+              <img
+                src="/assets/landing/app-home.webp"
+                width="535"
+                height="945"
+                alt="Главный экран SplitApp с балансом и событием"
+              />
+              <figcaption>Главная сразу показывает долги, события и ожидающие действия.</figcaption>
+            </figure>
+            <figure id="demo-splitik" class="demo-panel demo-panel--phone" data-demo-panel hidden>
+              <img
+                src="/assets/landing/app-splitik.webp"
+                width="535"
+                height="945"
+                alt="Экран чата с помощником Splitik"
+              />
+              <figcaption>Splitik помогает подготовить действие и объяснить расчёт.</figcaption>
+            </figure>
+          </div>
+
+          <div class="demo-tabs" role="tablist" aria-label="Экраны приложения">
+            <button
+              type="button"
+              role="tab"
+              aria-selected="true"
+              aria-controls="demo-overview"
+              data-demo-tab
+            >
+              Обзор
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="demo-balance"
+              data-demo-tab
+            >
+              Баланс
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="demo-splitik"
+              data-demo-tab
+            >
+              Splitik
+            </button>
+          </div>
+        </div>
       </section>
 
-      <section id="how-it-works" class="story" aria-labelledby="story-title">
-        <div>
-          <p class="section-label">Всё важное — в одном месте</p>
-          <h2 id="story-title">Больше ясности.<br />Меньше переписок.</h2>
-          <p>Создайте событие, добавьте участников и расходы — SplitApp сохранит контекст и поможет сверить расчёты.</p>
-          <a class="secondary-link" href="mailto:hello@split-app.ru?subject=SplitApp">Связаться с командой <span aria-hidden="true">→</span></a>
+      <section
+        id="how-it-works"
+        class="desktop-window"
+        aria-labelledby="how-title"
+        data-reveal
+      >
+        <div class="window-titlebar">
+          <span>HOW_IT_WORKS.EXE</span>
+          <span class="window-controls" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
         </div>
-        <ol>
-          <li><span>01</span> Создайте событие</li>
-          <li><span>02</span> Добавляйте чеки и расходы</li>
-          <li><span>03</span> Закрывайте долги с понятным итогом</li>
-        </ol>
+        <div class="window-body">
+          <div class="section-heading">
+            <h2 id="how-title">Как это работает</h2>
+            <p>Четыре шага вместо десятков сообщений и ручных пересчётов.</p>
+          </div>
+          <ol class="steps">
+            <li>
+              <span class="step-number">1</span>
+              <div>
+                <h3>Создайте событие</h3>
+                <p>Соберите поездку, ужин или общий быт и пригласите участников.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-number">2</span>
+              <div>
+                <h3>Добавьте чек</h3>
+                <p>Введите расходы вручную или подготовьте AI-черновик по фотографии.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-number">3</span>
+              <div>
+                <h3>Всё проверьте</h3>
+                <p>Участники подтверждают суммы и распределение до изменения балансов.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-number">4</span>
+              <div>
+                <h3>Закройте долги</h3>
+                <p>SplitApp рассчитает обязательства и покажет понятный план переводов.</p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="splitik" class="desktop-window splitik-window" aria-labelledby="splitik-title" data-reveal>
+        <div class="window-titlebar">
+          <span>SPLITIK.AI</span>
+          <span class="window-controls" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
+        </div>
+        <div class="window-body splitik-layout">
+          <div class="splitik-copy">
+            <div class="section-heading">
+              <h2 id="splitik-title">Помощник, который сначала предлагает</h2>
+              <p>
+                Splitik понимает контекст события, помогает собрать данные и формирует
+                черновик. Финансово значимые действия проходят серверную проверку и
+                требуют явного подтверждения.
+              </p>
+            </div>
+            <ul class="principles">
+              <li>
+                <strong>Draft-first</strong>
+                <span>Сначала черновик, потом действие.</span>
+              </li>
+              <li>
+                <strong>Проверка</strong>
+                <span>Backend проверяет права, суммы и состояние события.</span>
+              </li>
+              <li>
+                <strong>Safe stop</strong>
+                <span>При неоднозначности Splitik задаёт вопрос, а не угадывает.</span>
+              </li>
+            </ul>
+          </div>
+          <figure class="agent-figure">
+            <img
+              src="/assets/landing/agent-flow.webp"
+              width="1475"
+              height="1015"
+              loading="lazy"
+              alt="Схема агента: входные данные и контекст проходят через модели, проверку и черновик до решения пользователя"
+            />
+            <figcaption>Контекст → reasoning → проверка → черновик → подтверждение.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="stack" class="desktop-window" aria-labelledby="stack-title" data-reveal>
+        <div class="window-titlebar">
+          <span>STACK.SYS</span>
+          <span class="window-controls" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
+        </div>
+        <div class="window-body">
+          <div class="section-heading">
+            <h2 id="stack-title">Стек, который держит расчёты</h2>
+            <p>Мобильный клиент, безопасный backend, AI-контур и наблюдаемая инфраструктура.</p>
+          </div>
+          <div class="stack-grid">
+            <article>
+              <span class="stack-index">01</span>
+              <h3>iOS</h3>
+              <p>Swift<br />SwiftUI</p>
+            </article>
+            <article>
+              <span class="stack-index">02</span>
+              <h3>Backend</h3>
+              <p>Python 3.14<br />FastAPI<br />MongoDB</p>
+            </article>
+            <article>
+              <span class="stack-index">03</span>
+              <h3>AI и интеграции</h3>
+              <p>OpenRouter<br />Yandex OAuth<br />S3 storage</p>
+            </article>
+            <article>
+              <span class="stack-index">04</span>
+              <h3>Эксплуатация</h3>
+              <p>Docker Compose<br />GitHub Actions<br />Prometheus + Grafana</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="docs" class="desktop-window" aria-labelledby="docs-title" data-reveal>
+        <div class="window-titlebar">
+          <span>DOCS.LNK</span>
+          <span class="window-controls" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
+        </div>
+        <div class="window-body docs-layout">
+          <div class="section-heading">
+            <h2 id="docs-title">Посмотрите, как всё устроено</h2>
+            <p>Код и документация открыты: отдельно для приложения и серверной части.</p>
+          </div>
+          <div class="doc-links">
+            <a href="https://github.com/Strongf-bob/SplitApp" target="_blank" rel="noreferrer">
+              <svg aria-hidden="true" viewBox="0 0 48 48">
+                <path d="M8 4h24l8 8v32H8V4Zm5 5v30h22V15h-7V9H13Zm5 13h12v4H18v-4Zm0 8h12v4H18v-4Z" />
+              </svg>
+              <span><strong>iOS repository</strong><small>SwiftUI-приложение</small></span>
+            </a>
+            <a
+              href="https://github.com/Strongf-bob/SplitAppBackend"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <svg aria-hidden="true" viewBox="0 0 48 48">
+                <path d="M8 4h24l8 8v32H8V4Zm5 5v30h22V15h-7V9H13Zm5 13h12v4H18v-4Zm0 8h12v4H18v-4Z" />
+              </svg>
+              <span><strong>Backend repository</strong><small>FastAPI и инфраструктура</small></span>
+            </a>
+            <a
+              href="https://github.com/Strongf-bob/SplitApp/wiki"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <svg aria-hidden="true" viewBox="0 0 48 48">
+                <path d="M5 7h17c5 0 8 2 10 5 2-3 5-5 10-5h1v31h-2c-4 0-7 1-9 4-2-3-5-4-9-4H5V7Zm5 5v21h13c2 0 4 .5 6 1.5V17c-1-3-3-5-7-5H10Zm24 5v17.5c1.5-.8 3-1.2 4-1.4V12c-2 .4-3 2-4 5Z" />
+              </svg>
+              <span><strong>iOS Wiki</strong><small>Архитектура и интеграция</small></span>
+            </a>
+            <a
+              href="https://github.com/Strongf-bob/SplitAppBackend/wiki"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <svg aria-hidden="true" viewBox="0 0 48 48">
+                <path d="M5 7h17c5 0 8 2 10 5 2-3 5-5 10-5h1v31h-2c-4 0-7 1-9 4-2-3-5-4-9-4H5V7Zm5 5v21h13c2 0 4 .5 6 1.5V17c-1-3-3-5-7-5H10Zm24 5v17.5c1.5-.8 3-1.2 4-1.4V12c-2 .4-3 2-4 5Z" />
+              </svg>
+              <span><strong>Backend Wiki</strong><small>API, безопасность и deploy</small></span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section id="team" class="desktop-window" aria-labelledby="team-title" data-reveal>
+        <div class="window-titlebar">
+          <span>TEAM.EXE</span>
+          <span class="window-controls" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
+        </div>
+        <div class="window-body">
+          <div class="section-heading">
+            <h2 id="team-title">Команда SplitApp</h2>
+            <p>Продукт, дизайн, мобильная разработка, backend и AI — в одной команде.</p>
+          </div>
+          <img
+            class="team-art"
+            src="/assets/landing/team.webp"
+            width="1360"
+            height="360"
+            loading="lazy"
+            alt="Пиксельные портреты Ангелины Кобзиной, Ильи Карсакова и Анастасии Наурзоковой"
+          />
+          <div class="team-grid">
+            <article>
+              <h3>Ангелина Кобзина</h3>
+              <p>TeamLead / Designer</p>
+            </article>
+            <article class="team-card--contact">
+              <h3>Илья Карсаков</h3>
+              <p>Full Stack Engineer / AI Engineer</p>
+              <div class="contact-links">
+                <a href="https://t.me/nicto999" target="_blank" rel="noreferrer">
+                  Telegram · @nicto999
+                </a>
+                <a href="mailto:karsakovillya@yandex.ru">karsakovillya@yandex.ru</a>
+                <a href="https://github.com/Strongf-bob" target="_blank" rel="noreferrer">
+                  GitHub · Strongf-bob
+                </a>
+              </div>
+            </article>
+            <article>
+              <h3>Анастасия Наурзокова</h3>
+              <p>AI Engineer</p>
+            </article>
+          </div>
+        </div>
       </section>
     </main>
 
-    <footer>
+    <footer class="site-footer">
       <span>© 2026 SplitApp</span>
-      <a href="mailto:hello@split-app.ru">Контакты</a>
+      <nav aria-label="Контакты">
+        <a href="https://t.me/nicto999" target="_blank" rel="noreferrer">Telegram</a>
+        <a href="mailto:karsakovillya@yandex.ru">Email</a>
+        <a href="https://github.com/Strongf-bob" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
     </footer>
   </body>
 </html>
