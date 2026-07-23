@@ -360,7 +360,8 @@ def test_static_landing_is_public_and_retired_routes_are_absent():
     root = client.get("/")
 
     assert root.status_code == 200
-    assert 'src="/assets/landing/landing.js"' in root.text
+    assert 'href="/assets/landing/landing.css?v=9e4cfe29"' in root.text
+    assert 'src="/assets/landing/landing.js?v=93dfdd28"' in root.text
     assert "ABOUT.EXE" in root.text
     assert "SPLITIK.AI" in root.text
     assert "STACK.SYS" in root.text
