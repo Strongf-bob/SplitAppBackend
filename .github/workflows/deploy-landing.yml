@@ -1,0 +1,64 @@
+name: Deploy landing
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy landing assets
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy secrets
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_SSH_KEY"
+          test -n "$DEPLOY_PATH"
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${DEPLOY_PORT:-22}" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy landing assets over SSH
+        run: |
+          SSH_PORT="${DEPLOY_PORT:-22}"
+          EXPECTED_INDEX_SHA="$(sha256sum app/static/landing/index.html | awk '{print $1}')"
+
+          tar -czf - app/static/landing \
+            | ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+              "set -euo pipefail; cd '$DEPLOY_PATH'; tar -xzf -; \
+              docker cp app/static/landing/. splitapp-backend-api:/app/app/static/landing; \
+              docker exec splitapp-backend-api test -f /app/app/static/landing/index.html; \
+              docker exec splitapp-backend-api sha256sum /app/app/static/landing/index.html \
+                | awk '{print \$1}'" \
+            > deployed-index.sha
+
+          test "$(tr -d '[:space:]' < deployed-index.sha)" = "$EXPECTED_INDEX_SHA"
+
+      - name: Verify public landing
+        run: |
+          for attempt in $(seq 1 20); do
+            if curl -fsS https://split-app.ru/ \
+              | grep -q 'Приложение, а не ещё одна таблица'; then
+              exit 0
+            fi
+            sleep 3
+          done
+          exit 1
