@@ -522,8 +522,14 @@ svg {
 
 .splitik-layout {
   display: grid;
-  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
-  align-items: center;
+  grid-template-columns: 1fr;
+  gap: clamp(32px, 4vw, 52px);
+}
+
+.splitik-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(330px, 0.75fr);
+  align-items: end;
   gap: clamp(30px, 5vw, 70px);
 }
 
@@ -557,17 +563,32 @@ svg {
 }
 
 .agent-figure {
+  min-width: 0;
   margin: 0;
   border: 3px solid var(--color-ink);
   background: #e4f1fc;
   box-shadow: 8px 8px 0 var(--color-desktop-dark);
 }
 
-.agent-figure img {
+.agent-canvas {
   width: 100%;
-  aspect-ratio: 1.45;
-  object-fit: cover;
-  object-position: left center;
+  max-width: 100%;
+  overflow: hidden;
+  background: #e4f1fc;
+}
+
+.agent-canvas:focus-visible {
+  outline: 4px solid var(--color-accent);
+  outline-offset: -4px;
+}
+
+.agent-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  object-position: center;
 }
 
 .agent-figure figcaption {
@@ -828,7 +849,7 @@ svg {
     gap: 20px;
   }
 
-  .splitik-layout,
+  .splitik-copy,
   .docs-layout {
     grid-template-columns: 1fr;
   }
@@ -972,10 +993,14 @@ svg {
     margin-top: 20px;
   }
 
-  .agent-figure img {
-    min-height: 360px;
-    aspect-ratio: auto;
-    object-position: 47% center;
+  .agent-canvas {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  .agent-canvas img {
+    width: 760px;
+    max-width: none;
   }
 
   .team-art {

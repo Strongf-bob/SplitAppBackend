@@ -23,7 +23,7 @@
       type="font/woff2"
       crossorigin
     />
-    <link rel="stylesheet" href="/assets/landing/landing.css?v=1596d4c9" />
+    <link rel="stylesheet" href="/assets/landing/landing.css?v=339bd628" />
     <script src="/assets/landing/landing.js?v=c237ee65" defer></script>
   </head>
   <body>
@@ -215,13 +215,20 @@
             </ul>
           </div>
           <figure class="agent-figure">
-            <img
-              src="/assets/landing/agent-flow.webp"
-              width="1475"
-              height="1015"
-              loading="lazy"
-              alt="Схема агента: входные данные и контекст проходят через модели, проверку и черновик до решения пользователя"
-            />
+            <div
+              class="agent-canvas"
+              role="region"
+              tabindex="0"
+              aria-label="Схема агента; на маленьком экране прокручивается по горизонтали"
+            >
+              <img
+                src="/assets/landing/agent-flow.webp?v=a0d68104"
+                width="2400"
+                height="1350"
+                loading="lazy"
+                alt="Схема агента: входные данные и контекст проходят через модели, проверку и черновик до решения пользователя"
+              />
+            </div>
             <figcaption>Контекст → reasoning → проверка → черновик → подтверждение.</figcaption>
           </figure>
         </div>
