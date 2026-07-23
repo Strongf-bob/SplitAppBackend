@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -360,9 +361,16 @@ def test_static_landing_is_public_and_retired_routes_are_absent():
     root = client.get("/")
 
     assert root.status_code == 200
-    assert 'href="/assets/landing/landing.css?v=9e4cfe29"' in root.text
-    assert 'src="/assets/landing/landing.js?v=93dfdd28"' in root.text
+    landing_assets = PROJECT_ROOT / "app" / "static" / "landing" / "assets"
+    css_version = hashlib.sha256((landing_assets / "landing.css").read_bytes()).hexdigest()[:8]
+    js_version = hashlib.sha256((landing_assets / "landing.js").read_bytes()).hexdigest()[:8]
+    assert f'href="/assets/landing/landing.css?v={css_version}"' in root.text
+    assert f'src="/assets/landing/landing.js?v={js_version}"' in root.text
     assert "ABOUT.EXE" in root.text
+    assert "APP.EXE" in root.text
+    assert "DEMO.MOV" not in root.text
+    assert "Весь основной путь — от входа до понятного ответа Splitik." not in root.text
+    assert "data-demo-tab" not in root.text
     assert "SPLITIK.AI" in root.text
     assert "STACK.SYS" in root.text
     assert "DOCS.LNK" in root.text

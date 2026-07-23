@@ -480,48 +480,6 @@ svg {
   object-fit: contain;
 }
 
-.demo-panel--phone img {
-  width: min(100%, 360px);
-  max-height: 640px;
-}
-
-.demo-panel figcaption {
-  width: 100%;
-  border-top: 2px solid #555f69;
-  background: #25282c;
-  color: #e8edf4;
-  padding: 15px 20px;
-  font-size: 14px;
-  text-align: center;
-}
-
-.demo-tabs {
-  margin-top: 22px;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
-}
-
-.demo-tabs button {
-  min-width: 130px;
-  min-height: 48px;
-  border: 3px solid #ffffff;
-  background: transparent;
-  color: #ffffff;
-  padding: 10px 15px;
-  font-family: var(--font-pixel);
-  font-size: 9px;
-  cursor: pointer;
-}
-
-.demo-tabs button[aria-selected="true"] {
-  border-color: var(--color-ink);
-  background: #ffffff;
-  color: var(--color-ink);
-  box-shadow: 4px 4px 0 #5e93c7;
-}
-
 .steps {
   margin: 0;
   padding: 0;
@@ -986,17 +944,6 @@ svg {
 
   .demo-stage {
     min-height: 320px;
-  }
-
-  .demo-tabs {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .demo-tabs button {
-    min-width: 0;
-    padding: 8px 5px;
-    font-size: 7px;
   }
 
   .steps,

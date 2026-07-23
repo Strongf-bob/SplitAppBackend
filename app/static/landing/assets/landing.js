@@ -25,18 +25,6 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeMenu();
 });
 
-document.querySelectorAll("[data-demo-tab]").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    const target = tab.getAttribute("aria-controls");
-    document.querySelectorAll("[data-demo-tab]").forEach((item) => {
-      item.setAttribute("aria-selected", String(item === tab));
-    });
-    document.querySelectorAll("[data-demo-panel]").forEach((panel) => {
-      panel.hidden = panel.id !== target;
-    });
-  });
-});
-
 const revealItems = document.querySelectorAll("[data-reveal]");
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
