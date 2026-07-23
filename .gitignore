@@ -212,3 +212,12 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-local AI agent skills (installed from external sources)
+/.agents/
+/skills-lock.json
+
+# Local generated previews and temporary exports
+/output/
+/tmp/
+/.superpowers/brainstorm/
