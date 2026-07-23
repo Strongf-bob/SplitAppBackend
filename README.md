@@ -1,16 +1,28 @@
-# SplitAppBackend
+<p align="center">
+  <img src="./assets/readme/hero.svg" width="100%" alt="SplitApp Backend — authenticated APIs for receipts, balances, settlements, payments, and Splitik">
+</p>
 
-## Локальный запуск
+FastAPI backend нативного SplitApp: auth, события, друзья, чеки, платежи,
+балансы, урегулирование долгов, Splitik-agent, S3-вложения и observability.
+API-контракт зафиксирован в [`openapi.yaml`](openapi.yaml).
 
-1. Создать или обновить виртуальное окружение и зависимости:
+## Быстрый локальный запуск
 
-   `make setup`
+```bash
+make setup
+cp .env.example .env
+make run-dev
+```
 
-2. Создать локальный env-файл:
+Заполните `.env` настройками MongoDB перед запуском. Проверка:
 
-   `cp .env.example .env`
+- login: `POST /api/login`;
+- database health: `GET /api/health/db`;
+- публичная продуктовая страница: `GET /`.
 
-3. Заполнить `.env` настройками MongoDB.
+## MongoDB configuration
+
+Поддерживаются три режима.
 
    Вариант A, полный connection string:
 
@@ -47,13 +59,6 @@
    `MONGODB_TLS=true`
 
    `MONGODB_TLS_CA_FILE=/home/<your-home>/.mongodb/root.crt`
-
-4. Запустить API:
-
-   `make run-dev`
-
-Login endpoint: `POST /api/login`.
-Проверка MongoDB: `GET /api/health/db`.
 
 Публичный `GET /` отдает статичную страницу о нативном iOS-приложении SplitApp.
 Она не требует Node.js-сборки. Все продуктовые данные и действия доступны

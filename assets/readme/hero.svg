@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390" role="img" aria-labelledby="title desc">
+  <title id="title">SplitApp Backend — authenticated services for shared expenses</title>
+  <desc id="desc">A signed API request flows through receipt, event, balance, settlement, and Splitik service nodes.</desc>
+  <rect width="1200" height="390" rx="24" fill="#0B1020"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <text x="56" y="64" fill="#9DB4FF" font-size="18" font-weight="800" letter-spacing="3">FASTAPI · MONGODB · S3 · OBSERVABILITY</text>
+    <text x="56" y="146" fill="#F5F7FF" font-size="56" font-weight="780">SplitApp Backend</text>
+    <text x="56" y="194" fill="#B6C0DC" font-size="25">Secure expense, receipt, settlement, and Splitik services.</text>
+    <g transform="translate(56 252)" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="17">
+      <rect width="220" height="56" rx="8" fill="#1F387C"/>
+      <text x="25" y="35" fill="#FFFFFF">BEARER /api/*</text>
+      <path d="M220 28H274" stroke="#9DB4FF" stroke-width="3"/>
+      <text x="292" y="35" fill="#64CCA0">OPENAPI + TESTS + CI</text>
+    </g>
+    <g transform="translate(760 48)" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">
+      <rect x="0" y="96" width="128" height="64" rx="10" fill="#1F387C"/>
+      <text x="64" y="135" fill="#FFFFFF" font-size="18" text-anchor="middle">REQUEST</text>
+      <path d="M128 128H184" stroke="#9DB4FF" stroke-width="4"/>
+      <g fill="#161E33" stroke="#4C6096" stroke-width="2">
+        <rect x="184" y="8" width="154" height="54" rx="10"/>
+        <rect x="184" y="76" width="154" height="54" rx="10"/>
+        <rect x="184" y="144" width="154" height="54" rx="10"/>
+        <rect x="184" y="212" width="154" height="54" rx="10"/>
+      </g>
+      <g fill="#F5F7FF" font-size="17" text-anchor="middle">
+        <text x="261" y="42">RECEIPTS</text><text x="261" y="110">BALANCES</text>
+        <text x="261" y="178">SETTLEMENT</text><text x="261" y="246">SPLITIK</text>
+      </g>
+      <circle cx="362" cy="128" r="15" fill="#64CCA0"/>
+      <path d="M338 35H362V128M338 103H362M338 171H362V128M338 239H362V128" fill="none" stroke="#64CCA0" stroke-width="3"/>
+    </g>
+  </g>
+</svg>
