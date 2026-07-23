@@ -360,11 +360,32 @@ def test_static_landing_is_public_and_retired_routes_are_absent():
     root = client.get("/")
 
     assert root.status_code == 200
-    assert "SplitApp" in root.text
-    assert "Делите общие расходы" in root.text
+    assert 'src="/assets/landing/landing.js"' in root.text
+    assert "ABOUT.EXE" in root.text
+    assert "SPLITIK.AI" in root.text
+    assert "STACK.SYS" in root.text
+    assert "DOCS.LNK" in root.text
+    assert "TEAM.EXE" in root.text
+    assert 'href="https://t.me/nicto999"' in root.text
+    assert 'href="mailto:karsakovillya@yandex.ru"' in root.text
+    assert 'href="https://github.com/Strongf-bob"' in root.text
+    assert "© 2026 SplitApp" in root.text
+    assert "hello@split-app.ru" not in root.text
     assert client.head("/").status_code == 200
-    assert client.get("/assets/landing/landing.css").status_code == 200
-    assert client.get("/assets/landing/hero-phone.png").status_code == 200
+    for asset in (
+        "landing.css",
+        "landing.js",
+        "splitapp-bot.webp",
+        "app-showcase.webp",
+        "agent-flow.webp",
+        "team.webp",
+        "fonts/montserrat-cyrillic.woff2",
+        "fonts/montserrat-latin.woff2",
+        "fonts/press-start-2p-cyrillic.woff2",
+        "fonts/press-start-2p-latin.woff2",
+        "fonts/OFL.txt",
+    ):
+        assert client.get(f"/assets/landing/{asset}").status_code == 200
     assert client.get("/app").status_code == 404
     assert client.get("/manifest.webmanifest").status_code == 404
     assert client.get("/sw.js").status_code == 404
