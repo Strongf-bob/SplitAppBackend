@@ -513,12 +513,15 @@ def create_event_invite(
                 "deleted_at": {"$exists": False},
             }
         ):
-            if _invite_decision(
-                db,
-                invite_type="link",
-                invite_id=existing["id"],
-                actor_user_id=addressee_id,
-            ) is None:
+            if (
+                _invite_decision(
+                    db,
+                    invite_type="link",
+                    invite_id=existing["id"],
+                    actor_user_id=addressee_id,
+                )
+                is None
+            ):
                 raise HTTPException(status_code=409, detail="Invitation is already pending.")
 
     invite = {
