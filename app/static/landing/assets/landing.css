@@ -772,6 +772,7 @@ svg {
 }
 
 .site-footer a {
+  min-width: 44px;
   min-height: 44px;
   display: inline-flex;
   align-items: center;
@@ -1012,6 +1013,16 @@ svg {
     align-items: flex-start;
     flex-direction: column;
     padding: 28px 20px;
+  }
+}
+
+@media (max-width: 360px) {
+  .team-card--contact {
+    padding: 12px;
+  }
+
+  .contact-links a {
+    padding-inline: 8px;
   }
 }
 

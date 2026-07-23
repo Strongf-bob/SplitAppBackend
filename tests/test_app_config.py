@@ -403,7 +403,9 @@ def test_static_landing_is_public_and_retired_routes_are_absent():
         assert client.get(f"/assets/landing/{asset}").status_code == 200
     stylesheet = client.get("/assets/landing/landing.css").text
     agent_image_rule = stylesheet.split(".agent-figure img {", 1)[1].split("}", 1)[0]
+    footer_link_rule = stylesheet.split(".site-footer a {", 1)[1].split("}", 1)[0]
     assert "object-fit: contain" in agent_image_rule
+    assert "min-width: 44px" in footer_link_rule
     assert client.get("/app").status_code == 404
     assert client.get("/manifest.webmanifest").status_code == 404
     assert client.get("/sw.js").status_code == 404
