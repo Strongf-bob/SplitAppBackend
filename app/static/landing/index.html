@@ -23,8 +23,9 @@
       type="font/woff2"
       crossorigin
     />
-    <link rel="stylesheet" href="/assets/landing/landing.css?v=8c0414bd" />
+    <link rel="stylesheet" href="/assets/landing/landing.css?v=508f3844" />
     <script src="/assets/landing/landing.js?v=c237ee65" defer></script>
+    <script type="module" src="/assets/landing/split-demo.mjs?v=b2520208"></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Перейти к содержанию</a>
@@ -214,22 +215,114 @@
               </li>
             </ul>
           </div>
-          <figure class="agent-figure">
-            <div
-              class="agent-canvas"
-              role="region"
-              tabindex="0"
-              aria-label="Схема агента; на маленьком экране прокручивается по горизонтали"
-            >
-              <img
-                src="/assets/landing/agent-flow.webp?v=a0d68104"
-                width="2400"
-                height="1350"
-                loading="lazy"
-                alt="Схема агента: входные данные и контекст проходят через модели, проверку и черновик до решения пользователя"
-              />
+          <figure class="agent-figure" aria-labelledby="agent-map-caption">
+            <div class="agent-map">
+              <div class="agent-map__entry">
+                <div class="agent-node agent-node--accent">Входные данные</div>
+                <span class="agent-arrow" aria-hidden="true">↓</span>
+                <div class="agent-node agent-node--accent">
+                  <strong>Контекст</strong>
+                  <span>Сплитик + MongoDB</span>
+                </div>
+                <span class="agent-arrow" aria-hidden="true">↓</span>
+                <div class="agent-node agent-node--decision">Есть ли фото?</div>
+              </div>
+
+              <div class="agent-map__lanes">
+                <section class="agent-lane" aria-labelledby="photo-lane-title">
+                  <h3 id="photo-lane-title"><span>Да</span> Фото чека</h3>
+                  <ol class="agent-flow">
+                    <li class="agent-node">Предобработка</li>
+                    <li class="agent-node">
+                      <strong>Multimodal Reasoning</strong>
+                      <span>MiniMax M3</span>
+                    </li>
+                    <li class="agent-node agent-node--decision">Проверка кодом</li>
+                  </ol>
+                  <div class="agent-branch">
+                    <div>
+                      <span class="agent-branch__label">Invalid</span>
+                      <div class="agent-node agent-node--decision">Проблема</div>
+                      <div class="agent-subbranches">
+                        <div>
+                          <span>Спорные поля</span>
+                          <div class="agent-node">
+                            <strong>Multimodal Reasoning</strong>
+                            <span>Qwen 3.7 Plus</span>
+                          </div>
+                          <small>↺ повторная проверка кодом</small>
+                        </div>
+                        <div>
+                          <span>Поля / confidence</span>
+                          <div class="agent-node">Вопрос пользователю</div>
+                          <small>↓ в черновик</small>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="agent-branch__valid">
+                      <span class="agent-branch__label">Valid</span>
+                      <div class="agent-node agent-node--accent">Черновик</div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="agent-lane" aria-labelledby="text-lane-title">
+                  <h3 id="text-lane-title"><span>Нет</span> Текстовый запрос</h3>
+                  <ol class="agent-flow">
+                    <li class="agent-node">
+                      <strong>LLM Reasoning</strong>
+                      <span>DeepSeek Flash V4</span>
+                    </li>
+                    <li class="agent-node agent-node--decision">Тип текста</li>
+                  </ol>
+                  <div class="agent-text-routes">
+                    <div>
+                      <span>Вопрос</span>
+                      <div class="agent-node agent-node--accent">Ответ по контексту</div>
+                    </div>
+                    <div>
+                      <span>Правила</span>
+                      <div class="agent-node agent-node--accent">Черновик</div>
+                    </div>
+                    <div>
+                      <span>Иное</span>
+                      <div class="agent-node agent-node--accent">Текстовый ответ</div>
+                    </div>
+                  </div>
+                  <p class="agent-route-note">
+                    Вопрос и иное → вывод пользователю · правила → черновик
+                  </p>
+                </section>
+              </div>
+
+              <div class="agent-map__resolution">
+                <p class="agent-resolution-label">Маршрут черновика: фото или правила</p>
+                <div class="agent-node agent-node--accent">Черновик</div>
+                <span class="agent-arrow" aria-hidden="true">↓</span>
+                <div class="agent-node agent-node--decision">Решение пользователя</div>
+                <div class="agent-resolution-routes">
+                  <div>
+                    <span>Нет</span>
+                    <div class="agent-node">Safe stop</div>
+                  </div>
+                  <div>
+                    <span>Да / Исправил</span>
+                    <div class="agent-node">Сохранение</div>
+                    <span class="agent-arrow" aria-hidden="true">↓</span>
+                    <div class="agent-node">Создание чека в бэкенде</div>
+                    <small>↓ в вывод пользователю</small>
+                  </div>
+                </div>
+              </div>
+              <div class="agent-map__output">
+                <span>Ответ по контексту · Текстовый ответ · Созданный чек</span>
+                <div class="agent-node agent-node--output">Вывод пользователю</div>
+              </div>
             </div>
-            <figcaption>Контекст → reasoning → проверка → черновик → подтверждение.</figcaption>
+            <figcaption id="agent-map-caption">
+              Полная логика из презентации: черновики требуют решения пользователя,
+              а контекстные и текстовые ответы выводятся напрямую.
+            </figcaption>
           </figure>
         </div>
       </section>
@@ -370,6 +463,45 @@
         </div>
       </section>
     </main>
+
+    <button
+      class="split-demo-launcher"
+      type="button"
+      aria-expanded="false"
+      aria-controls="split-demo-panel"
+      aria-label="Открыть интерактивное разделение чека"
+      data-split-demo-launcher
+      hidden
+    >
+      <span aria-hidden="true">₽</span>
+      <strong>Разделить чек</strong>
+      <small>Интерактивное демо</small>
+    </button>
+
+    <aside
+      id="split-demo-panel"
+      class="split-demo-panel"
+      aria-labelledby="split-demo-title"
+      tabindex="-1"
+      data-split-demo-panel
+      hidden
+    >
+      <div class="split-demo-titlebar">
+        <div>
+          <strong id="split-demo-title">SPLIT.EXE</strong>
+          <span data-split-demo-progress>Шаг 1 из 3</span>
+        </div>
+        <button
+          type="button"
+          aria-label="Свернуть интерактивное демо"
+          data-split-demo-close
+        >
+          <span aria-hidden="true">—</span>
+        </button>
+      </div>
+      <div class="split-demo-content" data-split-demo-content></div>
+      <p class="sr-only" aria-live="polite" data-split-demo-live></p>
+    </aside>
 
     <footer class="site-footer">
       <span>© 2026 SplitApp</span>

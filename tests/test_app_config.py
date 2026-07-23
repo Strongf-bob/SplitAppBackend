@@ -364,20 +364,24 @@ def test_static_landing_is_public_and_retired_routes_are_absent():
     landing_assets = PROJECT_ROOT / "app" / "static" / "landing" / "assets"
     css_version = hashlib.sha256((landing_assets / "landing.css").read_bytes()).hexdigest()[:8]
     js_version = hashlib.sha256((landing_assets / "landing.js").read_bytes()).hexdigest()[:8]
-    agent_version = hashlib.sha256((landing_assets / "agent-flow.webp").read_bytes()).hexdigest()[
-        :8
-    ]
+    split_demo_version = hashlib.sha256(
+        (landing_assets / "split-demo.mjs").read_bytes()
+    ).hexdigest()[:8]
     assert f'href="/assets/landing/landing.css?v={css_version}"' in root.text
     assert f'src="/assets/landing/landing.js?v={js_version}"' in root.text
-    assert f'src="/assets/landing/agent-flow.webp?v={agent_version}"' in root.text
+    assert f'src="/assets/landing/split-demo.mjs?v={split_demo_version}"' in root.text
     assert "ABOUT.EXE" in root.text
     assert "APP.EXE" in root.text
     assert "DEMO.MOV" not in root.text
     assert "Весь основной путь — от входа до понятного ответа Splitik." not in root.text
     assert "data-demo-tab" not in root.text
     assert "SPLITIK.AI" in root.text
-    assert 'width="2400"' in root.text
-    assert 'height="1350"' in root.text
+    assert "Multimodal Reasoning" in root.text
+    assert "Qwen 3.7 Plus" in root.text
+    assert "Создание чека в бэкенде" in root.text
+    assert "agent-flow.webp" not in root.text
+    assert "data-split-demo-launcher" in root.text
+    assert "data-split-demo-panel" in root.text
     assert "STACK.SYS" in root.text
     assert "DOCS.LNK" in root.text
     assert "TEAM.EXE" in root.text
@@ -390,6 +394,7 @@ def test_static_landing_is_public_and_retired_routes_are_absent():
     for asset in (
         "landing.css",
         "landing.js",
+        "split-demo.mjs",
         "splitapp-bot.webp",
         "app-showcase.webp",
         "agent-flow.webp",
@@ -402,9 +407,9 @@ def test_static_landing_is_public_and_retired_routes_are_absent():
     ):
         assert client.get(f"/assets/landing/{asset}").status_code == 200
     stylesheet = client.get("/assets/landing/landing.css").text
-    agent_image_rule = stylesheet.split(".agent-figure img {", 1)[1].split("}", 1)[0]
     footer_link_rule = stylesheet.split(".site-footer a {", 1)[1].split("}", 1)[0]
-    assert "object-fit: contain" in agent_image_rule
+    assert ".agent-map__lanes" in stylesheet
+    assert ".split-demo-panel" in stylesheet
     assert "min-width: 44px" in footer_link_rule
     assert client.get("/app").status_code == 404
     assert client.get("/manifest.webmanifest").status_code == 404

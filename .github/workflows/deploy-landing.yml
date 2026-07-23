@@ -21,6 +21,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Test landing split demo
+        run: node --test tests/landing_split_demo.test.mjs
+
       - name: Validate deploy secrets
         run: |
           test -n "$DEPLOY_HOST"
@@ -55,8 +58,9 @@ jobs:
       - name: Verify public landing
         run: |
           for attempt in $(seq 1 20); do
-            if curl -fsS https://split-app.ru/ \
-              | grep -q 'Приложение, а не ещё одна таблица'; then
+            HTML="$(curl -fsS https://split-app.ru/ || true)"
+            if grep -q 'data-split-demo-launcher' <<< "$HTML" \
+              && grep -q 'Создание чека в бэкенде' <<< "$HTML"; then
               exit 0
             fi
             sleep 3
